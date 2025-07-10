@@ -37,7 +37,7 @@ public abstract class VillagerEntityMixin {
                 String langCode = MinecraftClient.getInstance().getLanguageManager().getLanguage();
                 ClientPlayNetworking.send(new RequestVillagerDataC2SPacket(thisVillager.getUuid(), langCode));
 
-                player.sendMessage(Text.translatable("chat.aiassist.villager.request_sent").formatted(Formatting.YELLOW), true);
+                player.sendMessage(Text.translatable("chat.loracore.villager.request_sent").formatted(Formatting.YELLOW), true);
             }
 
             cir.setReturnValue(ActionResult.SUCCESS);

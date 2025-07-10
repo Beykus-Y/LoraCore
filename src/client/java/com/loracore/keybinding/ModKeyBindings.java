@@ -13,10 +13,10 @@ public class ModKeyBindings {
 
     public static void register() {
         openQuestLogKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
-                "key.aiassist.open_quest_log", // Ключ для перевода в lang файле
+                "key.loracore.open_quest_log", // Ключ для перевода в lang файле
                 InputUtil.Type.KEYSYM,
                 GLFW.GLFW_KEY_J,
-                "category.aiassist.main" // Категория в настройках управления
+                "category.loracore.main" // Категория в настройках управления
         ));
 
         registerKeyInputs();

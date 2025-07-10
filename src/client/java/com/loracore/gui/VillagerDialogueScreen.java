@@ -40,7 +40,7 @@ public class VillagerDialogueScreen extends Screen {
     private boolean isQuestOfferActive = false;
 
     public VillagerDialogueScreen(VillagerEntity villager) {
-        super(Text.translatable("gui.aiassist.dialogue.title_prefix", ModComponents.VILLAGER_DATA.get(villager).getVillagerName()));
+        super(Text.translatable("gui.loracore.dialogue.title_prefix", ModComponents.VILLAGER_DATA.get(villager).getVillagerName()));
         this.villager = villager;
         this.villagerData = ModComponents.VILLAGER_DATA.get(villager);
         // Исправление: Используем Objects.requireNonNull для уверенности, что player не null
@@ -53,15 +53,15 @@ public class VillagerDialogueScreen extends Screen {
     protected void init() {
         super.init();
 
-        this.inputBox = new TextFieldWidget(this.textRenderer, this.width / 2 - 150, this.height - 38, 240, 20, Text.translatable("gui.aiassist.dialogue.input_placeholder"));
+        this.inputBox = new TextFieldWidget(this.textRenderer, this.width / 2 - 150, this.height - 38, 240, 20, Text.translatable("gui.loracore.dialogue.input_placeholder"));
         this.addDrawableChild(this.inputBox);
 
-        this.sendButton = ButtonWidget.builder(Text.translatable("gui.aiassist.dialogue.button.send"), button -> this.sendMessage())
+        this.sendButton = ButtonWidget.builder(Text.translatable("gui.loracore.dialogue.button.send"), button -> this.sendMessage())
                 .dimensions(this.width / 2 + 95, this.height - 38, 55, 20)
                 .build();
         this.addDrawableChild(sendButton);
 
-        this.acceptQuestButton = ButtonWidget.builder(Text.translatable("gui.aiassist.quest.button.accept"), button -> {
+        this.acceptQuestButton = ButtonWidget.builder(Text.translatable("gui.loracore.quest.button.accept"), button -> {
             String langCode = MinecraftClient.getInstance().getLanguageManager().getLanguage();
             // Исправление: Проверяем client.player на null, хотя в этом контексте он почти всегда есть
             if (this.client != null && this.client.player != null) {
@@ -71,7 +71,7 @@ public class VillagerDialogueScreen extends Screen {
         }).dimensions(this.width / 2 - 105, this.height - 38, 100, 20).build();
         this.addDrawableChild(acceptQuestButton);
 
-        this.declineQuestButton = ButtonWidget.builder(Text.translatable("gui.aiassist.quest.button.decline"), button -> {
+        this.declineQuestButton = ButtonWidget.builder(Text.translatable("gui.loracore.quest.button.decline"), button -> {
             // Исправление: Проверяем client.player на null
             if (this.client != null && this.client.player != null) {
                 UUID playerUuid = this.client.player.getUuid();
@@ -85,7 +85,7 @@ public class VillagerDialogueScreen extends Screen {
         }).dimensions(this.width / 2 + 5, this.height - 38, 100, 20).build();
         this.addDrawableChild(declineQuestButton);
 
-        this.completeQuestButton = ButtonWidget.builder(Text.translatable("gui.aiassist.quest.button.complete"), button -> {
+        this.completeQuestButton = ButtonWidget.builder(Text.translatable("gui.loracore.quest.button.complete"), button -> {
             ClientPlayNetworking.send(new CompleteQuestC2SPacket(this.villager.getUuid()));
             // Квест будет удален сервером, компонент синхронизируется, и кнопки обновятся
         }).dimensions(this.width / 2 - 152, this.height - 38, 304, 20).build();
@@ -201,7 +201,7 @@ public class VillagerDialogueScreen extends Screen {
             }
 
             Text prefix = msg.role().equals("user")
-                    ? Text.translatable("gui.aiassist.dialogue.prefix.user")
+                    ? Text.translatable("gui.loracore.dialogue.prefix.user")
                     : Text.literal(villagerData.getVillagerName() + ": ");
 
             MutableText fullText = Text.empty().append(prefix).append(content);

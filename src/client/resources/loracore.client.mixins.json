@@ -1,6 +1,7 @@
 {
 	"required": true,
-	"package": "com.aiassist.mixin.client",
+	"package": "com.loracore.mixin.client",
+
 	"compatibilityLevel": "JAVA_21",
 	"client": [
 		"VillagerEntityMixin"

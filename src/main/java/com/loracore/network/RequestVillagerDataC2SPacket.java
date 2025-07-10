@@ -1,6 +1,6 @@
 package com.loracore.network;
 
-import com.loracore.AiMod;
+import com.loracore.LoraCoreMod;
 import net.minecraft.network.RegistryByteBuf;
 import net.minecraft.network.codec.PacketCodec;
 import net.minecraft.network.codec.PacketCodecs; // Добавлен необходимый импорт
@@ -12,7 +12,7 @@ import java.util.UUID;
 
 // ИЗМЕНЕНИЕ 1: Добавлено поле languageCode
 public record RequestVillagerDataC2SPacket(UUID villagerUuid, String languageCode) implements CustomPayload {
-    public static final CustomPayload.Id<RequestVillagerDataC2SPacket> ID = new CustomPayload.Id<>(new Identifier(AiMod.MOD_ID, "request_villager_data"));
+    public static final CustomPayload.Id<RequestVillagerDataC2SPacket> ID = new CustomPayload.Id<>(new Identifier(LoraCoreMod.MOD_ID, "request_villager_data"));
 
     // ИЗМЕНЕНИЕ 2: Кодек заменен на tuple для обработки двух полей
     public static final PacketCodec<RegistryByteBuf, RequestVillagerDataC2SPacket> CODEC = PacketCodec.tuple(

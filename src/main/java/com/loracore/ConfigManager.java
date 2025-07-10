@@ -31,7 +31,7 @@ public class ConfigManager {
                 saveConfig();
             }
         } catch (IOException | JsonSyntaxException e) {
-            AiMod.LOGGER.error("Не удалось загрузить конфигурацию, будут использованы значения по умолчанию.", e);
+            LoraCoreMod.LOGGER.error("Не удалось загрузить конфигурацию, будут использованы значения по умолчанию.", e);
             ModConfig.instance = ModConfig.createDefault();
         }
     }
@@ -41,7 +41,7 @@ public class ConfigManager {
         try (BufferedWriter writer = Files.newBufferedWriter(CONFIG_FILE)) {
             GSON.toJson(ModConfig.instance, writer);
         } catch (IOException e) {
-            AiMod.LOGGER.error("Не удалось сохранить конфигурацию!", e);
+            LoraCoreMod.LOGGER.error("Не удалось сохранить конфигурацию!", e);
         }
     }
 }

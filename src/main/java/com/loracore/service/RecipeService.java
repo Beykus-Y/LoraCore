@@ -1,4 +1,4 @@
-package com.loracore.service; // ИЗМЕНЕНИЕ: Пакет исправлен на com.aiassist
+package com.loracore.service; // ИЗМЕНЕНИЕ: Пакет исправлен на com.loracore
 
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;

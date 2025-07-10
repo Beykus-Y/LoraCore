@@ -11,9 +11,9 @@ import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import static net.fabricmc.fabric.api.client.command.v2.ClientCommandManager.literal;
 
 @Environment(EnvType.CLIENT)
-public class AiAssistClient implements ClientModInitializer {
+public class LoraCoreClient implements ClientModInitializer {
     public static final org.slf4j.Logger LOGGER =
-            org.slf4j.LoggerFactory.getLogger(AiMod.MOD_ID + "_CLIENT");
+            org.slf4j.LoggerFactory.getLogger(LoraCoreMod.MOD_ID + "_CLIENT");
 
     // Флаг для отложенного открытия AskScreen
     private static boolean openAskScreenFlag = false;

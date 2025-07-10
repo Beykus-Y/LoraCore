@@ -28,7 +28,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class StructureNameManager extends PersistentState {
-    private static final String ID = "aiassist_structure_names";
+    private static final String ID = "loracore_structure_names";
 
     // ... класс StructureData остается без изменений ...
     public static class StructureData {
@@ -73,7 +73,7 @@ public class StructureNameManager extends PersistentState {
             StructureData data = new StructureData(compound);
             manager.structureDataMap.put(posKey, data);
         }
-        AiMod.LOGGER.info("Загружено {} записей о структурах.", manager.structureDataMap.size());
+        LoraCoreMod.LOGGER.info("Загружено {} записей о структурах.", manager.structureDataMap.size());
         return manager;
     }
     @Override
@@ -86,7 +86,7 @@ public class StructureNameManager extends PersistentState {
             list.add(compound);
         }
         nbt.put("structures", list);
-        AiMod.LOGGER.info("Сохранено {} записей о структурах.", structureDataMap.size());
+        LoraCoreMod.LOGGER.info("Сохранено {} записей о структурах.", structureDataMap.size());
         return nbt;
     }
     public static StructureNameManager get(ServerWorld world) {
@@ -134,18 +134,18 @@ public class StructureNameManager extends PersistentState {
                         newData.isGenerating.set(true);
                         RegistryEntry<Biome> biomeEntry = world.getBiome(playerPos);
                         String biomeId = biomeEntry.getKey().map(RegistryKey::getValue).orElse(new Identifier("minecraft", "unknown_biome")).toString();
-                        AiMod.LOGGER.info("Найдена новая структура (тег '{}') в биоме '{}' по позиции {}. Запускаем генерацию имени AI.", tag.id(), biomeId, posKey);
+                        LoraCoreMod.LOGGER.info("Найдена новая структура (тег '{}') в биоме '{}' по позиции {}. Запускаем генерацию имени AI.", tag.id(), biomeId, posKey);
                         AiService.generateStructureInfo(tag.id().toString(), biomeId)
                                 .whenCompleteAsync((generatedInfo, error) -> {
                                     MinecraftServer server = world.getServer();
                                     if (server == null) return;
                                     server.execute(() -> {
                                         if (error != null) {
-                                            AiMod.LOGGER.error("Ошибка при генерации имени AI для структуры в {}: {}", posKey, error.getMessage());
+                                            LoraCoreMod.LOGGER.error("Ошибка при генерации имени AI для структуры в {}: {}", posKey, error.getMessage());
                                             structureDataMap.put(posKey, new StructureData("Ошибка генерации", "Не удалось получить описание."));
                                         } else {
                                             // ИЗМЕНЕНИЕ: Используем методы доступа name() и description()
-                                            AiMod.LOGGER.info("AI сгенерировал имя '{}' и описание '{}' для структуры в {}.", generatedInfo.name(), generatedInfo.description(), posKey);
+                                            LoraCoreMod.LOGGER.info("AI сгенерировал имя '{}' и описание '{}' для структуры в {}.", generatedInfo.name(), generatedInfo.description(), posKey);
                                             structureDataMap.put(posKey, new StructureData(generatedInfo.name(), generatedInfo.description()));
                                         }
                                         StructureData currentData = structureDataMap.get(posKey);

@@ -8,18 +8,17 @@
 		"Beykus-Y"
 	],
 	"contact": {
-		"homepage": "https://your-project-homepage.com/",
-		"sources": "https://github.com/YourUser/YourRepo"
+		"sources": "https://github.com/Beykus-Y/LoraCore"
 	},
 	"license": "CC0-1.0",
 	"icon": "assets/loracore/icon.png",
 	"environment": "*",
 	"entrypoints": {
 		"main": [
-			"com.loracore.AiMod"
+			"com.loracore.LoraCoreMod"
 		],
 		"client": [
-			"com.loracore.loracoreClient"
+			"com.loracore.LoraCoreClient"
 		],
 		"modmenu": [
 			"com.loracore.ModMenuIntegration"

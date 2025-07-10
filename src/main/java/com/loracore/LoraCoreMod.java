@@ -20,8 +20,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 
-public class AiMod implements ModInitializer {
-	public static final String MOD_ID = "aiassist";
+public class LoraCoreMod implements ModInitializer {
+	public static final String MOD_ID = "loracore";
 	public static final org.slf4j.Logger LOGGER = org.slf4j.LoggerFactory.getLogger(MOD_ID);
 
 	private static final Map<UUID, String> lastKnownStructurePosKeyForPlayer = new HashMap<>();
@@ -77,25 +77,25 @@ public class AiMod implements ModInitializer {
 									Text structureDescription = Text.literal(data.description);
 
 									if (data.isGenerating.get()) {
-										player.sendMessage(Text.translatable("structure.aiassist.discover.generating", structureName).formatted(Formatting.YELLOW), false);
+										player.sendMessage(Text.translatable("structure.loracore.discover.generating", structureName).formatted(Formatting.YELLOW), false);
 										player.networkHandler.sendPacket(new TitleFadeS2CPacket(10, 70, 20));
 										player.networkHandler.sendPacket(new TitleS2CPacket(structureName));
 									} else {
-										player.sendMessage(Text.translatable("structure.aiassist.enter.title", structureName.copy().formatted(Formatting.BOLD)).formatted(Formatting.GREEN), false);
-										player.sendMessage(Text.translatable("structure.aiassist.enter.description", structureDescription).formatted(Formatting.GREEN), false);
+										player.sendMessage(Text.translatable("structure.loracore.enter.title", structureName.copy().formatted(Formatting.BOLD)).formatted(Formatting.GREEN), false);
+										player.sendMessage(Text.translatable("structure.loracore.enter.description", structureDescription).formatted(Formatting.GREEN), false);
 										player.networkHandler.sendPacket(new TitleFadeS2CPacket(10, 70, 20));
 										player.networkHandler.sendPacket(new TitleS2CPacket(structureName));
 										player.networkHandler.sendPacket(new SubtitleS2CPacket(structureDescription));
 									}
 								});
 							} else {
-								player.sendMessage(Text.translatable("structure.aiassist.leave.area").formatted(Formatting.GRAY), false);
+								player.sendMessage(Text.translatable("structure.loracore.leave.area").formatted(Formatting.GRAY), false);
 							}
 						}
 					} else {
 						if (lastKnownStructurePosKeyForPlayer.containsKey(uuid)) {
 							lastKnownStructurePosKeyForPlayer.remove(uuid);
-							player.sendMessage(Text.translatable("structure.aiassist.leave.dimension").formatted(Formatting.GRAY), false);
+							player.sendMessage(Text.translatable("structure.loracore.leave.dimension").formatted(Formatting.GRAY), false);
 							player.networkHandler.sendPacket(new TitleFadeS2CPacket(0, 0, 0));
 							player.networkHandler.sendPacket(new SubtitleS2CPacket(Text.empty()));
 							player.networkHandler.sendPacket(new TitleS2CPacket(Text.empty()));

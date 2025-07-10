@@ -1,6 +1,6 @@
 package com.loracore.network;
 
-import com.loracore.AiMod;
+import com.loracore.LoraCoreMod;
 import com.loracore.api.dto.OpenAiApiDto.Message;
 import com.loracore.component.ModComponents;
 import com.loracore.component.PlayerDialogueComponent;
@@ -72,7 +72,7 @@ public class ModNetworking {
 
                 AiService.generateVillagerPersonality(villager, langCode).whenCompleteAsync((info, error) -> {
                     if (error != null) {
-                        AiMod.LOGGER.error("Не удалось сгенерировать личность жителя:", error);
+                        LoraCoreMod.LOGGER.error("Не удалось сгенерировать личность жителя:", error);
                         villagerComponent.setHasGeneratedData(false);
                         villagerComponent.setVillagerName("");
                     } else {
@@ -133,7 +133,7 @@ public class ModNetworking {
                 AiService.continueConversation(history, payload.languageCode()).whenCompleteAsync((response, error) -> {
                     String aiResponseContent;
                     if (error != null) {
-                        AiMod.LOGGER.error("Не удалось сгенерировать ответ в диалоге:", error);
+                        LoraCoreMod.LOGGER.error("Не удалось сгенерировать ответ в диалоге:", error);
                         aiResponseContent = "Произошла какая-то ошибка...";
                     } else {
                         aiResponseContent = response;
@@ -145,7 +145,7 @@ public class ModNetworking {
 
                         AiService.generateQuest(villager, player, payload.languageCode()).whenCompleteAsync((generatedQuest, questError) -> {
                             if (questError != null) {
-                                AiMod.LOGGER.error("Не удалось сгенерировать квест после предложения AI:", questError);
+                                LoraCoreMod.LOGGER.error("Не удалось сгенерировать квест после предложения AI:", questError);
                                 playerDialogue.addMessageToHistory(payload.villagerUuid(), new Message("assistant", baseAiResponse + " (Квест временно недоступен из-за ошибки генерации.)"));
                             } else {
                                 // Quest successfully generated, assign it to the villager's component as the pending offer
@@ -210,7 +210,7 @@ public class ModNetworking {
                 Quest questToAccept = villagerData.getAssignedQuest(player.getUuid()); // "assigned" здесь означает "pending offer"
 
                 if (questToAccept == null) {
-                    AiMod.LOGGER.warn("AcceptQuestC2SPacket: No pending quest offer found for player {} by villager {}. Cannot accept.", player.getName().getString(), villagerUuid);
+                    LoraCoreMod.LOGGER.warn("AcceptQuestC2SPacket: No pending quest offer found for player {} by villager {}. Cannot accept.", player.getName().getString(), villagerUuid);
                     return;
                 }
 
@@ -226,7 +226,7 @@ public class ModNetworking {
                 ModComponents.PLAYER_QUEST.sync(player);
                 ModComponents.VILLAGER_DATA.sync(villager); // Синхронизируем, чтобы состояние квеста обновилось на клиенте
                 ModComponents.PLAYER_DIALOGUE.sync(player);
-                AiMod.LOGGER.info("AcceptQuestC2SPacket: Quest '{}' (ID: {}) accepted by player {}.", questToAccept.title(), questToAccept.questId(), player.getName().getString());
+                LoraCoreMod.LOGGER.info("AcceptQuestC2SPacket: Quest '{}' (ID: {}) accepted by player {}.", questToAccept.title(), questToAccept.questId(), player.getName().getString());
             });
         });
 
@@ -239,7 +239,7 @@ public class ModNetworking {
             server.execute(() -> {
                 Entity entity = player.getServerWorld().getEntity(villagerUuid);
                 if (!(entity instanceof VillagerEntity villager)) {
-                    AiMod.LOGGER.warn("CompleteQuestC2SPacket: Villager entity not found or not a villager for UUID: {}", villagerUuid);
+                    LoraCoreMod.LOGGER.warn("CompleteQuestC2SPacket: Villager entity not found or not a villager for UUID: {}", villagerUuid);
                     return;
                 }
 
@@ -247,14 +247,14 @@ public class ModNetworking {
                 Quest quest = villagerData.getAssignedQuest(player.getUuid());
 
                 if (quest == null) {
-                    AiMod.LOGGER.info("CompleteQuestC2SPacket: No quest assigned to player {} by villager {}.", player.getName().getString(), villagerData.getVillagerName());
+                    LoraCoreMod.LOGGER.info("CompleteQuestC2SPacket: No quest assigned to player {} by villager {}.", player.getName().getString(), villagerData.getVillagerName());
                     return;
                 }
 
                 Quest.FetchGoal goal = quest.goal();
                 boolean hasEnoughItems = player.getInventory().count(goal.item()) >= goal.requiredAmount();
 
-                AiMod.LOGGER.info("CompleteQuestC2SPacket: Checking quest for player {}. Quest: '{}', Goal Item: {}, Required: {}, Has: {}. Can complete: {}. Villager: {}",
+                LoraCoreMod.LOGGER.info("CompleteQuestC2SPacket: Checking quest for player {}. Quest: '{}', Goal Item: {}, Required: {}, Has: {}. Can complete: {}. Villager: {}",
                         player.getName().getString(), quest.title(), goal.item().getName().getString(), goal.requiredAmount(), player.getInventory().count(goal.item()), hasEnoughItems, villagerData.getVillagerName());
 
                 if (hasEnoughItems) {
@@ -271,9 +271,9 @@ public class ModNetworking {
                     ModComponents.PLAYER_QUEST.sync(player);
                     ModComponents.VILLAGER_DATA.sync(villager);
                     ModComponents.PLAYER_DIALOGUE.sync(player);
-                    AiMod.LOGGER.info("CompleteQuestC2SPacket: Quest '{}' completed successfully for player {}.", quest.title(), player.getName().getString());
+                    LoraCoreMod.LOGGER.info("CompleteQuestC2SPacket: Quest '{}' completed successfully for player {}.", quest.title(), player.getName().getString());
                 } else {
-                    AiMod.LOGGER.info("CompleteQuestC2SPacket: Player {} does not have enough items to complete quest '{}'.", player.getName().getString(), quest.title());
+                    LoraCoreMod.LOGGER.info("CompleteQuestC2SPacket: Player {} does not have enough items to complete quest '{}'.", player.getName().getString(), quest.title());
                 }
             });
         });

@@ -1,6 +1,6 @@
 package com.loracore.item;
 
-import com.loracore.AiMod;
+import com.loracore.LoraCoreMod;
 import net.fabricmc.fabric.api.itemgroup.v1.ItemGroupEvents;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemGroups;
@@ -15,7 +15,7 @@ public class ModItems {
             new EmeraldShardItem(new Item.Settings().rarity(Rarity.UNCOMMON)));
 
     private static Item registerItem(String name, Item item) {
-        Identifier id = new Identifier(AiMod.MOD_ID, name);
+        Identifier id = new Identifier(LoraCoreMod.MOD_ID, name);
         Item registeredItem = Registry.register(Registries.ITEM, id, item);
 
         ItemGroupEvents.modifyEntriesEvent(ItemGroups.INGREDIENTS).register(entries -> {
@@ -26,6 +26,6 @@ public class ModItems {
     }
 
     public static void registerModItems() {
-        AiMod.LOGGER.info("Регистрация предметов для мода " + AiMod.MOD_ID);
+        LoraCoreMod.LOGGER.info("Регистрация предметов для мода " + LoraCoreMod.MOD_ID);
     }
 }

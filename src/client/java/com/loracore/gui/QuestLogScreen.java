@@ -15,7 +15,7 @@ import java.util.List;
 public class QuestLogScreen extends Screen {
 
     public QuestLogScreen() {
-        super(Text.translatable("gui.aiassist.quest_log.title"));
+        super(Text.translatable("gui.loracore.quest_log.title"));
     }
 
     @Override
@@ -27,7 +27,7 @@ public class QuestLogScreen extends Screen {
         List<Quest> quests = questComponent.getQuests();
 
         if (quests.isEmpty()) {
-            context.drawCenteredTextWithShadow(this.textRenderer, Text.translatable("gui.aiassist.quest_log.no_quests"), this.width / 2, this.height / 2, 0xA0A0A0);
+            context.drawCenteredTextWithShadow(this.textRenderer, Text.translatable("gui.loracore.quest_log.no_quests"), this.width / 2, this.height / 2, 0xA0A0A0);
             return;
         }
 
@@ -47,11 +47,11 @@ public class QuestLogScreen extends Screen {
             y += 5;
 
             // Используем Text.translatable для цели и награды
-            Text goalText = Text.translatable("gui.aiassist.quest_log.goal", quest.goal().item().getName(), quest.goal().requiredAmount());
+            Text goalText = Text.translatable("gui.loracore.quest_log.goal", quest.goal().item().getName(), quest.goal().requiredAmount());
             context.drawTextWithShadow(this.textRenderer, goalText, 20, y, 0xAAAAAA);
             y += 12;
 
-            Text rewardText = Text.translatable("gui.aiassist.quest_log.reward", quest.reward().item().getName(), quest.reward().amount());
+            Text rewardText = Text.translatable("gui.loracore.quest_log.reward", quest.reward().item().getName(), quest.reward().amount());
             context.drawTextWithShadow(this.textRenderer, rewardText, 20, y, 0x55FF55);
             y += 20;
         }

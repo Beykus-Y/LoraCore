@@ -1,6 +1,6 @@
 package com.loracore.service;
 
-import com.loracore.AiMod;
+import com.loracore.LoraCoreMod;
 import com.loracore.ModConfig;
 import com.loracore.api.OpenAiApiClient;
 import com.loracore.api.dto.OpenAiApiDto.*;
@@ -64,7 +64,7 @@ public class AiService {
         String modelId = ModConfig.instance.MODEL_ID;
 
         if (apiKey.trim().isEmpty()) {
-            player.sendMessage(Text.translatable("error.aiassist.api_key_missing").formatted(Formatting.RED));
+            player.sendMessage(Text.translatable("error.loracore.api_key_missing").formatted(Formatting.RED));
             return;
         }
 
@@ -86,15 +86,15 @@ public class AiService {
 
         apiClient.createChatCompletionAsync(apiUrl, apiKey, chatRequest).whenCompleteAsync((response, error) -> {
             if (error != null) {
-                player.sendMessage(Text.translatable("error.aiassist.api_connection_failed").formatted(Formatting.RED));
+                player.sendMessage(Text.translatable("error.loracore.api_connection_failed").formatted(Formatting.RED));
                 return;
             }
             if (response.choices() == null || response.choices().isEmpty()) {
-                player.sendMessage(Text.translatable("error.aiassist.api_empty_response").formatted(Formatting.RED));
+                player.sendMessage(Text.translatable("error.loracore.api_empty_response").formatted(Formatting.RED));
                 return;
             }
             String answer = response.choices().get(0).message().content();
-            player.sendMessage(Text.translatable("chat.aiassist.ai.response_prefix", Text.literal(answer).formatted(Formatting.WHITE)).formatted(Formatting.GREEN));
+            player.sendMessage(Text.translatable("chat.loracore.ai.response_prefix", Text.literal(answer).formatted(Formatting.WHITE)).formatted(Formatting.GREEN));
         }, player.getServer());
     }
 
@@ -193,8 +193,8 @@ public class AiService {
             }
             return info;
         } catch (JsonSyntaxException e) {
-            AiMod.LOGGER.error("Не удалось распарсить JSON ответа AI: {}", cleanJson, e);
-            return new GeneratedStructureInfo("structure.aiassist.unknown.name", "structure.aiassist.unknown.description");
+            LoraCoreMod.LOGGER.error("Не удалось распарсить JSON ответа AI: {}", cleanJson, e);
+            return new GeneratedStructureInfo("structure.loracore.unknown.name", "structure.loracore.unknown.description");
         }
     }
 

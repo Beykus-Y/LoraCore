@@ -20,7 +20,7 @@ public class AskScreen extends Screen {
     private static final int RADIUS = 12;
 
     public AskScreen() {
-        super(Text.translatable("gui.aiassist.ask.title"));
+        super(Text.translatable("gui.loracore.ask.title"));
     }
 
     @Override
@@ -37,14 +37,14 @@ public class AskScreen extends Screen {
                 cy - 10,
                 PANEL_WIDTH - 32,
                 20,
-                Text.translatable("gui.aiassist.ask.input_placeholder")
+                Text.translatable("gui.loracore.ask.input_placeholder")
         );
         // Оставляем стандартную обводку и фон
         addDrawableChild(inputBox);
 
         // Кнопка отправки
         sendButton = ButtonWidget.builder(
-                        Text.translatable("gui.aiassist.dialogue.button.send"),
+                        Text.translatable("gui.loracore.dialogue.button.send"),
                         button -> this.sendMessage()
                 )
                 .dimensions(cx - 40, cy + 24, 80, 20)
@@ -62,7 +62,7 @@ public class AskScreen extends Screen {
 
             if (client != null && client.player != null) {
                 client.player.sendMessage(
-                        Text.translatable("command.aiassist.ask.success")
+                        Text.translatable("command.loracore.ask.success")
                                 .formatted(Formatting.YELLOW),
                         false
                 );
