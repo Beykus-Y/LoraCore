@@ -1,0 +1,172 @@
+package com.aiassist;
+
+import com.mojang.datafixers.util.Pair;
+import net.minecraft.nbt.NbtCompound;
+import net.minecraft.nbt.NbtElement;
+import net.minecraft.nbt.NbtList;
+import net.minecraft.registry.Registry;
+import net.minecraft.registry.RegistryKey;
+import net.minecraft.registry.RegistryKeys;
+import net.minecraft.registry.RegistryWrapper;
+import net.minecraft.registry.entry.RegistryEntry;
+import net.minecraft.registry.entry.RegistryEntryList;
+import net.minecraft.registry.tag.TagKey;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.world.ServerWorld;
+import net.minecraft.util.Identifier;
+import net.minecraft.util.math.BlockPos;
+import net.minecraft.world.PersistentState;
+import net.minecraft.world.PersistentStateManager;
+import net.minecraft.world.biome.Biome;
+import net.minecraft.world.gen.structure.Structure;
+import org.jetbrains.annotations.Nullable;
+import com.aiassist.service.AiService;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
+
+public class StructureNameManager extends PersistentState {
+    private static final String ID = "aiassist_structure_names";
+
+    // ... класс StructureData остается без изменений ...
+    public static class StructureData {
+        public String name;
+        public String description;
+        public AtomicBoolean isGenerating = new AtomicBoolean(false);
+
+        public StructureData(String name, String description) { this.name = name; this.description = description; }
+        public StructureData(NbtCompound nbt) { this.name = nbt.getString("name"); this.description = nbt.getString("description"); }
+        public NbtCompound writeNbt() { NbtCompound nbt = new NbtCompound(); nbt.putString("name", name); nbt.putString("description", description); return nbt; }
+    }
+
+    // ИЗМЕНЕНИЕ 1: Создаем вложенный класс для результата проверки
+    public static class StructureCheckResult {
+        private final Optional<StructureData> data;
+        private final Optional<String> posKey;
+
+        public StructureCheckResult(Optional<StructureData> data, Optional<String> posKey) {
+            this.data = data;
+            this.posKey = posKey;
+        }
+
+        public Optional<StructureData> getData() { return data; }
+        public Optional<String> getPosKey() { return posKey; }
+
+        public static StructureCheckResult empty() {
+            return new StructureCheckResult(Optional.empty(), Optional.empty());
+        }
+    }
+
+    private final Map<String, StructureData> structureDataMap = new ConcurrentHashMap<>();
+
+    // ... конструктор и другие методы до getOrCreateStructureDataAt остаются без изменений ...
+    public StructureNameManager() {}
+    public static StructureNameManager createFromNbt(NbtCompound nbt, RegistryWrapper.WrapperLookup lookup) {
+        // ... без изменений ...
+        StructureNameManager manager = new StructureNameManager();
+        NbtList list = nbt.getList("structures", NbtElement.COMPOUND_TYPE);
+        for (NbtElement element : list) {
+            NbtCompound compound = (NbtCompound) element;
+            String posKey = compound.getString("pos");
+            StructureData data = new StructureData(compound);
+            manager.structureDataMap.put(posKey, data);
+        }
+        AiMod.LOGGER.info("Загружено {} записей о структурах.", manager.structureDataMap.size());
+        return manager;
+    }
+    @Override
+    public NbtCompound writeNbt(NbtCompound nbt, RegistryWrapper.WrapperLookup lookup) {
+        // ... без изменений ...
+        NbtList list = new NbtList();
+        for (Map.Entry<String, StructureData> entry : structureDataMap.entrySet()) {
+            NbtCompound compound = entry.getValue().writeNbt();
+            compound.putString("pos", entry.getKey());
+            list.add(compound);
+        }
+        nbt.put("structures", list);
+        AiMod.LOGGER.info("Сохранено {} записей о структурах.", structureDataMap.size());
+        return nbt;
+    }
+    public static StructureNameManager get(ServerWorld world) {
+        // ... без изменений ...
+        PersistentStateManager stateManager = world.getPersistentStateManager();
+        Type<StructureNameManager> type = new Type<>(
+                StructureNameManager::new,
+                (nbt, lookup) -> createFromNbt(nbt, lookup),
+                null
+        );
+        return stateManager.getOrCreate(type, ID);
+    }
+
+    // ИЗМЕНЕНИЕ 2: Меняем возвращаемый тип и логику метода
+    public StructureCheckResult getOrCreateStructureDataAt(ServerWorld world, BlockPos playerPos) {
+        List<TagKey<Structure>> structureTags = List.of(
+                TagKey.of(RegistryKeys.STRUCTURE, new Identifier("minecraft", "village")),
+                TagKey.of(RegistryKeys.STRUCTURE, new Identifier("minecraft", "pillager_outpost")),
+                TagKey.of(RegistryKeys.STRUCTURE, new Identifier("minecraft", "mineshaft")),
+                TagKey.of(RegistryKeys.STRUCTURE, new Identifier("minecraft", "desert_pyramid")),
+                TagKey.of(RegistryKeys.STRUCTURE, new Identifier("minecraft", "jungle_temple")),
+                TagKey.of(RegistryKeys.STRUCTURE, new Identifier("minecraft", "ocean_monument")),
+                TagKey.of(RegistryKeys.STRUCTURE, new Identifier("minecraft", "stronghold")),
+                TagKey.of(RegistryKeys.STRUCTURE, new Identifier("minecraft", "mansion")),
+                TagKey.of(RegistryKeys.STRUCTURE, new Identifier("minecraft", "ruined_portal")),
+                TagKey.of(RegistryKeys.STRUCTURE, new Identifier("minecraft", "shipwreck")),
+                TagKey.of(RegistryKeys.STRUCTURE, new Identifier("minecraft", "swamp_hut"))
+        );
+
+        Registry<Structure> structureRegistry = world.getRegistryManager().get(RegistryKeys.STRUCTURE);
+
+        for (TagKey<Structure> tag : structureTags) {
+            Optional<RegistryEntryList.Named<Structure>> entryListOptional = structureRegistry.getEntryList(tag);
+
+            if (entryListOptional.isPresent()) {
+                @Nullable
+                Pair<BlockPos, RegistryEntry<Structure>> locatedStructure = world.getChunkManager().getChunkGenerator().locateStructure(world, entryListOptional.get(), playerPos, 32, false);
+
+                if (locatedStructure != null) {
+                    BlockPos structureOrigin = locatedStructure.getFirst();
+                    String posKey = structureOrigin.getX() + "," + structureOrigin.getY() + "," + structureOrigin.getZ();
+
+                    StructureData data = structureDataMap.computeIfAbsent(posKey, k -> {
+                        StructureData newData = new StructureData("Неизвестная структура...", "Получаем описание...");
+                        newData.isGenerating.set(true);
+                        RegistryEntry<Biome> biomeEntry = world.getBiome(playerPos);
+                        String biomeId = biomeEntry.getKey().map(RegistryKey::getValue).orElse(new Identifier("minecraft", "unknown_biome")).toString();
+                        AiMod.LOGGER.info("Найдена новая структура (тег '{}') в биоме '{}' по позиции {}. Запускаем генерацию имени AI.", tag.id(), biomeId, posKey);
+                        AiService.generateStructureInfo(tag.id().toString(), biomeId)
+                                .whenCompleteAsync((generatedInfo, error) -> {
+                                    MinecraftServer server = world.getServer();
+                                    if (server == null) return;
+                                    server.execute(() -> {
+                                        if (error != null) {
+                                            AiMod.LOGGER.error("Ошибка при генерации имени AI для структуры в {}: {}", posKey, error.getMessage());
+                                            structureDataMap.put(posKey, new StructureData("Ошибка генерации", "Не удалось получить описание."));
+                                        } else {
+                                            // ИЗМЕНЕНИЕ: Используем методы доступа name() и description()
+                                            AiMod.LOGGER.info("AI сгенерировал имя '{}' и описание '{}' для структуры в {}.", generatedInfo.name(), generatedInfo.description(), posKey);
+                                            structureDataMap.put(posKey, new StructureData(generatedInfo.name(), generatedInfo.description()));
+                                        }
+                                        StructureData currentData = structureDataMap.get(posKey);
+                                        if (currentData != null) {
+                                            currentData.isGenerating.set(false);
+                                        }
+                                        markDirty();
+                                    });
+                                }, world.getServer());
+                        return newData;
+                    });
+                    // Возвращаем результат, содержащий и данные, и ключ
+                    return new StructureCheckResult(Optional.of(data), Optional.of(posKey));
+                }
+            }
+        }
+        // Если ничего не найдено, возвращаем пустой результат
+        return StructureCheckResult.empty();
+    }
+
+    public Optional<StructureData> getStructureData(String posKey) {
+        return Optional.ofNullable(structureDataMap.get(posKey));
+    }
+}

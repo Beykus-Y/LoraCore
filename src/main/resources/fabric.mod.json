@@ -1,41 +1,53 @@
 {
 	"schemaVersion": 1,
-	"id": "modid",
+	"id": "aiassist",
 	"version": "${version}",
-	"name": "Example mod",
-	"description": "This is an example description! Tell everyone what your mod is about!",
+	"name": "AI Assistant",
+	"description": "An AI-powered assistant for Minecraft. Ask questions and discover dynamically named structures.",
 	"authors": [
-		"Me!"
+		"YourNameHere"
 	],
 	"contact": {
-		"homepage": "https://fabricmc.net/",
-		"sources": "https://github.com/FabricMC/fabric-example-mod"
+		"homepage": "https://your-project-homepage.com/",
+		"sources": "https://github.com/YourUser/YourRepo"
 	},
 	"license": "CC0-1.0",
-	"icon": "assets/modid/icon.png",
+	"icon": "assets/aiassist/icon.png",
 	"environment": "*",
 	"entrypoints": {
 		"main": [
-			"com.example.ExampleMod"
+			"com.aiassist.AiMod"
 		],
 		"client": [
-			"com.example.ExampleModClient"
+			"com.aiassist.AiAssistClient"
+		],
+		"modmenu": [
+			"com.aiassist.ModMenuIntegration"
+		],
+		"cardinal-components": [
+			"com.aiassist.component.ModComponents"
 		]
 	},
 	"mixins": [
-		"modid.mixins.json",
-		{
-			"config": "modid.client.mixins.json",
-			"environment": "client"
-		}
+		"aiassist.mixins.json",
+		"aiassist.client.mixins.json"
 	],
 	"depends": {
-		"fabricloader": ">=0.16.14",
-		"minecraft": "~1.21.7",
+		"fabricloader": ">=0.15.10",
+		"minecraft": "~1.20.6",
 		"java": ">=21",
-		"fabric-api": "*"
+		"fabric-api": "*",
+		"cardinal-components-base": "*",
+		"cardinal-components-entity": "*"
 	},
 	"suggests": {
-		"another-mod": "*"
+		"modmenu": "*"
+	},
+	"custom": {
+		"cardinal-components": [
+			"aiassist:villager_data",
+			"aiassist:player_dialogue",
+			"aiassist:player_quest"
+		]
 	}
 }
