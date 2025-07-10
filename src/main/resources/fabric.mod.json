@@ -1,36 +1,36 @@
 {
 	"schemaVersion": 1,
-	"id": "aiassist",
+	"id": "loracore",
 	"version": "${version}",
-	"name": "AI Assistant",
+	"name": "LoraCore",
 	"description": "An AI-powered assistant for Minecraft. Ask questions and discover dynamically named structures.",
 	"authors": [
-		"YourNameHere"
+		"Beykus-Y"
 	],
 	"contact": {
 		"homepage": "https://your-project-homepage.com/",
 		"sources": "https://github.com/YourUser/YourRepo"
 	},
 	"license": "CC0-1.0",
-	"icon": "assets/aiassist/icon.png",
+	"icon": "assets/loracore/icon.png",
 	"environment": "*",
 	"entrypoints": {
 		"main": [
-			"com.aiassist.AiMod"
+			"com.loracore.AiMod"
 		],
 		"client": [
-			"com.aiassist.AiAssistClient"
+			"com.loracore.loracoreClient"
 		],
 		"modmenu": [
-			"com.aiassist.ModMenuIntegration"
+			"com.loracore.ModMenuIntegration"
 		],
 		"cardinal-components": [
-			"com.aiassist.component.ModComponents"
+			"com.loracore.component.ModComponents"
 		]
 	},
 	"mixins": [
-		"aiassist.mixins.json",
-		"aiassist.client.mixins.json"
+		"loracore.mixins.json",
+		"loracore.client.mixins.json"
 	],
 	"depends": {
 		"fabricloader": ">=0.15.10",
@@ -45,9 +45,9 @@
 	},
 	"custom": {
 		"cardinal-components": [
-			"aiassist:villager_data",
-			"aiassist:player_dialogue",
-			"aiassist:player_quest"
+			"loracore:villager_data",
+			"loracore:player_dialogue",
+			"loracore:player_quest"
 		]
 	}
 }

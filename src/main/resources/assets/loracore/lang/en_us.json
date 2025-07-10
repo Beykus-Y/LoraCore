@@ -1,0 +1,55 @@
+{
+  "mod.aiassist.name": "LoraCore",
+
+  "item.aiassist.emerald_shard": "Emerald Shard",
+
+  "category.aiassist.main": "LoraCore",
+  "key.aiassist.open_quest_log": "Open Quest Log",
+
+  "config.aiassist.title": "LoraCore Settings",
+  "config.aiassist.category.openai": "OpenAI API",
+  "config.aiassist.option.apiUrl": "API URL",
+  "config.aiassist.option.apiUrl.tooltip": "URL for API requests.",
+  "config.aiassist.option.apiKey": "API Key",
+  "config.aiassist.option.apiKey.tooltip": "Your secret key from OpenAI.",
+  "config.aiassist.button.fetchModels": "Fetch/Update Model List",
+  "config.aiassist.button.fetchModels.tooltip": "Downloads available models from the API server.\nRequires the API key entered above.\n(This is a toggle that acts like a button)",
+  "config.aiassist.option.modelId": "Model ID",
+  "config.aiassist.option.modelId.tooltip.string": "Model ID. Press the button above to load the list for selection.",
+  "config.aiassist.option.modelId.tooltip.dropdown": "Select a model from the list received from the API.",
+  "config.aiassist.status.idle": "Press the button to get the list.",
+  "config.aiassist.status.loading": "Loading...",
+  "config.aiassist.status.error": "Error: %s",
+  "config.aiassist.status.success": "Successfully loaded %s models.",
+
+  "command.aiassist.ask.fail.not_player": "This command can only be used by a player.",
+  "command.aiassist.ask.success": "Sending your question to the AI...",
+
+  "structure.aiassist.discover.generating": "New structure detected: %s",
+  "structure.aiassist.enter.title": "Welcome to: %s!",
+  "structure.aiassist.enter.description": "%s",
+  "structure.aiassist.leave.area": "You have left the named area.",
+  "structure.aiassist.leave.dimension": "You have changed dimensions and left the named area.",
+
+  "gui.aiassist.quest_log.title": "Quest Log",
+  "gui.aiassist.quest_log.no_quests": "You have no active quests.",
+  "gui.aiassist.quest_log.goal": "Goal: Bring %s (%s)",
+  "gui.aiassist.quest_log.reward": "Reward: %s (%s)",
+
+  "gui.aiassist.dialogue.title_prefix": "Dialogue with %s",
+  "gui.aiassist.dialogue.input_placeholder": "Ask something...",
+  "gui.aiassist.dialogue.button.send": "Send",
+  "gui.aiassist.dialogue.prefix.user": "You: ",
+
+  "chat.aiassist.villager.request_sent": "Sent a request to get acquainted...",
+  "chat.aiassist.ai.response_prefix": "AI answers: %s",
+
+  "error.aiassist.api_key_missing": "Error: API key is not configured.",
+  "error.aiassist.api_connection_failed": "Failed to contact the AI.",
+  "error.aiassist.api_empty_response": "The AI returned an empty response.",
+  "error.aiassist.dialogue.generic": "An error occurred while communicating with the AI.",
+
+  "quest.aiassist.debug.title": "Farmer's Request",
+  "quest.aiassist.debug.description": "I need 10 carrots for my stew. Can you help?"
+
+}
