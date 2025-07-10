@@ -28,13 +28,7 @@ public class ModKeyBindings {
     private static void registerKeyInputs() {
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             while (openQuestLogKey.wasPressed()) {
-                // ДЛЯ ТЕСТА: добавляем квест-заглушку при каждом открытии
-                PlayerQuestComponent questComponent = ModComponents.PLAYER_QUEST.get(client.player);
-                if (questComponent.getQuests().isEmpty()) {
-                    questComponent.addQuest(Quest.createDebugQuest());
-                }
-
-                client.setScreen(new QuestLogScreen());
+                                client.setScreen(new QuestLogScreen());
             }
         });
     }

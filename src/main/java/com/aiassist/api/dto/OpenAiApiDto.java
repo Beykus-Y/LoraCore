@@ -24,4 +24,5 @@ public final class OpenAiApiDto {
 
 
     public record GeneratedVillagerInfo(String name, String personality) {}
+    public record GeneratedQuestInfo(String title, String description, String goalItem, int goalAmount, String rewardItem, int rewardAmount) {}
 }

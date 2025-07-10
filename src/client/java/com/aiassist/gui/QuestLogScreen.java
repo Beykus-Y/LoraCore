@@ -6,15 +6,16 @@ import com.aiassist.quest.Quest;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.text.OrderedText; // ИМПОРТ
+import net.minecraft.text.OrderedText;
 import net.minecraft.text.Text;
+import net.minecraft.util.Formatting;
 
 import java.util.List;
 
 public class QuestLogScreen extends Screen {
 
     public QuestLogScreen() {
-        super(Text.literal("Журнал заданий"));
+        super(Text.translatable("gui.aiassist.quest_log.title"));
     }
 
     @Override
@@ -26,7 +27,7 @@ public class QuestLogScreen extends Screen {
         List<Quest> quests = questComponent.getQuests();
 
         if (quests.isEmpty()) {
-            context.drawCenteredTextWithShadow(this.textRenderer, "У вас нет активных заданий.", this.width / 2, this.height / 2, 0xA0A0A0);
+            context.drawCenteredTextWithShadow(this.textRenderer, Text.translatable("gui.aiassist.quest_log.no_quests"), this.width / 2, this.height / 2, 0xA0A0A0);
             return;
         }
 
@@ -34,23 +35,24 @@ public class QuestLogScreen extends Screen {
         int maxTextWidth = this.width - 40;
 
         for (Quest quest : quests) {
-            context.drawTextWithShadow(this.textRenderer, Text.literal("§e" + quest.title()), 20, y, 0xFFFF55);
+            // Название и описание теперь используют ключи, заданные в Quest.java
+            context.drawTextWithShadow(this.textRenderer, Text.translatable(quest.title()).formatted(Formatting.YELLOW), 20, y, 0xFFFF55);
             y += 12;
 
-            // ИСПРАВЛЕНИЕ: Метод wrapLines вызывается напрямую у textRenderer, а не через getTextHandler
-            List<OrderedText> wrappedLines = this.textRenderer.wrapLines(Text.literal(quest.description()), maxTextWidth);
+            List<OrderedText> wrappedLines = this.textRenderer.wrapLines(Text.translatable(quest.description()), maxTextWidth);
             for (OrderedText line : wrappedLines) {
                 context.drawTextWithShadow(this.textRenderer, line, 20, y, 0xFFFFFF);
                 y += 10;
             }
             y += 5;
 
-            String goalText = String.format("Цель: Принести %s (%d шт.)", quest.goal().item().getName().getString(), quest.goal().requiredAmount());
-            context.drawTextWithShadow(this.textRenderer, Text.literal(goalText), 20, y, 0xAAAAAA);
+            // Используем Text.translatable для цели и награды
+            Text goalText = Text.translatable("gui.aiassist.quest_log.goal", quest.goal().item().getName(), quest.goal().requiredAmount());
+            context.drawTextWithShadow(this.textRenderer, goalText, 20, y, 0xAAAAAA);
             y += 12;
 
-            String rewardText = String.format("Награда: %s (%d шт.)", quest.reward().item().getName().getString(), quest.reward().amount());
-            context.drawTextWithShadow(this.textRenderer, Text.literal(rewardText), 20, y, 0x55FF55);
+            Text rewardText = Text.translatable("gui.aiassist.quest_log.reward", quest.reward().item().getName(), quest.reward().amount());
+            context.drawTextWithShadow(this.textRenderer, rewardText, 20, y, 0x55FF55);
             y += 20;
         }
     }

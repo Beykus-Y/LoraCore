@@ -3,53 +3,157 @@ package com.aiassist.gui;
 import com.aiassist.api.dto.OpenAiApiDto.Message;
 import com.aiassist.component.ModComponents;
 import com.aiassist.component.PlayerDialogueComponent;
+import com.aiassist.component.PlayerQuestComponent;
 import com.aiassist.component.VillagerDataComponent;
+import com.aiassist.network.AcceptQuestC2SPacket;
+import com.aiassist.network.CompleteQuestC2SPacket;
 import com.aiassist.network.SendDialogueMessageC2SPacket;
-import com.aiassist.network.SetVillagerFrozenC2SPacket; // ИМПОРТ НОВОГО ПАКЕТА
+import com.aiassist.network.SetVillagerFrozenC2SPacket;
+import com.aiassist.quest.Quest;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.client.gui.widget.TextFieldWidget;
-import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.entity.passive.VillagerEntity;
+import net.minecraft.text.MutableText;
 import net.minecraft.text.OrderedText;
 import net.minecraft.text.Text;
 
 import java.util.List;
+import java.util.Objects; // Добавлен импорт Objects
+import java.util.UUID;
 
 public class VillagerDialogueScreen extends Screen {
     private final VillagerEntity villager;
-    private TextFieldWidget inputBox;
     private final VillagerDataComponent villagerData;
     private final PlayerDialogueComponent playerDialogue;
+    private final PlayerQuestComponent playerQuest;
+
+    private TextFieldWidget inputBox;
+    private ButtonWidget sendButton;
+    private ButtonWidget acceptQuestButton;
+    private ButtonWidget declineQuestButton;
+    private ButtonWidget completeQuestButton;
+
+    private boolean isQuestOfferActive = false;
 
     public VillagerDialogueScreen(VillagerEntity villager) {
-        super(Text.literal("Диалог с " + ModComponents.VILLAGER_DATA.get(villager).getVillagerName()));
+        super(Text.translatable("gui.aiassist.dialogue.title_prefix", ModComponents.VILLAGER_DATA.get(villager).getVillagerName()));
         this.villager = villager;
         this.villagerData = ModComponents.VILLAGER_DATA.get(villager);
-        this.playerDialogue = ModComponents.PLAYER_DIALOGUE.get(MinecraftClient.getInstance().player);
+        // Исправление: Используем Objects.requireNonNull для уверенности, что player не null
+        // Это безопасно, так как экран диалога открывается только когда игрок существует.
+        this.playerDialogue = ModComponents.PLAYER_DIALOGUE.get(Objects.requireNonNull(MinecraftClient.getInstance().player));
+        this.playerQuest = ModComponents.PLAYER_QUEST.get(Objects.requireNonNull(MinecraftClient.getInstance().player));
     }
 
     @Override
     protected void init() {
         super.init();
-        this.inputBox = new TextFieldWidget(this.textRenderer, this.width / 2 - 150, this.height - 38, 240, 20, Text.literal("Спросить что-нибудь..."));
-        ButtonWidget sendButton = ButtonWidget.builder(Text.literal("Отправить"), button -> this.sendMessage())
+
+        this.inputBox = new TextFieldWidget(this.textRenderer, this.width / 2 - 150, this.height - 38, 240, 20, Text.translatable("gui.aiassist.dialogue.input_placeholder"));
+        this.addDrawableChild(this.inputBox);
+
+        this.sendButton = ButtonWidget.builder(Text.translatable("gui.aiassist.dialogue.button.send"), button -> this.sendMessage())
                 .dimensions(this.width / 2 + 95, this.height - 38, 55, 20)
                 .build();
-
-        this.addDrawableChild(this.inputBox);
         this.addDrawableChild(sendButton);
 
-        // ИЗМЕНЕНИЕ: Отправляем пакет, чтобы "заморозить" жителя
+        this.acceptQuestButton = ButtonWidget.builder(Text.translatable("gui.aiassist.quest.button.accept"), button -> {
+            String langCode = MinecraftClient.getInstance().getLanguageManager().getLanguage();
+            // Исправление: Проверяем client.player на null, хотя в этом контексте он почти всегда есть
+            if (this.client != null && this.client.player != null) {
+                ClientPlayNetworking.send(new AcceptQuestC2SPacket(this.villager.getUuid(), langCode));
+            }
+            this.setQuestOfferMode(false);
+        }).dimensions(this.width / 2 - 105, this.height - 38, 100, 20).build();
+        this.addDrawableChild(acceptQuestButton);
+
+        this.declineQuestButton = ButtonWidget.builder(Text.translatable("gui.aiassist.quest.button.decline"), button -> {
+            // Исправление: Проверяем client.player на null
+            if (this.client != null && this.client.player != null) {
+                UUID playerUuid = this.client.player.getUuid();
+                if (villagerData.hasQuestForPlayer(playerUuid)) {
+                    villagerData.completeQuestForPlayer(playerUuid); // Используем completeQuestForPlayer для удаления "предложенного" квеста
+                }
+                this.playerDialogue.addMessageToHistory(this.villager.getUuid(), new Message("assistant", "Очень жаль. Может, в другой раз."));
+                // Сброс флага, кнопки обновятся при следующем рендере после синхронизации компонента
+                this.setQuestOfferMode(false);
+            }
+        }).dimensions(this.width / 2 + 5, this.height - 38, 100, 20).build();
+        this.addDrawableChild(declineQuestButton);
+
+        this.completeQuestButton = ButtonWidget.builder(Text.translatable("gui.aiassist.quest.button.complete"), button -> {
+            ClientPlayNetworking.send(new CompleteQuestC2SPacket(this.villager.getUuid()));
+            // Квест будет удален сервером, компонент синхронизируется, и кнопки обновятся
+        }).dimensions(this.width / 2 - 152, this.height - 38, 304, 20).build();
+        this.addDrawableChild(completeQuestButton);
+
         ClientPlayNetworking.send(new SetVillagerFrozenC2SPacket(this.villager.getUuid(), true));
+        updateButtonVisibility(); // Первоначальное обновление видимости при открытии экрана
+    }
+
+    private void setQuestOfferMode(boolean isQuestOffer) {
+        this.isQuestOfferActive = isQuestOffer;
+        // updateButtonVisibility() будет вызван в render()
+    }
+
+    private void updateButtonVisibility() {
+        Quest activeQuest = getActiveQuestForThisVillager();
+
+        if (activeQuest != null) {
+            boolean canComplete = canCompleteQuest(activeQuest);
+            // Используем поле 'visible' вместо метода 'setVisible()'
+            completeQuestButton.visible = canComplete;
+            completeQuestButton.active = canComplete; // active влияет на возможность нажатия
+
+            inputBox.visible = !canComplete;
+            sendButton.visible = !canComplete;
+
+            acceptQuestButton.visible = false;
+            declineQuestButton.visible = false;
+        } else if (isQuestOfferActive) {
+            inputBox.visible = false;
+            sendButton.visible = false;
+
+            acceptQuestButton.visible = true;
+            declineQuestButton.visible = true;
+
+            completeQuestButton.visible = false;
+        } else {
+            // Обычный режим диалога
+            inputBox.visible = true;
+            sendButton.visible = true;
+
+            acceptQuestButton.visible = false;
+            declineQuestButton.visible = false;
+            completeQuestButton.visible = false;
+        }
+    }
+
+    private Quest getActiveQuestForThisVillager() {
+        // На клиенте для определения активного квеста, назначенного именно ЭТИМ жителем
+        // мы смотрим в список квестов игрока, а не в VillagerDataComponent.
+        // VillagerDataComponent на сервере будет хранить квест, который житель "предложил"
+        // или "назначил" игроку, но на клиенте игрок должен видеть только свои активные квесты
+        // из PlayerQuestComponent.
+        // Исправление: Дополнительная проверка на null для player
+        if (this.client == null || this.client.player == null) return null;
+        return playerQuest.getQuests().stream()
+                .filter(quest -> quest.villagerGiverUuid().equals(this.villager.getUuid()))
+                .findFirst()
+                .orElse(null);
+    }
+
+    private boolean canCompleteQuest(Quest quest) {
+        if (quest == null || this.client == null || this.client.player == null) return false;
+        return this.client.player.getInventory().count(quest.goal().item()) >= quest.goal().requiredAmount();
     }
 
     @Override
     public void close() {
-        // ИЗМЕНЕНИЕ: Отправляем пакет, чтобы "разморозить" жителя при закрытии экрана
         ClientPlayNetworking.send(new SetVillagerFrozenC2SPacket(this.villager.getUuid(), false));
         super.close();
     }
@@ -59,8 +163,13 @@ public class VillagerDialogueScreen extends Screen {
         if (messageText == null || messageText.trim().isEmpty()) {
             return;
         }
-        ClientPlayNetworking.send(new SendDialogueMessageC2SPacket(this.villager.getUuid(), messageText));
+        String langCode = MinecraftClient.getInstance().getLanguageManager().getLanguage();
+        // Исправление: Проверяем client.player на null
+        if (this.client != null && this.client.player != null) {
+            ClientPlayNetworking.send(new SendDialogueMessageC2SPacket(this.villager.getUuid(), messageText, langCode));
+        }
         this.inputBox.setText("");
+        setQuestOfferMode(false); // Сброс режима предложения квеста после отправки обычного сообщения
     }
 
     @Override
@@ -70,22 +179,58 @@ public class VillagerDialogueScreen extends Screen {
 
         List<Message> history = playerDialogue.getDialogueHistory(this.villager.getUuid());
         int y = 35;
-        // Задаем максимальную ширину для текста диалога
-        int maxTextWidth = this.width - 60; // Отступы по 30 пикселей с каждой стороны
+        int maxTextWidth = this.width - 60;
 
+        // Переменная для определения, является ли последнее сообщение предложением квеста
+        boolean currentLastMessageIsQuestOffer = false;
+
+        // Начинаем с 1, чтобы пропустить системный промпт
         for (int i = 1; i < history.size(); i++) {
             Message msg = history.get(i);
-            String prefix = msg.role().equals("user") ? "Вы: " : villagerData.getVillagerName() + ": ";
-            String fullText = prefix + msg.content();
 
-            // ИЗМЕНЕНИЕ: Разбиваем текст на строки, если он не помещается
-            List<OrderedText> wrappedLines = this.textRenderer.wrapLines(Text.literal(fullText), maxTextWidth);
+            String content = msg.content();
+            // Проверяем, есть ли маркер квеста.
+            if (msg.role().equals("assistant") && content.endsWith("[QUEST_OFFER]")) {
+                content = content.replace("[QUEST_OFFER]", "").trim();
+                // Если это последнее сообщение в истории и оно содержит маркер квеста,
+                // и при этом у игрока нет активного квеста от этого жителя,
+                // то текущее состояние - это активное предложение квеста.
+                if (i == history.size() - 1 && getActiveQuestForThisVillager() == null) {
+                    currentLastMessageIsQuestOffer = true;
+                }
+            }
 
-            // Рендерим каждую строку отдельно
+            Text prefix = msg.role().equals("user")
+                    ? Text.translatable("gui.aiassist.dialogue.prefix.user")
+                    : Text.literal(villagerData.getVillagerName() + ": ");
+
+            MutableText fullText = Text.empty().append(prefix).append(content);
+            List<OrderedText> wrappedLines = this.textRenderer.wrapLines(fullText, maxTextWidth);
+
             for (OrderedText line : wrappedLines) {
                 context.drawTextWithShadow(this.textRenderer, line, 30, y, 0xFFFFFF);
-                y += 12; // Смещаем Y для следующей строки
+                y += 12;
             }
+        }
+
+        // Исправление для "effectively final": создаем финальную копию переменной
+        final boolean finalCurrentLastMessageIsQuestOffer = currentLastMessageIsQuestOffer;
+
+        // Устанавливаем режим предложения квеста ВНЕ цикла, на основе последнего сообщения
+        // и только если у игрока нет активного квеста от этого жителя.
+        // Вызов setQuestOfferMode() внутри client.execute() необходим, чтобы изменения состояния
+        // GUI происходили на основном потоке Minecraft после завершения текущего рендера.
+        // Исправление: Проверяем this.client на null перед вызовом execute
+        if (this.isQuestOfferActive != finalCurrentLastMessageIsQuestOffer && this.client != null) { // Избегаем ненужных вызовов
+            this.client.execute(() -> setQuestOfferMode(finalCurrentLastMessageIsQuestOffer));
+        }
+
+        // ОБЯЗАТЕЛЬНО: Вызываем updateButtonVisibility() каждый кадр,
+        // чтобы GUI реагировал на изменения в компонентах после синхронизации.
+        // Теперь updateButtonVisibility будет использовать актуальное isQuestOfferActive
+        // и состояние квеста из компонента.
+        if (this.client != null) {
+            this.client.execute(this::updateButtonVisibility);
         }
     }
 

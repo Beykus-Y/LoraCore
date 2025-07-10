@@ -1,15 +1,18 @@
 package com.aiassist.quest;
 
-import com.aiassist.item.ModItems;
+import net.minecraft.entity.passive.VillagerEntity;
 import net.minecraft.item.Item;
 import net.minecraft.item.Items;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.registry.Registries;
-import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
 
-// Основной record для квеста
+import java.util.UUID; // Добавлен импорт
+
+// ИЗМЕНЕНИЕ 1: Добавлены поля questId и villagerGiverUuid
 public record Quest(
+        UUID questId,
+        UUID villagerGiverUuid,
         String title,
         String description,
         FetchGoal goal,
@@ -24,6 +27,9 @@ public record Quest(
     // Метод для сохранения квеста в NBT
     public NbtCompound writeNbt() {
         NbtCompound nbt = new NbtCompound();
+        // ИЗМЕНЕНИЕ 2: Сохранение новых полей UUID
+        nbt.putUuid("questId", questId);
+        nbt.putUuid("villagerGiverUuid", villagerGiverUuid);
         nbt.putString("title", title);
         nbt.putString("description", description);
 
@@ -42,6 +48,9 @@ public record Quest(
 
     // Статический метод для загрузки квеста из NBT
     public static Quest fromNbt(NbtCompound nbt) {
+        // ИЗМЕНЕНИЕ 3: Загрузка новых полей UUID
+        UUID questId = nbt.getUuid("questId");
+        UUID villagerGiverUuid = nbt.getUuid("villagerGiverUuid");
         String title = nbt.getString("title");
         String description = nbt.getString("description");
 
@@ -55,16 +64,13 @@ public record Quest(
         int rewardAmount = rewardNbt.getInt("amount");
         QuestReward reward = new QuestReward(rewardItem, rewardAmount);
 
-        return new Quest(title, description, goal, reward);
+        return new Quest(questId, villagerGiverUuid, title, description, goal, reward);
     }
 
-    // Статический метод для создания квеста-заглушки для теста
+    // ИЗМЕНЕНИЕ 4: Метод-заглушка удален, так как квесты теперь генерируются динамически
+    /*
     public static Quest createDebugQuest() {
-        return new Quest(
-                "Просьба фермера",
-                "Мне нужно 10 морковок для моего рагу. Поможешь?",
-                new FetchGoal(Items.CARROT, 10),
-                new QuestReward(ModItems.EMERALD_SHARD, 5)
-        );
+        // Этот код больше не нужен
     }
+    */
 }
