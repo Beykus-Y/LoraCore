@@ -3,7 +3,7 @@
 ![Fabric Loader](https://img.shields.io/badge/Fabric-Loader-orange?style=for-the-badge&logo=fabric)
 ![Minecraft Version](https://img.shields.io/badge/Minecraft-1.20.6-blue?style=for-the-badge&logo=minecraft)
 ![Java Version](https://img.shields.io/badge/Java-21-red?style=for-the-badge&logo=openjdk)
-![License: CC0](https://img.shields.io/badge/License-CC0%201.0%20Universal-lightgrey.svg?style=for-the-badge)
+![License: CC0](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)
 
 ---
 

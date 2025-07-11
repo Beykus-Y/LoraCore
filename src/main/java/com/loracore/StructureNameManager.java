@@ -1,6 +1,5 @@
 package com.loracore;
 
-import com.mojang.datafixers.util.Pair;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.nbt.NbtElement;
 import net.minecraft.nbt.NbtList;
@@ -13,14 +12,15 @@ import net.minecraft.registry.entry.RegistryEntryList;
 import net.minecraft.registry.tag.TagKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.world.ServerWorld;
+import net.minecraft.structure.StructureStart;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.PersistentState;
 import net.minecraft.world.PersistentStateManager;
 import net.minecraft.world.biome.Biome;
 import net.minecraft.world.gen.structure.Structure;
-import org.jetbrains.annotations.Nullable;
 import com.loracore.service.AiService;
+
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -30,7 +30,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class StructureNameManager extends PersistentState {
     private static final String ID = "loracore_structure_names";
 
-    // ... класс StructureData остается без изменений ...
     public static class StructureData {
         public String name;
         public String description;
@@ -41,7 +40,6 @@ public class StructureNameManager extends PersistentState {
         public NbtCompound writeNbt() { NbtCompound nbt = new NbtCompound(); nbt.putString("name", name); nbt.putString("description", description); return nbt; }
     }
 
-    // ИЗМЕНЕНИЕ 1: Создаем вложенный класс для результата проверки
     public static class StructureCheckResult {
         private final Optional<StructureData> data;
         private final Optional<String> posKey;
@@ -61,10 +59,9 @@ public class StructureNameManager extends PersistentState {
 
     private final Map<String, StructureData> structureDataMap = new ConcurrentHashMap<>();
 
-    // ... конструктор и другие методы до getOrCreateStructureDataAt остаются без изменений ...
     public StructureNameManager() {}
+
     public static StructureNameManager createFromNbt(NbtCompound nbt, RegistryWrapper.WrapperLookup lookup) {
-        // ... без изменений ...
         StructureNameManager manager = new StructureNameManager();
         NbtList list = nbt.getList("structures", NbtElement.COMPOUND_TYPE);
         for (NbtElement element : list) {
@@ -76,9 +73,9 @@ public class StructureNameManager extends PersistentState {
         LoraCoreMod.LOGGER.info("Загружено {} записей о структурах.", manager.structureDataMap.size());
         return manager;
     }
+
     @Override
     public NbtCompound writeNbt(NbtCompound nbt, RegistryWrapper.WrapperLookup lookup) {
-        // ... без изменений ...
         NbtList list = new NbtList();
         for (Map.Entry<String, StructureData> entry : structureDataMap.entrySet()) {
             NbtCompound compound = entry.getValue().writeNbt();
@@ -89,18 +86,20 @@ public class StructureNameManager extends PersistentState {
         LoraCoreMod.LOGGER.info("Сохранено {} записей о структурах.", structureDataMap.size());
         return nbt;
     }
+
     public static StructureNameManager get(ServerWorld world) {
-        // ... без изменений ...
         PersistentStateManager stateManager = world.getPersistentStateManager();
         Type<StructureNameManager> type = new Type<>(
                 StructureNameManager::new,
-                (nbt, lookup) -> createFromNbt(nbt, lookup),
+                StructureNameManager::createFromNbt, // Заменено на method reference
                 null
         );
         return stateManager.getOrCreate(type, ID);
     }
 
-    // ИЗМЕНЕНИЕ 2: Меняем возвращаемый тип и логику метода
+    // =========================================================================
+    // ИСПРАВЛЕННАЯ ЛОГИКА ПОИСКА
+    // =========================================================================
     public StructureCheckResult getOrCreateStructureDataAt(ServerWorld world, BlockPos playerPos) {
         List<TagKey<Structure>> structureTags = List.of(
                 TagKey.of(RegistryKeys.STRUCTURE, new Identifier("minecraft", "village")),
@@ -120,31 +119,39 @@ public class StructureNameManager extends PersistentState {
 
         for (TagKey<Structure> tag : structureTags) {
             Optional<RegistryEntryList.Named<Structure>> entryListOptional = structureRegistry.getEntryList(tag);
+            if (entryListOptional.isEmpty()) continue;
 
-            if (entryListOptional.isPresent()) {
-                @Nullable
-                Pair<BlockPos, RegistryEntry<Structure>> locatedStructure = world.getChunkManager().getChunkGenerator().locateStructure(world, entryListOptional.get(), playerPos, 32, false);
+            // НОВЫЙ ПОДХОД: Перебираем каждую структуру внутри тега
+            for (RegistryEntry<Structure> structureEntry : entryListOptional.get()) {
+                // Получаем ключ для каждой конкретной структуры (например, minecraft:village_plains)
+                Optional<RegistryKey<Structure>> keyOptional = structureEntry.getKey();
+                if (keyOptional.isEmpty()) continue;
 
-                if (locatedStructure != null) {
-                    BlockPos structureOrigin = locatedStructure.getFirst();
-                    String posKey = structureOrigin.getX() + "," + structureOrigin.getY() + "," + structureOrigin.getZ();
+                // Используем правильный метод API с правильными аргументами
+                StructureStart structureStart = world.getStructureAccessor().getStructureAt(playerPos, structureEntry.value());
+
+                if (structureStart != null && structureStart.hasChildren()) {
+                    BlockPos structureCenter = structureStart.getBoundingBox().getCenter();
+                    String posKey = structureCenter.getX() + "," + structureCenter.getY() + "," + structureCenter.getZ();
 
                     StructureData data = structureDataMap.computeIfAbsent(posKey, k -> {
                         StructureData newData = new StructureData("Неизвестная структура...", "Получаем описание...");
                         newData.isGenerating.set(true);
+
                         RegistryEntry<Biome> biomeEntry = world.getBiome(playerPos);
                         String biomeId = biomeEntry.getKey().map(RegistryKey::getValue).orElse(new Identifier("minecraft", "unknown_biome")).toString();
+
                         LoraCoreMod.LOGGER.info("Найдена новая структура (тег '{}') в биоме '{}' по позиции {}. Запускаем генерацию имени AI.", tag.id(), biomeId, posKey);
+
                         AiService.generateStructureInfo(tag.id().toString(), biomeId)
                                 .whenCompleteAsync((generatedInfo, error) -> {
                                     MinecraftServer server = world.getServer();
-                                    if (server == null) return;
+                                    // Проверка server != null здесь избыточна, так как мы находимся на сервере
                                     server.execute(() -> {
                                         if (error != null) {
                                             LoraCoreMod.LOGGER.error("Ошибка при генерации имени AI для структуры в {}: {}", posKey, error.getMessage());
                                             structureDataMap.put(posKey, new StructureData("Ошибка генерации", "Не удалось получить описание."));
                                         } else {
-                                            // ИЗМЕНЕНИЕ: Используем методы доступа name() и description()
                                             LoraCoreMod.LOGGER.info("AI сгенерировал имя '{}' и описание '{}' для структуры в {}.", generatedInfo.name(), generatedInfo.description(), posKey);
                                             structureDataMap.put(posKey, new StructureData(generatedInfo.name(), generatedInfo.description()));
                                         }
@@ -157,16 +164,12 @@ public class StructureNameManager extends PersistentState {
                                 }, world.getServer());
                         return newData;
                     });
-                    // Возвращаем результат, содержащий и данные, и ключ
+                    // Как только нашли структуру, выходим из обоих циклов и возвращаем результат
                     return new StructureCheckResult(Optional.of(data), Optional.of(posKey));
                 }
             }
         }
-        // Если ничего не найдено, возвращаем пустой результат
+        // Если после всех проверок ничего не найдено
         return StructureCheckResult.empty();
-    }
-
-    public Optional<StructureData> getStructureData(String posKey) {
-        return Optional.ofNullable(structureDataMap.get(posKey));
     }
 }

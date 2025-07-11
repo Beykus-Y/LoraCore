@@ -26,7 +26,7 @@ public class LoraCoreMod implements ModInitializer {
 
 	private static final Map<UUID, String> lastKnownStructurePosKeyForPlayer = new HashMap<>();
 	private static final Map<UUID, Long> lastStructureCheckTickForPlayer = new HashMap<>();
-	private static final int STRUCTURE_CHECK_INTERVAL_TICKS = 60;
+	private static final int STRUCTURE_CHECK_INTERVAL_TICKS = 60; // Проверка раз в 3 секунды
 	private static StructureNameManager structureNameManager;
 
 	@Override
@@ -35,8 +35,6 @@ public class LoraCoreMod implements ModInitializer {
 		ConfigManager.loadConfig();
 		ModNetworking.registerC2SPackets();
 		ModItems.registerModItems();
-
-		// БЛОК РЕГИСТРАЦИИ СЕРВЕРНОЙ КОМАНДЫ /ask БЫЛ УДАЛЕН ОТСЮДА
 
 		ServerWorldEvents.LOAD.register((server, world) -> {
 			if (world.getRegistryKey() == World.OVERWORLD) {
@@ -66,23 +64,28 @@ public class LoraCoreMod implements ModInitializer {
 						if (!Objects.equals(oldStructurePosKey, newStructurePosKey)) {
 							lastKnownStructurePosKeyForPlayer.put(uuid, newStructurePosKey);
 
+							// Сначала очищаем старый заголовок
 							player.networkHandler.sendPacket(new TitleFadeS2CPacket(5, 10, 5));
 							player.networkHandler.sendPacket(new SubtitleS2CPacket(Text.empty()));
 							player.networkHandler.sendPacket(new TitleS2CPacket(Text.empty()));
+
 							if (newStructurePosKey != null) {
 								result.getData().ifPresent(data -> {
-									// ИЗМЕНЕНИЕ: Используем Text.literal для сгенерированных данных,
-									// так как это контент, а не ключ перевода.
-									Text structureName = Text.literal(data.name);
-									Text structureDescription = Text.literal(data.description);
-
+									// ИЗМЕНЕННАЯ ЛОГИКА:
+									// Четко разделяем, когда показывать сообщение о генерации, а когда - результат.
 									if (data.isGenerating.get()) {
-										player.sendMessage(Text.translatable("structure.loracore.discover.generating", structureName).formatted(Formatting.YELLOW), false);
-										player.networkHandler.sendPacket(new TitleFadeS2CPacket(10, 70, 20));
-										player.networkHandler.sendPacket(new TitleS2CPacket(structureName));
+										// Показываем сообщение о новой структуре ТОЛЬКО один раз, когда начинается генерация.
+										// Название "Неизвестная структура..." берется из StructureNameManager
+										player.sendMessage(Text.translatable("structure.loracore.discover.generating", data.name).formatted(Formatting.YELLOW), false);
 									} else {
+										// Когда генерация завершена (isGenerating == false), показываем полный результат.
+										Text structureName = Text.literal(data.name);
+										Text structureDescription = Text.literal(data.description);
+
+										// Используем ключи для локализации обертки
 										player.sendMessage(Text.translatable("structure.loracore.enter.title", structureName.copy().formatted(Formatting.BOLD)).formatted(Formatting.GREEN), false);
 										player.sendMessage(Text.translatable("structure.loracore.enter.description", structureDescription).formatted(Formatting.GREEN), false);
+
 										player.networkHandler.sendPacket(new TitleFadeS2CPacket(10, 70, 20));
 										player.networkHandler.sendPacket(new TitleS2CPacket(structureName));
 										player.networkHandler.sendPacket(new SubtitleS2CPacket(structureDescription));

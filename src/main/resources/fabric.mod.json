@@ -10,7 +10,7 @@
 	"contact": {
 		"sources": "https://github.com/Beykus-Y/LoraCore"
 	},
-	"license": "CC0-1.0",
+	"license": "MIT",
 	"icon": "assets/loracore/icon.png",
 	"environment": "*",
 	"entrypoints": {
