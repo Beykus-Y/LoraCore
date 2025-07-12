@@ -46,7 +46,8 @@
 		"cardinal-components": [
 			"loracore:villager_data",
 			"loracore:player_dialogue",
-			"loracore:player_quest"
+			"loracore:player_quest",
+			"loracore:player_ask_history"
 		]
 	}
 }

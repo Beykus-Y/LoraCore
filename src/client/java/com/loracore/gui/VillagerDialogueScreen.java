@@ -52,6 +52,7 @@ public class VillagerDialogueScreen extends Screen {
 
         // Поле ввода для чата
         this.inputBox = new TextFieldWidget(this.textRenderer, this.width / 2 - 150, this.height - 38, 240, 20, Text.translatable("gui.loracore.dialogue.input_placeholder"));
+        this.inputBox.setMaxLength(256);
         this.addDrawableChild(this.inputBox);
 
         // Кнопка "Отправить"

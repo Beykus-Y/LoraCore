@@ -19,6 +19,8 @@ public class ModComponents implements EntityComponentInitializer {
             ComponentRegistry.getOrCreate(new Identifier(LoraCoreMod.MOD_ID, "player_dialogue"), PlayerDialogueComponent.class);
     public static final ComponentKey<PlayerQuestComponent> PLAYER_QUEST =
             ComponentRegistry.getOrCreate(new Identifier(LoraCoreMod.MOD_ID, "player_quest"), PlayerQuestComponent.class);
+    public static final ComponentKey<PlayerAskHistoryComponent> PLAYER_ASK_HISTORY =
+            ComponentRegistry.getOrCreate(new Identifier(LoraCoreMod.MOD_ID, "player_ask_history"), PlayerAskHistoryComponent.class);
 
     @Override
     public void registerEntityComponentFactories(EntityComponentFactoryRegistry registry) {
@@ -28,5 +30,7 @@ public class ModComponents implements EntityComponentInitializer {
         registry.registerFor(PlayerEntity.class, PLAYER_DIALOGUE, player -> new PlayerDialogueComponentImpl());
 
         registry.registerFor(PlayerEntity.class, PLAYER_QUEST, player -> new PlayerQuestComponentImpl());
+
+        registry.registerFor(PlayerEntity.class, PLAYER_ASK_HISTORY, player -> new PlayerAskHistoryComponentImpl());
     }
 }

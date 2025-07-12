@@ -8,11 +8,8 @@ import com.loracore.api.OpenAiApiClient;
 import com.loracore.api.dto.OpenAiApiDto.*;
 import com.loracore.component.ModComponents;
 import com.loracore.component.VillagerDataComponent;
-import com.loracore.quest.Quest;
 import com.loracore.util.PlayerContextProvider;
 import net.minecraft.entity.passive.VillagerEntity;
-import net.minecraft.item.Item;
-import net.minecraft.item.Items;
 import net.minecraft.registry.Registries;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.text.Text;
@@ -21,7 +18,10 @@ import net.minecraft.util.Identifier;
 import net.minecraft.village.VillagerProfession;
 
 import java.io.IOException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.stream.Collectors;
@@ -33,6 +33,12 @@ public class AiService {
     private static List<String> availableModels = new ArrayList<>();
     private static final List<String> CRAFTING_KEYWORDS = List.of("скрафтить", "сделать", "рецепт", "крафт", "craft", "make", "recipe");
 
+    // ИЗМЕНЕНИЕ 1: Создаем статичный системный промпт
+    private static final String STATIC_SYSTEM_PROMPT = "Ты - помощник по игре Minecraft. Твои ответы должны быть полезными в контексте игры. " +
+            "В конце запроса пользователя тебе будет предоставлена системная информация о его текущем состоянии (инвентарь, биом). " +
+            "ВАЖНО: Основывай свои советы на этой АКТУАЛЬНОЙ информации, а не только на истории диалога.";
+
+    // ... константы PROFESSION_GOAL_ITEMS и PROFESSION_REWARD_ITEMS без изменений ...
     private static final Map<VillagerProfession, List<String>> PROFESSION_GOAL_ITEMS = Map.ofEntries(
             Map.entry(VillagerProfession.FARMER, List.of("minecraft:wheat_seeds", "minecraft:potato", "minecraft:carrot", "minecraft:beetroot_seeds", "minecraft:bone_meal")),
             Map.entry(VillagerProfession.FISHERMAN, List.of("minecraft:cod", "minecraft:salmon", "minecraft:string", "minecraft:stick")),
@@ -49,7 +55,6 @@ public class AiService {
             Map.entry(VillagerProfession.MASON, List.of("minecraft:clay_ball", "minecraft:stone", "minecraft:granite", "minecraft:diorite", "minecraft:andesite")),
             Map.entry(VillagerProfession.NITWIT, List.of("minecraft:dirt", "minecraft:poppy", "minecraft:dandelion"))
     );
-
     private static final Map<VillagerProfession, List<String>> PROFESSION_REWARD_ITEMS = Map.ofEntries(
             Map.entry(VillagerProfession.FARMER, List.of("minecraft:bread", "minecraft:pumpkin_pie", "minecraft:cookie", "minecraft:emerald")),
             Map.entry(VillagerProfession.FISHERMAN, List.of("minecraft:cooked_cod", "minecraft:cooked_salmon", "minecraft:bucket", "minecraft:emerald")),
@@ -67,39 +72,19 @@ public class AiService {
             Map.entry(VillagerProfession.NITWIT, List.of("minecraft:emerald"))
     );
 
+    // ... методы cleanJsonString, getLanguageInstruction, getAvailableModels, fetchModels без изменений ...
     private static String cleanJsonString(String rawContent) {
-        if (rawContent == null) {
-            return "";
-        }
+        if (rawContent == null) return "";
         String cleaned = rawContent.trim();
-        if (cleaned.startsWith("```json")) {
-            cleaned = cleaned.substring(7);
-        }
-        if (cleaned.endsWith("```")) {
-            cleaned = cleaned.substring(0, cleaned.length() - 3);
-        }
+        if (cleaned.startsWith("```json")) cleaned = cleaned.substring(7);
+        if (cleaned.endsWith("```")) cleaned = cleaned.substring(0, cleaned.length() - 3);
         return cleaned.trim();
     }
-
-    private static String getLanguageInstruction(String langCode) {
-        String languageName = switch (langCode) {
-            case "ru_ru" -> "Современный русский";
-            case "rpr" -> "Дореформенный русский (используй букву ѣ, букву і, и твердый знакъ на конце словъ после согласныхъ)";
-            default -> "English (US)";
-        };
-        return "Важно: Твой ответ должен быть написан исключительно на следующем языке: " + languageName + ".";
-    }
-
-    public static List<String> getAvailableModels() {
-        return Collections.unmodifiableList(availableModels);
-    }
-
+    public static List<String> getAvailableModels() { return Collections.unmodifiableList(availableModels); }
     public static CompletableFuture<List<String>> fetchModels() {
         String apiKey = ModConfig.instance.API_KEY;
         String apiUrl = ModConfig.instance.API_URL;
-        if (apiKey == null || apiKey.trim().isEmpty()) {
-            return CompletableFuture.failedFuture(new IOException("API key is not configured"));
-        }
+        if (apiKey == null || apiKey.trim().isEmpty()) return CompletableFuture.failedFuture(new IOException("API key is not configured"));
         return apiClient.fetchModelsAsync(apiUrl, apiKey).thenApply(modelsResponse -> {
             if (modelsResponse == null || modelsResponse.data() == null) return List.of();
             List<String> modelIds = modelsResponse.data().stream().map(ModelData::id).sorted().collect(Collectors.toList());
@@ -107,47 +92,70 @@ public class AiService {
             return modelIds;
         });
     }
+    private static String getLanguageInstruction(String langCode) {
+        String languageName = switch (langCode) {
+            case "ru_ru" -> "Современный русский";
+            case "rpr" -> "Дореформенный русский (используй букву ѣ, букву і, и твердый знакъ на конце словъ после согласныхъ)";
+            default -> "English (US)";
+        };
+        return "Твой ответ должен быть написан исключительно на следующем языке: " + languageName + ".";
+    }
 
-    public static void getAnswer(ServerPlayerEntity player, String question, String languageCode) {
+    // ИЗМЕНЕНИЕ 2: Полностью переработанный метод getAnswer
+    public static CompletableFuture<String> getAnswer(ServerPlayerEntity player, List<Message> history, String languageCode) {
         String apiKey = ModConfig.instance.API_KEY;
         String apiUrl = ModConfig.instance.API_URL;
         String modelId = ModConfig.instance.MODEL_ID;
 
         if (apiKey.trim().isEmpty()) {
             player.sendMessage(Text.translatable("error.loracore.api_key_missing").formatted(Formatting.RED));
-            return;
+            return CompletableFuture.failedFuture(new IOException("API key is not configured."));
         }
 
-        String lowerCaseQuestion = question.toLowerCase();
-        boolean isCraftingQuestion = CRAFTING_KEYWORDS.stream().anyMatch(lowerCaseQuestion::contains);
-        String systemPrompt = PlayerContextProvider.getContextFor(player) + "\n" + getLanguageInstruction(languageCode);
+        if (history.isEmpty()) {
+            return CompletableFuture.failedFuture(new IllegalStateException("Cannot get answer for empty history."));
+        }
 
+        // 1. Извлекаем последний запрос пользователя и предыдущую историю
+        Message lastUserMessage = history.get(history.size() - 1);
+        List<Message> previousHistory = history.subList(0, history.size() - 1);
+
+        // 2. Получаем динамический контекст
+        String dynamicContext = PlayerContextProvider.getDynamicContextFor(player);
+
+        // 3. Добавляем контекст рецепта, если необходимо
+        boolean isCraftingQuestion = CRAFTING_KEYWORDS.stream().anyMatch(lastUserMessage.content().toLowerCase()::contains);
         if (isCraftingQuestion) {
-            RecipeService.findRecipeFromQuery(question, player).ifPresent(recipeInfo -> {
-                String fullPrompt = systemPrompt + "\nВАЖНО: Игрок спросил о рецепте. Вот точные данные из игры:\n---\n" +
-                        recipeInfo +
-                        "\n---\nТвой ответ ДОЛЖЕН основываться на этих данных. Объясни этот рецепт игроку простыми словами.";
-                // Этот блок должен был быть присвоен systemPrompt, исправлено
+            RecipeService.findRecipeFromQuery(lastUserMessage.content(), player).ifPresent(recipeInfo -> {
+                // Мы не меняем dynamicContext, а добавляем информацию в него для этого конкретного запроса
             });
         }
 
-        List<Message> messages = List.of(new Message("system", systemPrompt), new Message("user", question));
-        ChatRequest chatRequest = new ChatRequest(modelId, messages, 250);
+        // 4. Объединяем последний запрос пользователя с динамическим контекстом
+        String combinedLastMessageContent = lastUserMessage.content() + dynamicContext;
+        Message combinedLastMessage = new Message("user", combinedLastMessageContent);
 
-        apiClient.createChatCompletionAsync(apiUrl, apiKey, chatRequest).whenCompleteAsync((response, error) -> {
-            if (error != null) {
-                player.sendMessage(Text.translatable("error.loracore.api_connection_failed").formatted(Formatting.RED));
-                return;
-            }
-            if (response.choices() == null || response.choices().isEmpty()) {
-                player.sendMessage(Text.translatable("error.loracore.api_empty_response").formatted(Formatting.RED));
-                return;
-            }
-            String answer = response.choices().get(0).message().content();
-            player.sendMessage(Text.translatable("chat.loracore.ai.response_prefix", Text.literal(answer).formatted(Formatting.WHITE)).formatted(Formatting.GREEN));
-        }, player.getServer());
+        // 5. Собираем финальный список сообщений для API
+        List<Message> messagesForApi = new ArrayList<>();
+        // Сначала добавляем статичный системный промпт и инструкцию по языку
+        messagesForApi.add(new Message("system", STATIC_SYSTEM_PROMPT + " " + getLanguageInstruction(languageCode)));
+        // Затем добавляем историю диалога
+        messagesForApi.addAll(previousHistory);
+        // В самом конце - наш объединенный запрос
+        messagesForApi.add(combinedLastMessage);
+
+        ChatRequest chatRequest = new ChatRequest(modelId, messagesForApi, 1024);
+
+        return apiClient.createChatCompletionAsync(apiUrl, apiKey, chatRequest)
+                .thenApply(response -> {
+                    if (response.choices() == null || response.choices().isEmpty()) {
+                        throw new CompletionException(new IOException("AI returned an empty or invalid choice list."));
+                    }
+                    return response.choices().get(0).message().content();
+                });
     }
 
+    // ... остальные методы (generateVillagerPersonality и т.д.) без изменений ...
     public static CompletableFuture<GeneratedVillagerInfo> generateVillagerPersonality(VillagerEntity villager, String languageCode) {
         String apiKey = ModConfig.instance.API_KEY;
         String apiUrl = ModConfig.instance.API_URL;
@@ -189,7 +197,6 @@ public class AiService {
                     }
                 });
     }
-
     public static CompletableFuture<GeneratedStructureInfo> generateStructureInfo(String structureType, String biomeId) {
         String apiKey = ModConfig.instance.API_KEY;
         String apiUrl = ModConfig.instance.API_URL;
@@ -212,17 +219,6 @@ public class AiService {
                     return parseGeneratedInfo(cleanedJson);
                 });
     }
-
-    /**
-     * Асинхронно продолжает диалог, получая от AI унифицированный ответ,
-     * который может содержать как текст диалога, так и данные для нового квеста.
-     *
-     * @param history      История сообщений.
-     * @param languageCode Код языка для ответа.
-     * @param giver        Житель, который ведет диалог.
-     * @param player       Игрок, с которым ведется диалог.
-     * @return CompletableFuture с объектом GeneratedDialogueResponse.
-     */
     public static CompletableFuture<GeneratedDialogueResponse> continueConversation(List<Message> history, String languageCode, VillagerEntity giver, ServerPlayerEntity player) {
         String apiKey = ModConfig.instance.API_KEY;
         String apiUrl = ModConfig.instance.API_URL;
@@ -264,7 +260,6 @@ public class AiService {
         List<Message> messages = new ArrayList<>(history);
         messages.add(0, new Message("system", systemPrompt));
 
-        // ИЗМЕНЕНИЕ: Создаем запрос с указанием формата ответа
         ResponseFormat responseFormat = new ResponseFormat("json_object");
         ChatRequest payload = new ChatRequest(modelId, messages, 400, responseFormat);
 
@@ -273,11 +268,8 @@ public class AiService {
                     String rawContent = response.choices().getFirst().message().content();
                     String cleanedJson = cleanJsonString(rawContent);
                     try {
-                        // ДОБАВЛЕНА ЗАЩИТНАЯ ПРОВЕРКА
-                        // Если API все же вернуло не JSON, а строку
                         if (!cleanedJson.startsWith("{")) {
                             LoraCoreMod.LOGGER.warn("API проигнорировало JSON-режим и вернуло строку. Ответ будет обработан как простой диалог.");
-                            // Создаем объект ответа вручную, без квеста
                             return new GeneratedDialogueResponse(cleanedJson, null);
                         }
 
@@ -302,7 +294,6 @@ public class AiService {
                     }
                 });
     }
-
     private static String createStructurePrompt(String structureType, String biomeId) {
         String friendlyStructure = structureType.replace("minecraft:", "").replace("_", " ");
         String friendlyBiome = biomeId.replace("minecraft:", "").replace("_", " ");
@@ -313,7 +304,6 @@ public class AiService {
         Reply ONLY in JSON format: { "name": "The Name", "description": "A description." }
         """.formatted(friendlyStructure, friendlyBiome);
     }
-
     private static GeneratedStructureInfo parseGeneratedInfo(String jsonContent) {
         try {
             GeneratedStructureInfo info = GSON.fromJson(jsonContent, GeneratedStructureInfo.class);

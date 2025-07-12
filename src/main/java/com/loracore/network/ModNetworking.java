@@ -3,10 +3,7 @@ package com.loracore.network;
 import com.loracore.LoraCoreMod;
 import com.loracore.api.dto.OpenAiApiDto.GeneratedQuestInfo;
 import com.loracore.api.dto.OpenAiApiDto.Message;
-import com.loracore.component.ModComponents;
-import com.loracore.component.PlayerDialogueComponent;
-import com.loracore.component.PlayerQuestComponent;
-import com.loracore.component.VillagerDataComponent;
+import com.loracore.component.*;
 import com.loracore.quest.Quest;
 import com.loracore.service.AiService;
 import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
@@ -28,7 +25,9 @@ import java.util.UUID;
 
 public class ModNetworking {
 
+    // ... методы registerC2SPackets, registerPacketHandlers и часть registerDialogueAndQuestHandlers без изменений ...
     public static void registerC2SPackets() {
+        // Регистрация типов пакетов
         PayloadTypeRegistry.playC2S().register(RequestVillagerDataC2SPacket.ID, RequestVillagerDataC2SPacket.CODEC);
         PayloadTypeRegistry.playC2S().register(SendDialogueMessageC2SPacket.ID, SendDialogueMessageC2SPacket.CODEC);
         PayloadTypeRegistry.playC2S().register(SetVillagerFrozenC2SPacket.ID, SetVillagerFrozenC2SPacket.CODEC);
@@ -36,10 +35,12 @@ public class ModNetworking {
         PayloadTypeRegistry.playC2S().register(AcceptQuestC2SPacket.ID, AcceptQuestC2SPacket.CODEC);
         PayloadTypeRegistry.playC2S().register(CompleteQuestC2SPacket.ID, CompleteQuestC2SPacket.CODEC);
 
+        // Регистрация обработчиков
         registerPacketHandlers();
+        registerDialogueAndQuestHandlers();
     }
-
     private static void registerPacketHandlers() {
+        // Обработчик запроса данных о жителе
         ServerPlayNetworking.registerGlobalReceiver(RequestVillagerDataC2SPacket.ID, (payload, context) -> {
             ServerPlayerEntity player = context.player();
             MinecraftServer server = player.getServer();
@@ -57,9 +58,7 @@ public class ModNetworking {
                 PlayerDialogueComponent playerDialogue = ModComponents.PLAYER_DIALOGUE.get(player);
 
                 if (villagerComponent.hasGeneratedData()) {
-                    // Системный промпт будет формироваться динамически в AiService,
-                    // поэтому здесь просто инициализируем диалог, если его еще нет.
-                    playerDialogue.initializeDialogue(villager.getUuid(), ""); // Промпт будет добавлен в AiService
+                    playerDialogue.initializeDialogue(villager.getUuid(), "");
                     ModComponents.PLAYER_DIALOGUE.sync(player);
                     return;
                 }
@@ -78,20 +77,29 @@ public class ModNetworking {
                         villagerComponent.setVillagerName(info.name());
                         villagerComponent.setPersonality(info.personality());
                     }
-
                     playerDialogue.initializeDialogue(villager.getUuid(), "");
-
                     ModComponents.VILLAGER_DATA.sync(villager);
                     ModComponents.PLAYER_DIALOGUE.sync(player);
                 }, server);
             });
         });
 
-        registerDialogueAndQuestHandlers();
-    }
+        // Обработчик "заморозки" жителя
+        ServerPlayNetworking.registerGlobalReceiver(SetVillagerFrozenC2SPacket.ID, (payload, context) -> {
+            ServerPlayerEntity player = context.player();
+            MinecraftServer server = player.getServer();
+            if (server == null) return;
 
+            server.execute(() -> {
+                Entity entity = player.getServerWorld().getEntity(payload.villagerUuid());
+                if (entity instanceof VillagerEntity villager) {
+                    villager.setCustomer(payload.frozen() ? player : null);
+                }
+            });
+        });
+    }
     private static void registerDialogueAndQuestHandlers() {
-        // ОБРАБОТЧИК СООБЩЕНИЙ В ДИАЛОГЕ
+        // Обработчик сообщений в диалоге
         ServerPlayNetworking.registerGlobalReceiver(SendDialogueMessageC2SPacket.ID, (payload, context) -> {
             ServerPlayerEntity player = context.player();
             MinecraftServer server = player.getServer();
@@ -140,7 +148,7 @@ public class ModNetworking {
             });
         });
 
-        // ОБРАБОТЧИК ПРИНЯТИЯ КВЕСТА
+        // Обработчик принятия квеста
         ServerPlayNetworking.registerGlobalReceiver(AcceptQuestC2SPacket.ID, (payload, context) -> {
             ServerPlayerEntity player = context.player();
             MinecraftServer server = player.getServer();
@@ -174,7 +182,7 @@ public class ModNetworking {
             });
         });
 
-        // ОБРАБОТЧИК ЗАВЕРШЕНИЯ КВЕСТА
+        // Обработчик завершения квеста
         ServerPlayNetworking.registerGlobalReceiver(CompleteQuestC2SPacket.ID, (payload, context) -> {
             ServerPlayerEntity player = context.player();
             MinecraftServer server = player.getServer();
@@ -216,24 +224,27 @@ public class ModNetworking {
             });
         });
 
-        // ПРОЧИЕ ОБРАБОТЧИКИ
         ServerPlayNetworking.registerGlobalReceiver(AskAiC2SPacket.ID, (payload, context) -> {
             ServerPlayerEntity player = context.player();
             MinecraftServer server = player.getServer();
-            if (server != null) {
-                server.execute(() -> AiService.getAnswer(player, payload.question(), payload.languageCode()));
-            }
-        });
-
-        ServerPlayNetworking.registerGlobalReceiver(SetVillagerFrozenC2SPacket.ID, (payload, context) -> {
-            ServerPlayerEntity player = context.player();
-            MinecraftServer server = player.getServer();
             if (server == null) return;
+
             server.execute(() -> {
-                Entity entity = player.getServerWorld().getEntity(payload.villagerUuid());
-                if (entity instanceof VillagerEntity villager) {
-                    villager.setCustomer(payload.frozen() ? player : null);
-                }
+                PlayerAskHistoryComponent historyComponent = ModComponents.PLAYER_ASK_HISTORY.get(player);
+                historyComponent.addMessage(new Message("user", payload.question()));
+                ModComponents.PLAYER_ASK_HISTORY.sync(player);
+
+                // ИЗМЕНЕНИЕ: Передаем всю историю в AiService
+                AiService.getAnswer(player, historyComponent.getHistory(), payload.languageCode())
+                        .whenCompleteAsync((answer, error) -> {
+                            if (error != null) {
+                                LoraCoreMod.LOGGER.error("AI service failed to provide an answer", error);
+                                historyComponent.addMessage(new Message("assistant", "Произошла ошибка при обращении к AI."));
+                            } else {
+                                historyComponent.addMessage(new Message("assistant", answer));
+                            }
+                            ModComponents.PLAYER_ASK_HISTORY.sync(player);
+                        }, server);
             });
         });
     }

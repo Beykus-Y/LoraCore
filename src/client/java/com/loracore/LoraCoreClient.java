@@ -1,6 +1,6 @@
 package com.loracore;
 
-import com.loracore.gui.AskScreen;
+import com.loracore.gui.AskChatScreen;
 import com.loracore.keybinding.ModKeyBindings;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.api.EnvType;
@@ -44,7 +44,7 @@ public class LoraCoreClient implements ClientModInitializer {
             if (openAskScreenFlag) {
                 openAskScreenFlag = false;
                 LOGGER.info("Opening AskScreen now (END_CLIENT_TICK).");
-                client.setScreen(new AskScreen());
+                client.setScreen(new AskChatScreen());
             }
         });
     }

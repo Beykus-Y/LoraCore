@@ -14,19 +14,19 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public final class PlayerContextProvider {
 
-    // Приватный конструктор, чтобы предотвратить создание экземпляров утилитарного класса.
     private PlayerContextProvider() {}
 
     /**
-     * Собирает и форматирует полную контекстную информацию об игроке для AI.
+     * Собирает и форматирует блок с ДИНАМИЧЕСКОЙ информацией об игроке для AI.
      * @param player Игрок, для которого собирается контекст.
-     * @return Строка с информацией о состоянии игрока.
+     * @return Строка с актуальной информацией о состоянии игрока.
      */
-    public static String getContextFor(ServerPlayerEntity player) {
+    public static String getDynamicContextFor(ServerPlayerEntity player) {
         StringBuilder context = new StringBuilder();
-        context.append("Ты - помощник по игре Minecraft. Твои ответы должны быть полезными в контексте игры.\n");
-        context.append("Информация о текущем состоянии игрока:\n");
-        context.append(String.format("Местоположение: X=%d, Y=%d, Z=%d%n", player.getBlockX(), player.getBlockY(), player.getBlockZ()));
+
+        // ИЗМЕНЕНИЕ: Формируем отдельный, легко различимый блок системной информации
+        context.append("\n\n--- СИСТЕМНАЯ ИНФОРМАЦИЯ (АКТУАЛЬНОЕ СОСТОЯНИЕ ИГРОКА) ---\n");
+        context.append(String.format("Местоположение: X=%d, Y=%d, Z=%d\n", player.getBlockX(), player.getBlockY(), player.getBlockZ()));
 
         World world = player.getEntityWorld();
         Identifier dimensionId = world.getRegistryKey().getValue();
@@ -42,26 +42,23 @@ public final class PlayerContextProvider {
         context.append("Инвентарь игрока:\n");
         AtomicInteger itemsInInventory = new AtomicInteger(0);
 
-        // Основной инвентарь
         player.getInventory().main.stream()
                 .filter(stack -> !stack.isEmpty())
                 .forEach(stack -> {
-                    context.append("- ").append(stack.getCount()).append("x ").append(stack.getName().getString()).append("\n");
+                    context.append(String.format("- %dx %s\n", stack.getCount(), stack.getName().getString()));
                     itemsInInventory.incrementAndGet();
                 });
 
-        // Броня
         player.getInventory().armor.stream()
                 .filter(stack -> !stack.isEmpty())
                 .forEach(stack -> {
-                    context.append("- ").append(stack.getName().getString()).append(" (броня)\n");
+                    context.append(String.format("- %s (броня)\n", stack.getName().getString()));
                     itemsInInventory.incrementAndGet();
                 });
 
-        // Вторая рука
         ItemStack offhandStack = player.getStackInHand(Hand.OFF_HAND);
         if (!offhandStack.isEmpty()) {
-            context.append("- ").append(offhandStack.getCount()).append("x ").append(offhandStack.getName().getString()).append(" (вторая рука)\n");
+            context.append(String.format("- %dx %s (вторая рука)\n", offhandStack.getCount(), offhandStack.getName().getString()));
             itemsInInventory.incrementAndGet();
         }
 
@@ -69,7 +66,7 @@ public final class PlayerContextProvider {
             context.append("- Инвентарь пуст.\n");
         }
 
-        context.append("\n");
+        context.append("--- КОНЕЦ СИСТЕМНОЙ ИНФОРМАЦИИ ---\n");
         return context.toString();
     }
 }
