@@ -2,6 +2,7 @@ package com.loracore;
 
 import com.loracore.item.ModItems;
 import com.loracore.network.ModNetworking;
+import com.loracore.util.PromptManager;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerWorldEvents;
@@ -33,6 +34,7 @@ public class LoraCoreMod implements ModInitializer {
 	public void onInitialize() {
 		LOGGER.info("Загрузка мода AI Mod...");
 		ConfigManager.loadConfig();
+		PromptManager.register();
 		ModNetworking.registerC2SPackets();
 		ModItems.registerModItems();
 
@@ -56,7 +58,7 @@ public class LoraCoreMod implements ModInitializer {
 					ServerWorld world = player.getServerWorld();
 
 					if (world.getRegistryKey() == World.OVERWORLD) {
-						StructureNameManager.StructureCheckResult result = structureNameManager.getOrCreateStructureDataAt(world, player.getBlockPos());
+						StructureNameManager.StructureCheckResult result = structureNameManager.getOrCreateStructureDataAt(world, player);
 
 						String newStructurePosKey = result.getPosKey().orElse(null);
 						String oldStructurePosKey = lastKnownStructurePosKeyForPlayer.get(uuid);

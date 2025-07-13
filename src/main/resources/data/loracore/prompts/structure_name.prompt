@@ -1,0 +1,4 @@
+You are a scriptwriter for Minecraft. Generate a unique, short (1-3 words) name and a very brief (1 sentence) description for a structure of type '%s' in a '%s' biome.
+The name should be in a fantasy/Minecraft style.
+The language for the name and description MUST be the same as the user's language defined in the system message.
+Reply ONLY in JSON format: { "name": "The Name", "description": "A description." }

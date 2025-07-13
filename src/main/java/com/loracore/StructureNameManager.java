@@ -11,6 +11,7 @@ import net.minecraft.registry.entry.RegistryEntry;
 import net.minecraft.registry.entry.RegistryEntryList;
 import net.minecraft.registry.tag.TagKey;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.structure.StructureStart;
 import net.minecraft.util.Identifier;
@@ -100,7 +101,10 @@ public class StructureNameManager extends PersistentState {
     // =========================================================================
     // ИСПРАВЛЕННАЯ ЛОГИКА ПОИСКА
     // =========================================================================
-    public StructureCheckResult getOrCreateStructureDataAt(ServerWorld world, BlockPos playerPos) {
+    public StructureCheckResult getOrCreateStructureDataAt(ServerWorld world, ServerPlayerEntity player) {
+        // ИЗМЕНЕНИЕ 2: Получаем позицию из игрока
+        BlockPos playerPos = player.getBlockPos();
+
         List<TagKey<Structure>> structureTags = List.of(
                 TagKey.of(RegistryKeys.STRUCTURE, new Identifier("minecraft", "village")),
                 TagKey.of(RegistryKeys.STRUCTURE, new Identifier("minecraft", "pillager_outpost")),
@@ -121,13 +125,10 @@ public class StructureNameManager extends PersistentState {
             Optional<RegistryEntryList.Named<Structure>> entryListOptional = structureRegistry.getEntryList(tag);
             if (entryListOptional.isEmpty()) continue;
 
-            // НОВЫЙ ПОДХОД: Перебираем каждую структуру внутри тега
             for (RegistryEntry<Structure> structureEntry : entryListOptional.get()) {
-                // Получаем ключ для каждой конкретной структуры (например, minecraft:village_plains)
                 Optional<RegistryKey<Structure>> keyOptional = structureEntry.getKey();
                 if (keyOptional.isEmpty()) continue;
 
-                // Используем правильный метод API с правильными аргументами
                 StructureStart structureStart = world.getStructureAccessor().getStructureAt(playerPos, structureEntry.value());
 
                 if (structureStart != null && structureStart.hasChildren()) {
@@ -141,12 +142,15 @@ public class StructureNameManager extends PersistentState {
                         RegistryEntry<Biome> biomeEntry = world.getBiome(playerPos);
                         String biomeId = biomeEntry.getKey().map(RegistryKey::getValue).orElse(new Identifier("minecraft", "unknown_biome")).toString();
 
+                        // ИЗМЕНЕНИЕ 3: Получаем язык игрока
+                        String langCode = player.getClientOptions().language();
+
                         LoraCoreMod.LOGGER.info("Найдена новая структура (тег '{}') в биоме '{}' по позиции {}. Запускаем генерацию имени AI.", tag.id(), biomeId, posKey);
 
-                        AiService.generateStructureInfo(tag.id().toString(), biomeId)
+                        // ИЗМЕНЕНИЕ 4: Добавляем третий аргумент `langCode` в вызов
+                        AiService.generateStructureInfo(tag.id().toString(), biomeId, langCode)
                                 .whenCompleteAsync((generatedInfo, error) -> {
                                     MinecraftServer server = world.getServer();
-                                    // Проверка server != null здесь избыточна, так как мы находимся на сервере
                                     server.execute(() -> {
                                         if (error != null) {
                                             LoraCoreMod.LOGGER.error("Ошибка при генерации имени AI для структуры в {}: {}", posKey, error.getMessage());
@@ -164,12 +168,10 @@ public class StructureNameManager extends PersistentState {
                                 }, world.getServer());
                         return newData;
                     });
-                    // Как только нашли структуру, выходим из обоих циклов и возвращаем результат
                     return new StructureCheckResult(Optional.of(data), Optional.of(posKey));
                 }
             }
         }
-        // Если после всех проверок ничего не найдено
         return StructureCheckResult.empty();
     }
 }

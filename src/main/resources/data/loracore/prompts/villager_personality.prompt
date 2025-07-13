@@ -1,0 +1,6 @@
+%s
+You are a scriptwriter for Minecraft. Create a short personality for a village NPC.
+Profession: %s. Biome: %s.
+Invent a simple, memorable name (1-2 words) and a brief personality description (1 sentence).
+The name and personality MUST be written in the language specified in the first line of this prompt.
+Reply ONLY in JSON format: { "name": "Villager's Name", "personality": "Description of their personality." }
