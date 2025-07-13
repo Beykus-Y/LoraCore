@@ -6,6 +6,7 @@ import com.loracore.api.dto.OpenAiApiDto.Message;
 import com.loracore.component.*;
 import com.loracore.quest.Quest;
 import com.loracore.service.AiService;
+import com.loracore.service.GiftService;
 import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.entity.Entity;
@@ -19,9 +20,12 @@ import net.minecraft.server.world.ServerWorld;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
 import net.minecraft.util.Identifier;
+import net.minecraft.village.VillagerProfession;
 
 import java.util.List;
 import java.util.UUID;
+
+import static com.loracore.service.GiftService.GiftTier.LOVED;
 
 public class ModNetworking {
 
@@ -34,6 +38,7 @@ public class ModNetworking {
         PayloadTypeRegistry.playC2S().register(AskAiC2SPacket.ID, AskAiC2SPacket.CODEC);
         PayloadTypeRegistry.playC2S().register(AcceptQuestC2SPacket.ID, AcceptQuestC2SPacket.CODEC);
         PayloadTypeRegistry.playC2S().register(CompleteQuestC2SPacket.ID, CompleteQuestC2SPacket.CODEC);
+        PayloadTypeRegistry.playC2S().register(GiveGiftC2SPacket.ID, GiveGiftC2SPacket.CODEC);
 
         // Регистрация обработчиков
         registerPacketHandlers();
@@ -211,6 +216,7 @@ public class ModNetworking {
 
                     VillagerDataComponent villagerData = ModComponents.VILLAGER_DATA.get(villager);
                     villagerData.completeQuestForPlayer(player.getUuid());
+                    villagerData.addFriendship(player.getUuid(), 10);
                     playerQuests.getQuests().removeIf(q -> q.questId().equals(activeQuest.questId()));
 
                     PlayerDialogueComponent playerDialogue = ModComponents.PLAYER_DIALOGUE.get(player);
@@ -241,10 +247,53 @@ public class ModNetworking {
                                 LoraCoreMod.LOGGER.error("AI service failed to provide an answer", error);
                                 historyComponent.addMessage(new Message("assistant", "Произошла ошибка при обращении к AI."));
                             } else {
-                                historyComponent.addMessage(new Message("assistant", answer));
+                                // ИЗМЕНЕНИЕ: Добавляем проверку на null
+                                if (answer == null || answer.isBlank()) {
+                                    historyComponent.addMessage(new Message("assistant", "ИИ вернул пустой или некорректный ответ."));
+                                } else {
+                                    historyComponent.addMessage(new Message("assistant", answer));
+                                }
                             }
                             ModComponents.PLAYER_ASK_HISTORY.sync(player);
                         }, server);
+            });
+        });
+        ServerPlayNetworking.registerGlobalReceiver(GiveGiftC2SPacket.ID, (payload, context) -> {
+            ServerPlayerEntity player = context.player();
+            MinecraftServer server = player.getServer();
+            if (server == null) return;
+
+            server.execute(() -> {
+                Entity entity = player.getServerWorld().getEntity(payload.villagerUuid());
+                if (!(entity instanceof VillagerEntity villager)) return;
+
+                ItemStack giftStack = player.getMainHandStack();
+                if (giftStack.isEmpty()) return;
+
+                VillagerProfession profession = villager.getVillagerData().getProfession();
+                GiftService.GiftResult result = GiftService.evaluateGift(profession, giftStack.getItem());
+
+                VillagerDataComponent villagerData = ModComponents.VILLAGER_DATA.get(villager);
+                villagerData.addFriendship(player.getUuid(), result.friendshipChange());
+
+                String feedbackKey = switch (result.tier()) {
+                    case LOVED -> "gui.loracore.dialogue.gift.loved";
+                    case LIKED -> "gui.loracore.dialogue.gift.liked";
+                    case NEUTRAL -> "gui.loracore.dialogue.gift.neutral";
+                    case DISLIKED -> "gui.loracore.dialogue.gift.disliked";
+                };
+
+                // Отправляем системное сообщение в чат диалога
+                PlayerDialogueComponent playerDialogue = ModComponents.PLAYER_DIALOGUE.get(player);
+                // Используем Text.translatable, чтобы клиент сам перевел текст
+                playerDialogue.addMessageToHistory(villager.getUuid(), new Message("system", feedbackKey));
+
+                // Забираем подарок
+                giftStack.decrement(1);
+
+                // Синхронизируем
+                ModComponents.VILLAGER_DATA.sync(villager);
+                ModComponents.PLAYER_DIALOGUE.sync(player);
             });
         });
     }

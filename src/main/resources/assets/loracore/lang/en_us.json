@@ -50,6 +50,7 @@
   "error.loracore.dialogue.generic": "An error occurred while communicating with the AI.",
 
   "quest.loracore.debug.title": "Farmer's Request",
-  "quest.loracore.debug.description": "I need 10 carrots for my stew. Can you help?"
+  "quest.loracore.debug.description": "I need 10 carrots for my stew. Can you help?",
+  "gui.loracore.dialogue.friendship": "Friendship: %s"
 
 }

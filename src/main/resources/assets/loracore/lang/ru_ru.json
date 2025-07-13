@@ -56,6 +56,14 @@
   "gui.loracore.quest.button.decline": "Отказаться",
   "gui.loracore.quest.button.complete": "Завершить квест",
   "gui.loracore.ask.title": "Спросить ИИ",
-  "gui.loracore.ask.input_placeholder": "Введите ваш вопрос..."
+  "gui.loracore.ask.input_placeholder": "Введите ваш вопрос...",
+
+  "gui.loracore.dialogue.friendship": "Дружба: %s",
+  "gui.loracore.dialogue.button.give_gift": "Подарок",
+  "gui.loracore.dialogue.gift.loved": "Это чудесный подарок! Спасибо!",
+  "gui.loracore.dialogue.gift.liked": "О, спасибо, это мне пригодится.",
+  "gui.loracore.dialogue.gift.neutral": "Спасибо.",
+  "gui.loracore.dialogue.gift.disliked": "Эм... спасибо, наверное.",
+  "chat.loracore.villager.hit_penalty": "Ваша дружба с %s уменьшилась на %s."
 
 }

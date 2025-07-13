@@ -18,6 +18,8 @@ public class VillagerDataComponentImpl implements VillagerDataComponent {
 
     // Карта: UUID игрока -> выданный ему квест
     private final Map<UUID, Quest> assignedQuests = new ConcurrentHashMap<>();
+    // Карта: UUID игрока -> уровень дружбы
+    private final Map<UUID, Integer> friendshipLevels = new ConcurrentHashMap<>();
 
     @Override
     public boolean hasGeneratedData() {
@@ -27,7 +29,6 @@ public class VillagerDataComponentImpl implements VillagerDataComponent {
     @Override
     public void setHasGeneratedData(boolean hasGenerated) {
         this.hasGeneratedData = hasGenerated;
-        // this.markDirty(); // УДАЛЕНО: Этот вызов здесь не нужен
     }
 
     @Override
@@ -38,7 +39,6 @@ public class VillagerDataComponentImpl implements VillagerDataComponent {
     @Override
     public void setVillagerName(String name) {
         this.villagerName = name;
-        // this.markDirty(); // УДАЛЕНО: Этот вызов здесь не нужен
     }
 
     @Override
@@ -49,7 +49,6 @@ public class VillagerDataComponentImpl implements VillagerDataComponent {
     @Override
     public void setPersonality(String personality) {
         this.personality = personality;
-        // this.markDirty(); // УДАЛЕНО: Этот вызов здесь не нужен
     }
 
     @Override
@@ -60,13 +59,11 @@ public class VillagerDataComponentImpl implements VillagerDataComponent {
     @Override
     public void assignQuestToPlayer(UUID playerUuid, Quest quest) {
         this.assignedQuests.put(playerUuid, quest);
-        // this.markDirty(); // УДАЛЕНО: Этот вызов здесь не нужен
     }
 
     @Override
     public void completeQuestForPlayer(UUID playerUuid) {
         this.assignedQuests.remove(playerUuid);
-        // this.markDirty(); // УДАЛЕНО: Этот вызов здесь не нужен
     }
 
     @Override
@@ -75,18 +72,49 @@ public class VillagerDataComponentImpl implements VillagerDataComponent {
     }
 
     @Override
+    public int getFriendship(UUID playerUuid) {
+        return this.friendshipLevels.getOrDefault(playerUuid, 0);
+    }
+
+    @Override
+    public void setFriendship(UUID playerUuid, int level) {
+        this.friendshipLevels.put(playerUuid, level);
+    }
+
+    @Override
+    public void addFriendship(UUID playerUuid, int amount) {
+        int currentFriendship = getFriendship(playerUuid);
+        setFriendship(playerUuid, currentFriendship + amount);
+    }
+
+    @Override
     public void readFromNbt(NbtCompound tag, RegistryWrapper.WrapperLookup lookup) {
         this.hasGeneratedData = tag.getBoolean("HasGeneratedData");
         this.villagerName = tag.getString("VillagerName");
         this.personality = tag.getString("Personality");
 
+        // Чтение квестов
         assignedQuests.clear();
-        NbtList questsList = tag.getList("AssignedQuests", NbtElement.COMPOUND_TYPE);
-        for (NbtElement element : questsList) {
-            NbtCompound questTag = (NbtCompound) element;
-            UUID playerUuid = questTag.getUuid("PlayerUUID");
-            Quest quest = Quest.fromNbt(questTag.getCompound("QuestData"));
-            assignedQuests.put(playerUuid, quest);
+        if (tag.contains("AssignedQuests", NbtElement.LIST_TYPE)) {
+            NbtList questsList = tag.getList("AssignedQuests", NbtElement.COMPOUND_TYPE);
+            for (NbtElement element : questsList) {
+                NbtCompound questTag = (NbtCompound) element;
+                UUID playerUuid = questTag.getUuid("PlayerUUID");
+                Quest quest = Quest.fromNbt(questTag.getCompound("QuestData"));
+                assignedQuests.put(playerUuid, quest);
+            }
+        }
+
+        // Чтение данных о дружбе
+        friendshipLevels.clear();
+        if (tag.contains("FriendshipLevels", NbtElement.LIST_TYPE)) {
+            NbtList friendshipList = tag.getList("FriendshipLevels", NbtElement.COMPOUND_TYPE);
+            for (NbtElement element : friendshipList) {
+                NbtCompound friendshipTag = (NbtCompound) element;
+                UUID playerUuid = friendshipTag.getUuid("PlayerUUID");
+                int level = friendshipTag.getInt("Level");
+                friendshipLevels.put(playerUuid, level);
+            }
         }
     }
 
@@ -96,13 +124,32 @@ public class VillagerDataComponentImpl implements VillagerDataComponent {
         tag.putString("VillagerName", this.villagerName);
         tag.putString("Personality", this.personality);
 
-        NbtList questsList = new NbtList();
-        for (Map.Entry<UUID, Quest> entry : assignedQuests.entrySet()) {
-            NbtCompound questTag = new NbtCompound();
-            questTag.putUuid("PlayerUUID", entry.getKey());
-            questTag.put("QuestData", entry.getValue().writeNbt());
-            questsList.add(questTag);
+        // Запись квестов с проверкой на null
+        if (assignedQuests != null && !assignedQuests.isEmpty()) {
+            NbtList questsList = new NbtList();
+            for (Map.Entry<UUID, Quest> entry : assignedQuests.entrySet()) {
+                if (entry.getKey() != null && entry.getValue() != null) {
+                    NbtCompound questTag = new NbtCompound();
+                    questTag.putUuid("PlayerUUID", entry.getKey());
+                    questTag.put("QuestData", entry.getValue().writeNbt());
+                    questsList.add(questTag);
+                }
+            }
+            tag.put("AssignedQuests", questsList);
         }
-        tag.put("AssignedQuests", questsList);
+
+        // Запись данных о дружбе с проверкой на null
+        if (friendshipLevels != null && !friendshipLevels.isEmpty()) {
+            NbtList friendshipList = new NbtList();
+            for (Map.Entry<UUID, Integer> entry : friendshipLevels.entrySet()) {
+                if (entry.getKey() != null && entry.getValue() != null) {
+                    NbtCompound friendshipTag = new NbtCompound();
+                    friendshipTag.putUuid("PlayerUUID", entry.getKey());
+                    friendshipTag.putInt("Level", entry.getValue());
+                    friendshipList.add(friendshipTag);
+                }
+            }
+            tag.put("FriendshipLevels", friendshipList);
+        }
     }
 }

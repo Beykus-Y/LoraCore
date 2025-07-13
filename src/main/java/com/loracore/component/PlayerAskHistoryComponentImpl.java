@@ -42,6 +42,10 @@ public class PlayerAskHistoryComponentImpl implements PlayerAskHistoryComponent 
     public void writeToNbt(NbtCompound tag, RegistryWrapper.WrapperLookup lookup) {
         NbtList historyList = new NbtList();
         for (Message msg : this.history) {
+            // Пропускаем некорректные сообщения, чтобы избежать краша
+            if (msg == null || msg.role() == null || msg.content() == null) {
+                continue;
+            }
             NbtCompound msgTag = new NbtCompound();
             msgTag.putString("role", msg.role());
             msgTag.putString("content", msg.content());

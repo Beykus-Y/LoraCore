@@ -44,5 +44,25 @@ public interface VillagerDataComponent extends Component, AutoSyncedComponent {
     void assignQuestToPlayer(UUID playerUuid, Quest quest);
     void completeQuestForPlayer(UUID playerUuid);
     Quest getAssignedQuest(UUID playerUuid);
+    /**
+     * Получает уровень дружбы жителя с указанным игроком.
+     * @param playerUuid UUID игрока.
+     * @return Уровень дружбы (по умолчанию 0).
+     */
+    int getFriendship(UUID playerUuid);
+
+    /**
+     * Устанавливает уровень дружбы для указанного игрока.
+     * @param playerUuid UUID игрока.
+     * @param level Новый уровень дружбы.
+     */
+    void setFriendship(UUID playerUuid, int level);
+
+    /**
+     * Добавляет указанное количество очков к дружбе с игроком.
+     * @param playerUuid UUID игрока.
+     * @param amount Количество очков для добавления (может быть отрицательным).
+     */
+    void addFriendship(UUID playerUuid, int amount);
 
 }

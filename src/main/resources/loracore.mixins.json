@@ -3,7 +3,8 @@
   "package": "com.loracore.mixin",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
-    "VillagerEntityServerMixin"
+    "VillagerEntityServerMixin",
+    "PlayerEntityMixin"
   ],
   "injectors": {
     "defaultRequire": 1

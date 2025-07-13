@@ -40,5 +40,6 @@
   "error.loracore.api_empty_response": "Машина вернула пустой отвѣтъ.",
   "error.loracore.dialogue.generic": "Приключилась ошибка въ бесѣдѣ съ Машиной.",
   "quest.loracore.debug.title": "Прошеніе Земледѣльца",
-  "quest.loracore.debug.description": "Надобно мнѣ десять морковей для моей похлебки. Споспѣшествуешь ли?"
+  "quest.loracore.debug.description": "Надобно мнѣ десять морковей для моей похлебки. Споспѣшествуешь ли?",
+  "gui.loracore.dialogue.friendship": "Пріязнь: %s"
 }

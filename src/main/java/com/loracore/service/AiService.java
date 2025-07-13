@@ -31,7 +31,7 @@ public class AiService {
     private static List<String> availableModels = new ArrayList<>();
     private static final List<String> CRAFTING_KEYWORDS = List.of("скрафтить", "сделать", "рецепт", "крафт", "craft", "make", "recipe");
 
-    private static final Map<VillagerProfession, List<String>> PROFESSION_GOAL_ITEMS = Map.ofEntries(
+    public static final Map<VillagerProfession, List<String>> PROFESSION_GOAL_ITEMS = Map.ofEntries(
             Map.entry(VillagerProfession.FARMER, List.of("minecraft:wheat_seeds", "minecraft:potato", "minecraft:carrot", "minecraft:beetroot_seeds", "minecraft:bone_meal")),
             Map.entry(VillagerProfession.FISHERMAN, List.of("minecraft:cod", "minecraft:salmon", "minecraft:string", "minecraft:stick")),
             Map.entry(VillagerProfession.SHEPHERD, List.of("minecraft:white_wool", "minecraft:black_wool", "minecraft:gray_wool", "minecraft:shears")),
@@ -153,6 +153,8 @@ public class AiService {
 
         String langInstruction = getLanguageInstruction(languageCode);
         String villagerContext = "Твоя личность: " + villagerData.getVillagerName() + ", " + villagerData.getPersonality();
+        int friendshipLevel = villagerData.getFriendship(player.getUuid());
+        String friendshipContext = String.valueOf(friendshipLevel);
         String questContext = "";
 
         if (!villagerData.hasQuestForPlayer(player.getUuid())) {
@@ -166,7 +168,7 @@ public class AiService {
             """, String.join(", ", goalItems), String.join(", ", rewardItems));
         }
 
-        String systemPrompt = PromptManager.getFormattedPrompt("villager_dialogue", langInstruction, villagerContext, questContext);
+        String systemPrompt = PromptManager.getFormattedPrompt("villager_dialogue", langInstruction, villagerContext, friendshipContext, questContext);
 
         return executeChatCompletion(systemPrompt, history, 400, new ResponseFormat("json_object"))
                 .thenApply(response -> {
