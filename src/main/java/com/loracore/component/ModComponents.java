@@ -1,27 +1,62 @@
 package com.loracore.component;
 
 import com.loracore.LoraCoreMod;
+import com.loracore.component.data.*;
+import com.mojang.serialization.Codec;
+import net.minecraft.component.DataComponentType;
 import net.minecraft.entity.passive.VillagerEntity;
-import net.minecraft.entity.player.PlayerEntity; // ИМПОРТ
+import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.registry.Registries;
+import net.minecraft.registry.Registry;
 import net.minecraft.util.Identifier;
 import org.ladysnake.cca.api.v3.component.ComponentKey;
 import org.ladysnake.cca.api.v3.component.ComponentRegistry;
 import org.ladysnake.cca.api.v3.entity.EntityComponentFactoryRegistry;
 import org.ladysnake.cca.api.v3.entity.EntityComponentInitializer;
+import com.loracore.component.data.*;
+import java.util.function.Function;
 
 public class ModComponents implements EntityComponentInitializer {
+
+    // --- Cardinal Components (для хранения данных на сущностях) ---
 
     public static final ComponentKey<VillagerDataComponent> VILLAGER_DATA =
             ComponentRegistry.getOrCreate(new Identifier(LoraCoreMod.MOD_ID, "villager_data"), VillagerDataComponent.class);
 
-    // НОВЫЙ КЛЮЧ ДЛЯ КОМПОНЕНТА ИГРОКА
     public static final ComponentKey<PlayerDialogueComponent> PLAYER_DIALOGUE =
             ComponentRegistry.getOrCreate(new Identifier(LoraCoreMod.MOD_ID, "player_dialogue"), PlayerDialogueComponent.class);
+
     public static final ComponentKey<PlayerQuestComponent> PLAYER_QUEST =
             ComponentRegistry.getOrCreate(new Identifier(LoraCoreMod.MOD_ID, "player_quest"), PlayerQuestComponent.class);
+
     public static final ComponentKey<PlayerAskHistoryComponent> PLAYER_ASK_HISTORY =
             ComponentRegistry.getOrCreate(new Identifier(LoraCoreMod.MOD_ID, "player_ask_history"), PlayerAskHistoryComponent.class);
 
+
+    // --- Data Components (для хранения данных на ItemStack'ах) ---
+
+
+    public static final DataComponentType<CpuData> CPU_DATA = register("cpu_data", builder -> builder.codec(CpuData.CODEC).build());
+    public static final DataComponentType<GpuData> GPU_DATA = register("gpu_data", builder -> builder.codec(GpuData.CODEC).build());
+    public static final DataComponentType<RamData> RAM_DATA = register("ram_data", builder -> builder.codec(RamData.CODEC).build());
+    public static final DataComponentType<FirmwareData> FIRMWARE_DATA = register("firmware_data", builder -> builder.codec(FirmwareData.CODEC).build());
+    public static final DataComponentType<StorageData> STORAGE_DATA = register("storage_data", builder -> builder.codec(StorageData.CODEC).build());
+    public static final DataComponentType<MotherboardData> MOTHERBOARD_DATA = register("motherboard_data", builder -> builder.codec(MotherboardData.CODEC).packetCodec(MotherboardData.PACKET_CODEC).build());
+
+    // [ИЗМЕНЕНО] Удален внутренний record, регистрируем новый компонент из отдельного файла
+    public static final DataComponentType<FileSystemsData> FILE_SYSTEMS_DATA = register("file_systems_data", builder -> builder
+            .codec(FileSystemsData.CODEC)
+            .packetCodec(FileSystemsData.PACKET_CODEC)
+            .build());    /**
+     * Вспомогательный метод для регистрации Data Component в реестре Minecraft.
+     */
+    private static <T> DataComponentType<T> register(String id, Function<DataComponentType.Builder<T>, DataComponentType<T>> factory) {
+        return Registry.register(Registries.DATA_COMPONENT_TYPE, new Identifier(LoraCoreMod.MOD_ID, id), factory.apply(DataComponentType.builder()));
+    }
+
+    /**
+     * Регистрация компонентов Cardinal Components на сущностях.
+     */
     @Override
     public void registerEntityComponentFactories(EntityComponentFactoryRegistry registry) {
         registry.registerFor(VillagerEntity.class, VILLAGER_DATA, villager -> new VillagerDataComponentImpl());

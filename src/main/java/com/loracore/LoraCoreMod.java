@@ -1,9 +1,12 @@
 package com.loracore;
 
+import com.loracore.computer.VirtualFileSystemManager;
+import com.loracore.computer.WorldStorageVFS;
 import com.loracore.item.ModItems;
 import com.loracore.network.ModNetworking;
 import com.loracore.util.PromptManager;
 import net.fabricmc.api.ModInitializer;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerWorldEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
@@ -35,8 +38,12 @@ public class LoraCoreMod implements ModInitializer {
 		LOGGER.info("Загрузка мода AI Mod...");
 		ConfigManager.loadConfig();
 		PromptManager.register();
+		VirtualFileSystemManager.registerResourceManagerListener();
 		ModNetworking.registerC2SPackets();
 		ModItems.registerModItems();
+		ServerLifecycleEvents.SERVER_STARTING.register(server -> {
+			VirtualFileSystemManager.getInstance().initialize(server);
+		});
 
 		ServerWorldEvents.LOAD.register((server, world) -> {
 			if (world.getRegistryKey() == World.OVERWORLD) {

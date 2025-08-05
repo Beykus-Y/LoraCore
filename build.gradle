@@ -70,6 +70,8 @@ dependencies {
 	modImplementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.9.22"
 	include          "org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.9.22"
 
+	implementation 'org.luaj:luaj-jse:3.0' // Или более новая версия, если доступна
+	include 'org.luaj:luaj-jse:3.0' // Включаем в jar мода
 
 	// Cardinal Components API (для системы компонентов мода)
 	modImplementation "org.ladysnake.cardinal-components-api:cardinal-components-base:${project.cca_version}"
