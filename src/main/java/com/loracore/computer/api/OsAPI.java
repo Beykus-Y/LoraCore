@@ -1,6 +1,7 @@
 // [ИСПРАВЛЕНО]
 package com.loracore.computer.api;
 
+import com.loracore.computer.RebootSignalException;
 import com.loracore.computer.VirtualMachine;
 import org.luaj.vm2.LuaTable;
 import org.luaj.vm2.LuaValue;
@@ -30,6 +31,7 @@ public class OsAPI extends LibFunction {
         LuaTable os = new LuaTable();
         os.set("reboot", new reboot(vm));
         os.set("sleep", new sleep(vm));
+        os.set("pullEvent", new pullEvent(vm));
         env.set("os", os);
         return os;
     }
@@ -41,7 +43,7 @@ public class OsAPI extends LibFunction {
         @Override
         public LuaValue call() {
             vm.reboot();
-            return NIL;
+            throw new RebootSignalException();
         }
     }
     private static class sleep extends OneArgFunction {

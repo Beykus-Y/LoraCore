@@ -1,9 +1,8 @@
-// Файл: src/client/java/com/loracore/LoraCoreClient.java
+// Полный исправленный файл: src/client/java/com/loracore/LoraCoreClient.java
 package com.loracore;
 
 import com.loracore.api.ClientApi;
 import com.loracore.computer.ClientVFS;
-import com.loracore.computer.ResourceLoader;
 import com.loracore.computer.VirtualMachine;
 import com.loracore.gui.AskChatScreen;
 import com.loracore.gui.TabletScreen;
@@ -17,13 +16,8 @@ import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallba
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.minecraft.client.MinecraftClient;
-import net.minecraft.resource.Resource;
-import net.minecraft.util.Identifier;
 import org.luaj.vm2.LuaValue;
 
-import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
-import java.util.Optional;
 import java.util.UUID;
 
 import static net.fabricmc.fabric.api.client.command.v2.ClientCommandManager.literal;
@@ -35,9 +29,10 @@ public class LoraCoreClient implements ClientModInitializer {
 
     private static boolean openAskScreenFlag = false;
 
+    // ИСПРАВЛЕНИЕ: activeVM больше не нужен как глобальная статическая переменная,
+    // так как вся логика теперь инкапсулирована в экранах.
+    // Оставляем только activeVfsInstance для обработки ответов.
     private static ClientVFS activeVfsInstance;
-    private static TabletScreen activeTabletScreen = null;
-    private static VirtualMachine activeVM = null;
 
     @Override
     public void onInitializeClient() {
@@ -50,22 +45,6 @@ public class LoraCoreClient implements ClientModInitializer {
         LOGGER.info("LoraCore Client successfully initialized!");
     }
 
-    public static VirtualMachine getActiveVM() {
-        return activeVM;
-    }
-
-    public static void shutdownActiveVM() {
-        if (activeVM != null) {
-            activeVM.shutdown();
-            activeVM = null;
-        }
-        if (activeTabletScreen != null) {
-            activeTabletScreen = null;
-        }
-        if (activeVfsInstance != null) {
-            activeVfsInstance = null;
-        }
-    }
 
     public static void setActiveVfsInstance(ClientVFS vfs) {
         activeVfsInstance = vfs;
@@ -74,17 +53,17 @@ public class LoraCoreClient implements ClientModInitializer {
     private void registerPacketHandlers() {
         ClientPlayNetworking.registerGlobalReceiver(VfsResponseS2CPacket.ID, (payload, context) -> {
             context.client().execute(() -> {
-                // Теперь VFS обрабатывает ответ для блокирующих операций,
-                // а VM - для асинхронных.
-                if (activeVM != null) {
-                    activeVM.resolveCallback(payload.callbackId(), payload.type(), payload.data());
-                } else if (activeVfsInstance != null) {
+                // ИСПРАВЛЕНИЕ: Упрощена вся логика.
+                // Теперь ЛЮБОЙ ответ от VFS направляется в активный экземпляр ClientVFS.
+                // ClientVFS сам разберется, положить ответ в блокирующую очередь или завершить Future.
+                if (activeVfsInstance != null) {
                     LuaValue responseValue = switch (payload.type()) {
                         case TRUE -> LuaValue.TRUE;
                         case FALSE -> LuaValue.FALSE;
                         case STRING, TABLE_JSON -> LuaValue.valueOf(payload.data());
                         default -> LuaValue.NIL;
                     };
+                    // Просто передаем ответ в обработчик.
                     activeVfsInstance.handleResponse(payload.callbackId(), responseValue);
                 }
             });
@@ -92,50 +71,11 @@ public class LoraCoreClient implements ClientModInitializer {
 
         ClientPlayNetworking.registerGlobalReceiver(BootTabletS2CPacket.ID, (payload, context) -> {
             UUID fsUuid = payload.fileSystemUuid();
-            String bootScriptPath = payload.bootScriptPath();
-            String architecture = payload.architecture();
-            int totalRamKb = payload.totalRamKb();
-
             context.client().execute(() -> {
-                if (activeTabletScreen == null) {
-                    ClientVFS vfs = new ClientVFS(fsUuid);
-                    setActiveVfsInstance(vfs);
-                    activeTabletScreen = new TabletScreen(vfs);
-
-                    ResourceLoader loader = (path) -> {
-                        try {
-                            Identifier id = path.contains(":") ? new Identifier(path) : new Identifier("loracore", path);
-                            Optional<Resource> resourceOpt = MinecraftClient.getInstance().getResourceManager().getResource(id);
-                            if (resourceOpt.isPresent()) {
-                                try (InputStream stream = resourceOpt.get().getInputStream()) {
-                                    return new String(stream.readAllBytes(), StandardCharsets.UTF_8);
-                                }
-                            }
-                        } catch (Exception e) {
-                            if (!path.startsWith("/")) {
-                                LoraCoreMod.LOGGER.error("Failed to load internal resource: {}", path, e);
-                            }
-                        }
-                        return null;
-                    };
-
-                    // --- НОВАЯ ЛОГИКА ЗАГРУЗКИ ---
-                    String bootScriptContent;
-                    if (bootScriptPath.startsWith("/")) {
-                        // Если путь из VFS, используем блокирующий метод для загрузки
-                        LuaValue content = vfs.readBlocking(bootScriptPath);
-                        bootScriptContent = content.isnil() ? null : content.tojstring();
-                    } else {
-                        // Иначе это внутренний ресурс
-                        bootScriptContent = loader.load(bootScriptPath);
-                    }
-
-                    // Создаем VM, передавая ей VFS как IVfsRequester
-                    activeVM = new VirtualMachine(architecture, totalRamKb, activeTabletScreen, loader, vfs, fsUuid);
-                    // Запускаем VM с уже загруженным кодом
-                    activeVM.start(bootScriptContent);
-                }
-                context.client().setScreen(activeTabletScreen);
+                ClientVFS vfs = new ClientVFS(fsUuid);
+                // Устанавливаем этот экземпляр VFS как активный, чтобы он мог получать ответы от сервера.
+                setActiveVfsInstance(vfs);
+                context.client().setScreen(new TabletScreen(vfs));
             });
         });
     }

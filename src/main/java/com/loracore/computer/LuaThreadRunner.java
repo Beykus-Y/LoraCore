@@ -1,7 +1,7 @@
+// Полный исправленный файл: src/main/java/com/loracore/computer/LuaThreadRunner.java
 package com.loracore.computer;
 
 import com.loracore.LoraCoreMod;
-import com.loracore.api.ClientApi;
 import org.luaj.vm2.Globals;
 import org.luaj.vm2.LuaError;
 import org.luaj.vm2.LuaThread;
@@ -14,28 +14,29 @@ import java.util.concurrent.TimeUnit;
 
 public class LuaThreadRunner implements Runnable {
 
+    private final VirtualMachine vm;
     private final Globals globals;
-    private final Terminal terminal;
     private final String bootScript;
 
     private final BlockingQueue<LuaValue[]> eventQueue = new LinkedBlockingQueue<>();
     private Thread workerThread;
     private LuaThread kernelCoroutine;
 
-    // --- НОВЫЕ ПОЛЯ ---
-    // Простая структура для хранения задачи на возобновление
     private record Resumable(LuaThread coroutine, Varargs value) {}
-    // Потокобезопасная очередь для задач на возобновление
     private final BlockingQueue<Resumable> resumeQueue = new LinkedBlockingQueue<>();
 
-    public LuaThreadRunner(Globals globals, Terminal terminal, String bootScript) {
+    public LuaThreadRunner(VirtualMachine vm, Globals globals, String bootScript) {
+        this.vm = vm;
         this.globals = globals;
-        this.terminal = terminal;
         this.bootScript = bootScript;
     }
 
     public Globals getGlobals() {
         return this.globals;
+    }
+
+    public boolean isAlive() {
+        return workerThread != null && workerThread.isAlive();
     }
 
     /**
@@ -85,22 +86,14 @@ public class LuaThreadRunner implements Runnable {
             Varargs resumeArgs = LuaValue.NIL;
 
             while (kernelCoroutine.state.status != LuaThread.STATUS_DEAD && !Thread.currentThread().isInterrupted()) {
-
-                // --- ШАГ 1: СНАЧАЛА проверяем приоритетную очередь VFS-ответов ---
                 Resumable toResume = resumeQueue.poll();
 
                 if (toResume != null) {
-                    // Если есть ответ от VFS, немедленно используем его
                     resumeArgs = toResume.value();
                 } else {
-                    // Если ответов нет, БЛОКИРУЕМСЯ в ожидании обычного события
-                    // Используем take() для блокировки вместо poll() с задержкой,
-                    // чтобы не пропустить VFS-ответ, пришедший во время ожидания.
-                    // Обернем в poll с небольшим таймаутом, чтобы цикл мог проверить interrupted.
                     LuaValue[] event = eventQueue.poll(100, TimeUnit.MILLISECONDS);
                     if (Thread.currentThread().isInterrupted()) break;
 
-                    // Важная проверка: пока мы ждали событие, мог прийти VFS-ответ. Проверим еще раз!
                     toResume = resumeQueue.poll();
                     if (toResume != null) {
                         resumeArgs = toResume.value();
@@ -109,24 +102,35 @@ public class LuaThreadRunner implements Runnable {
                     }
                 }
 
-                // --- ШАГ 2: ЕДИНСТВЕННАЯ точка возобновления ---
-                LoraCoreMod.LOGGER.info("[LuaThreadRunner] Resuming kernel with args: {}", resumeArgs);
                 Varargs result = kernelCoroutine.resume(resumeArgs);
-                LoraCoreMod.LOGGER.info("[LuaThreadRunner] Kernel resumed with status: {}, result: {}", result.checkboolean(1), result);
 
                 if (!result.checkboolean(1)) {
                     throw new LuaError(result.optjstring(2, "Kernel error"));
                 }
             }
             LoraCoreMod.LOGGER.info("[LuaThreadRunner] Thread loop finished.");
-        } catch (InterruptedException e) {
+        }  catch (InterruptedException e) {
             LoraCoreMod.LOGGER.info("Lua thread {} was interrupted.", Thread.currentThread().getName());
             Thread.currentThread().interrupt();
         } catch (Throwable t) {
-            LoraCoreMod.LOGGER.error("!!! LUA VIRTUAL MACHINE KERNEL PANIC !!!", t);
-            String causeMessage = (t.getCause() != null) ? t.getCause().getMessage() : "No root cause";
-            final String errorMessage = "LUA KERNEL PANIC:\n\n" + t.getMessage() + "\n\nCause: " + causeMessage;
-            ClientApi.executeOnRenderThread(() -> this.terminal.showCrashScreen(errorMessage));
+            // =======================================================
+            //          ФИНАЛЬНОЕ ИСПРАВЛЕНИЕ v2
+            // =======================================================
+            // Проверяем, содержит ли ТЕКСТ СООБЩЕНИЯ ошибки название нашего класса-сигнала.
+            // Это надежнее, чем проверять getCause(), так как LuaJ вставляет его как текст.
+            if (t instanceof LuaError && t.getMessage() != null && t.getMessage().contains(RebootSignalException.class.getName())) {
+                // Если да - это НЕ паника. Это штатная перезагрузка.
+                LoraCoreMod.LOGGER.info("[LuaThreadRunner] Reboot signal received. Thread is shutting down cleanly.");
+            } else {
+                // Если это любая другая ошибка - это НАСТОЯЩАЯ паника.
+                LoraCoreMod.LOGGER.error("!!! LUA VIRTUAL MACHINE KERNEL PANIC !!!", t);
+                String causeMessage = (t.getCause() != null) ? t.getCause().getMessage() : "No root cause";
+                final String errorMessage = "LUA KERNEL PANIC:\n\n" + t.getMessage() + "\n\nCause: " + causeMessage;
+
+                vm.setCrashState(errorMessage);
+            }
         }
+
+        LoraCoreMod.LOGGER.info("[LuaThreadRunner] Thread loop finished.");
     }
 }

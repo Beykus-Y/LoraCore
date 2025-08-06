@@ -1,265 +1,203 @@
-// Файл: src/client/java/com/loracore/gui/TabletScreen.java
+// Полный исправленный файл: src/client/java/com/loracore/gui/TabletScreen.java
 package com.loracore.gui;
 
 import com.loracore.LoraCoreClient;
 import com.loracore.computer.ClientVFS;
+import com.loracore.computer.IRuntimeEnvironment;
 import com.loracore.computer.Terminal;
-import com.loracore.computer.VirtualMachine;
+import com.loracore.computer.TerminalRenderer;
+import com.loracore.computer.jkernel.JavaRuntime;
+import com.loracore.computer.lualibs.LuaRuntime;
+import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.font.TextRenderer;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.text.Text;
 import org.lwjgl.glfw.GLFW;
+import com.loracore.api.ClientApi;
 
-import java.util.UUID;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.LinkedBlockingQueue;
-
+// ИСПРАВЛЕНИЕ: Класс теперь реализует интерфейс Terminal
 public class TabletScreen extends Screen implements Terminal {
 
-    // --- Константы ---
     private static final int BACKGROUND_OVERLAY_COLOR = 0xB0000000;
-    private static final int TABLET_BG_COLOR = 0xFF1E1E1E;
     private static final int TABLET_BORDER_COLOR = 0xFF0A0A0A;
-    private static final int TEXT_COLOR = 0xFFE0E0E0;
-    private static final int FONT_HEIGHT = 9;
-    private static final int FONT_WIDTH = 6;
+    private static final int TABLET_BG_COLOR = 0xFF1E1E1E;
+    private static final String CONFIG_PATH = "/etc/loracore.conf";
+    private static final String LUA_BOOT_PATH = "os/recovery.lua";
+    private static final String JAVA_BOOT_PATH = "/boot/kernel.jar";
 
-    // --- Состояние ---
-    private final VirtualMachine vm;
-    private TerminalChar[][] buffer;
-    private int termWidth, termHeight;
-    private int cursorX = 1, cursorY = 1;
-    private boolean cursorVisible = true;
-    private boolean cursorBlinkEnabled = true;
-    private int tickCounter = 0;
-    private int tabletX, tabletY, tabletWidth, tabletHeight;
-    private int currentTextColor = TEXT_COLOR;
-    private int currentBgColor = TABLET_BG_COLOR;
+    private enum State { LOADING, RUNNING, CRASHED, HALTED }
+    private State currentState = State.LOADING;
+    private String statusMessage = "Initializing...";
 
-    // --- Поля для ввода/вывода ---
-    private final BlockingQueue<String> inputQueue = new LinkedBlockingQueue<>(1);
-    private String currentInputLine = "";
     private final ClientVFS vfs;
+    private IRuntimeEnvironment runtime;
+
+    private int tabletX, tabletY, tabletWidth, tabletHeight;
+
+    public int getTabletWidth() { return tabletWidth; }
+    public int getTabletHeight() { return tabletHeight; }
+    public MinecraftClient getClient() { return this.client; }
+    public TextRenderer getTextRenderer() { return this.textRenderer; }
 
     public TabletScreen(ClientVFS vfs) {
         super(Text.literal("LoraOS"));
         this.vfs = vfs;
-        // [ИСПРАВЛЕНО] Получаем активную VM из клиента, а не создаем новую.
-        // Это сохраняет состояние между перерисовками экрана (ресайз).
-        this.vm = LoraCoreClient.getActiveVM();
     }
 
     @Override
     protected void init() {
         super.init();
+        LoraCoreClient.setActiveVfsInstance(this.vfs);
         calculateTabletDimensions();
+        initializeRuntime();
 
-        int newTermWidth = (tabletWidth - 8) / FONT_WIDTH;
-        int newTermHeight = (tabletHeight - 8) / FONT_HEIGHT;
+    }
 
-        if (this.buffer == null || this.termWidth != newTermWidth || this.termHeight != newTermHeight) {
-            this.termWidth = newTermWidth;
-            this.termHeight = newTermHeight;
+    private void initializeRuntime() {
+        this.currentState = State.LOADING;
+        this.statusMessage = "Reading boot config...";
 
-            this.buffer = new TerminalChar[termHeight][termWidth];
-            for (int y = 0; y < termHeight; y++) {
-                for (int x = 0; x < termWidth; x++) {
-                    buffer[y][x] = new TerminalChar(' ', currentTextColor, currentBgColor);
+        // ИСПРАВЛЕНИЕ: Используем асинхронный вызов, чтобы не замораживать игру.
+        vfs.readAsync(CONFIG_PATH).whenComplete((configContentLua, error) -> {
+            // Ответ от сервера пришел. Теперь мы можем безопасно продолжить
+            // инициализацию в главном потоке игры.
+            client.execute(() -> {
+                String mode = "LUA"; // Режим по умолчанию
+                if (error == null && configContentLua != null && !configContentLua.isnil()) {
+                    if (configContentLua.tojstring().toUpperCase().contains("MODE=JAVA")) {
+                        mode = "JAVA";
+                    }
                 }
-            }
-            if(this.vm != null) {
-                vm.pushEvent("term_resize");
-            }
-        }
+
+                if ("JAVA".equals(mode)) {
+                    this.statusMessage = "JAVA mode detected. Booting kernel...";
+                    this.runtime = new JavaRuntime(this, vfs);
+                    this.runtime.boot(JAVA_BOOT_PATH);
+                } else {
+                    this.statusMessage = "LUA mode detected. Booting...";
+                    this.runtime = new LuaRuntime(this, vfs, textRenderer);
+
+                    if (runtime instanceof LuaRuntime luaRuntime) {
+                        // Инициализируем размеры терминала ДО запуска скрипта
+                        luaRuntime.resizeTerminal(this.tabletWidth - 8, this.tabletHeight - 8);
+                    }
+
+                    // И только теперь запускаем скрипт
+                    this.runtime.boot(LUA_BOOT_PATH);
+                }
+
+                this.currentState = State.RUNNING;
+            });
+        });
     }
 
     @Override
-    public void close() {
-        // Этот метод вызывается, когда мы хотим закрыть экран (например, по нажатию ESC).
-        // Фактическая очистка ресурсов произойдет в onClosed().
-        super.close();
-    }
-
-    @Override
-    public void removed() {
-        LoraCoreClient.shutdownActiveVM();
-        super.removed();
+    public void renderBackground(DrawContext context, int mouseX, int mouseY, float delta) {
+        // Пусто
     }
 
     @Override
     public void render(DrawContext context, int mouseX, int mouseY, float delta) {
-        this.renderBackground(context, mouseX, mouseY, delta);
-        if (cursorBlinkEnabled) {
-            tickCounter++;
-            if (tickCounter >= 10) {
-                tickCounter = 0;
-                cursorVisible = !cursorVisible;
-            }
-        } else {
-            cursorVisible = true;
-        }
-
+        context.fill(0, 0, this.width, this.height, BACKGROUND_OVERLAY_COLOR);
         context.fill(tabletX, tabletY, tabletX + tabletWidth, tabletY + tabletHeight, TABLET_BORDER_COLOR);
+        context.fill(tabletX + 2, tabletY + 2, tabletX + tabletWidth - 2, tabletY + tabletHeight - 2, TABLET_BG_COLOR);
 
-        if (buffer != null) {
-            for (int y = 0; y < termHeight; y++) {
-                for (int x = 0; x < termWidth; x++) {
-                    TerminalChar ch = buffer[y][x];
-                    int drawX = tabletX + 4 + x * FONT_WIDTH;
-                    int drawY = tabletY + 4 + y * FONT_HEIGHT;
-                    context.fill(drawX, drawY, drawX + FONT_WIDTH, drawY + FONT_HEIGHT, ch.bgColor);
-                    context.drawTextWithShadow(textRenderer, String.valueOf(ch.character), drawX, drawY, ch.fgColor);
+        context.getMatrices().push();
+        context.enableScissor(tabletX + 2, tabletY + 2, tabletX + tabletWidth - 2, tabletY + tabletHeight - 2);
+        context.getMatrices().translate(tabletX + 4, tabletY + 4, 0);
+
+        switch (currentState) {
+            case LOADING:
+                context.drawCenteredTextWithShadow(textRenderer, statusMessage, (width / 2) - (tabletX + 4), (height / 2) - (tabletY + 4), 0xFFFFFF);
+                break;
+            case RUNNING:
+            case HALTED:
+                if (runtime != null) {
+                    runtime.render(context, mouseX - (tabletX + 4), mouseY - (tabletY + 4), delta);
                 }
-            }
+                break;
+            case CRASHED:
+                context.drawCenteredTextWithShadow(textRenderer, "FATAL ERROR", (width / 2) - (tabletX + 4), (height / 2) - 10 - (tabletY + 4), 0xFF5555);
+                if (statusMessage != null) {
+                    textRenderer.wrapLines(Text.literal(statusMessage), tabletWidth - 10).forEach((line) -> {
+                        context.drawCenteredTextWithShadow(textRenderer, line, (width / 2) - (tabletX + 4), (height / 2) - (tabletY + 4), 0xFFFFFF);
+                    });
+                }
+                break;
         }
 
-        if (cursorVisible) {
-            int cursorDrawX = tabletX + 4 + (cursorX - 1) * FONT_WIDTH;
-            int cursorDrawY = tabletY + 4 + (cursorY - 1) * FONT_HEIGHT;
-            context.fill(cursorDrawX, cursorDrawY, cursorDrawX + FONT_WIDTH, cursorDrawY + FONT_HEIGHT, 0xFFFFFFFF);
+        context.disableScissor();
+        context.getMatrices().pop();
+    }
+
+    @Override
+    public void tick() {
+        if (currentState == State.RUNNING && runtime != null) {
+            if (runtime.getCrashMessage() != null) {
+                this.currentState = State.CRASHED;
+                this.statusMessage = runtime.getCrashMessage();
+            } else if (runtime.isRunning()) {
+                runtime.tick();
+            } else {
+                this.currentState = State.HALTED;
+            }
         }
     }
 
     @Override
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (modifiers == GLFW.GLFW_MOD_CONTROL && keyCode == GLFW.GLFW_KEY_C) {
-            if (vm != null) {
-                vm.pushEvent("signal", "interrupt");
-            }
-            return true;
+    public void removed() {
+        if (runtime != null) {
+            runtime.shutdown();
         }
+        LoraCoreClient.setActiveVfsInstance(null);
+        super.removed();
+    }
+
+    @Override
+    public void reboot() {
+        // ПРАВИЛЬНО: Мы просим клиент выполнить смену экрана в его собственном потоке
+        ClientApi.executeOnRenderThread(() -> {
+            if (this.client != null) {
+                this.client.setScreen(new TabletScreen(this.vfs));
+            }
+        });
+    }
+
+    @Override
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
         if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
             this.close();
             return true;
         }
-        if (keyCode == GLFW.GLFW_KEY_ENTER || keyCode == GLFW.GLFW_KEY_KP_ENTER) {
-            try {
-                this.inputQueue.put(this.currentInputLine);
-                this.print("\n");
-                this.currentInputLine = "";
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-            return true;
-        }
-        if (keyCode == GLFW.GLFW_KEY_BACKSPACE) {
-            if (!this.currentInputLine.isEmpty()) {
-                this.currentInputLine = this.currentInputLine.substring(0, this.currentInputLine.length() - 1);
-                if (this.cursorX > 1) {
-                    this.setCursorPos(this.cursorX - 1, this.cursorY);
-                    this.print(" ");
-                    this.setCursorPos(this.cursorX - 1, this.cursorY);
-                }
-            }
-            return true;
-        }
-        if (vm != null) {
-            vm.pushEvent("key", keyCode);
+        if (runtime != null && currentState == State.RUNNING) {
+            return runtime.onKeyPressed(keyCode, scanCode, modifiers);
         }
         return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
     @Override
+    public boolean keyReleased(int keyCode, int scanCode, int modifiers) {
+        if (runtime != null && currentState == State.RUNNING) {
+            return runtime.onKeyReleased(keyCode, scanCode, modifiers);
+        }
+        return super.keyReleased(keyCode, scanCode, modifiers);
+    }
+
+    @Override
     public boolean charTyped(char chr, int modifiers) {
-        this.currentInputLine += chr;
-        this.print(String.valueOf(chr));
-        return true;
-    }
-
-    @Override
-    public void print(String text) {
-        for (char ch : text.toCharArray()) {
-            if (ch == '\n') {
-                cursorX = 1;
-                cursorY++;
-            } else {
-                if (cursorX > termWidth) {
-                    cursorX = 1;
-                    cursorY++;
-                }
-                if (cursorY > termHeight) {
-                    scrollBuffer();
-                    cursorY = termHeight;
-                }
-                if (buffer != null && cursorY - 1 >= 0 && cursorY - 1 < buffer.length && cursorX - 1 >= 0 && cursorX - 1 < buffer[0].length) {
-                    buffer[cursorY - 1][cursorX - 1].setCharacter(ch, currentTextColor, currentBgColor);
-                    cursorX++;
-                }
-            }
+        if (runtime != null && currentState == State.RUNNING) {
+            return runtime.onCharTyped(chr, modifiers);
         }
-        resetCursorBlink();
+        return super.charTyped(chr, modifiers);
     }
 
+    // --- Методы mouse... без изменений ---
+
     @Override
-    public void clear() {
-        if (buffer != null) {
-            for (int y = 0; y < termHeight; y++) {
-                for (int x = 0; x < termWidth; x++) {
-                    buffer[y][x].setCharacter(' ', currentTextColor, currentBgColor);
-                }
-            }
-        }
-        this.cursorX = 1;
-        this.cursorY = 1;
-        resetCursorBlink();
+    public boolean shouldPause() {
+        return false;
     }
-
-    @Override
-    public void clearLine() {
-        if (buffer != null && cursorY - 1 >= 0 && cursorY - 1 < buffer.length) {
-            for (int x = 0; x < termWidth; x++) {
-                buffer[cursorY - 1][x].setCharacter(' ', currentTextColor, currentBgColor);
-            }
-        }
-        resetCursorBlink();
-    }
-
-    @Override
-    public void setCursorPos(int x, int y) {
-        this.cursorX = Math.max(1, Math.min(termWidth + 1, x));
-        this.cursorY = Math.max(1, Math.min(termHeight, y));
-        resetCursorBlink();
-    }
-
-    @Override
-    public String read() {
-        try {
-            return this.inputQueue.take();
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            return null;
-        }
-    }
-
-    @Override
-    public void reboot() {
-        if (this.client != null) {
-            this.client.execute(() -> {
-                LoraCoreClient.shutdownActiveVM();
-                this.client.setScreen(null); // Просто закрываем экран, при следующем использовании предмета создастся новая сессия.
-            });
-        }
-    }
-
-    @Override
-    public void setTextColor(int color) { this.currentTextColor = 0xFF000000 | color; }
-
-    @Override
-    public void setBackgroundColor(int color) { this.currentBgColor = 0xFF000000 | color; }
-
-    @Override
-    public int[] getCursorPos() { return new int[]{this.cursorX, this.cursorY}; }
-
-    @Override
-    public int[] getSize() { return new int[]{this.termWidth, this.termHeight}; }
-
-    @Override
-    public void renderBackground(DrawContext context, int mouseX, int mouseY, float delta) {
-        context.fill(0, 0, this.width, this.height, BACKGROUND_OVERLAY_COLOR);
-    }
-
-    @Override
-    public boolean shouldPause() { return false; }
 
     private void calculateTabletDimensions() {
         this.tabletHeight = (int) (this.height * 0.9);
@@ -272,55 +210,24 @@ public class TabletScreen extends Screen implements Terminal {
         this.tabletY = (this.height - this.tabletHeight) / 2;
     }
 
-    private void scrollBuffer() {
-        if (buffer == null) return;
-        for (int y = 0; y < termHeight - 1; y++) {
-            if (this.buffer[y] != null && this.buffer[y+1] != null)
-                System.arraycopy(this.buffer[y + 1], 0, this.buffer[y], 0, termWidth);
+    // --- ИСПРАВЛЕНИЕ: Реализация методов интерфейса Terminal ---
+
+    private TerminalRenderer getTerminalRenderer() {
+        if (runtime instanceof LuaRuntime luaRuntime) {
+            return luaRuntime.getTerminalRenderer();
         }
-        for (int x = 0; x < termWidth; x++) {
-            if (this.buffer[termHeight-1] != null)
-                this.buffer[termHeight - 1][x] = new TerminalChar(' ', currentTextColor, currentBgColor);
-        }
+        return null;
     }
 
-    private void resetCursorBlink() {
-        this.cursorVisible = true;
-        this.tickCounter = 0;
-    }
-
-    private static class TerminalChar {
-        char character;
-        int fgColor;
-        int bgColor;
-
-        TerminalChar(char character, int fgColor, int bgColor) {
-            this.character = character;
-            this.fgColor = fgColor;
-            this.bgColor = bgColor;
-        }
-
-        void setCharacter(char c, int fg, int bg) {
-            this.character = c;
-            this.fgColor = fg;
-            this.bgColor = bg;
-        }
-    }
-    @Override
-    public void setCursorBlink(boolean enabled) {
-        this.cursorBlinkEnabled = enabled;
-        // Если мигание отключается, курсор должен стать видимым немедленно
-        if (!enabled) {
-            this.cursorVisible = true;
-        }
-    }
-    @Override
-    public void showCrashScreen(String message) {
-        // Убеждаемся, что мы находимся в потоке клиента
-        if (this.client != null) {
-            // Просто говорим клиенту установить новый экран - наш CrashScreen.
-            // Передаем ему текущий экран (this) как родительский, на который можно вернуться.
-            this.client.setScreen(new CrashScreen(message, this));
-        }
-    }
+    @Override public void print(String text) { if (getTerminalRenderer() != null) getTerminalRenderer().print(text); }
+    @Override public void clear() { if (getTerminalRenderer() != null) getTerminalRenderer().clear(); }
+    @Override public void clearLine() { if (getTerminalRenderer() != null) getTerminalRenderer().clearLine(); }
+    @Override public void setCursorPos(int x, int y) { if (getTerminalRenderer() != null) getTerminalRenderer().setCursorPos(x, y); }
+    @Override public void setCursorBlink(boolean enabled) { if (getTerminalRenderer() != null) getTerminalRenderer().setCursorBlink(enabled); }
+    @Override public String read() { return getTerminalRenderer() != null ? getTerminalRenderer().read() : null; }
+    @Override public void showCrashScreen(String message) { this.currentState = State.CRASHED; this.statusMessage = message; }
+    @Override public void setTextColor(int color) { if (getTerminalRenderer() != null) getTerminalRenderer().setTextColor(color); }
+    @Override public void setBackgroundColor(int color) { if (getTerminalRenderer() != null) getTerminalRenderer().setBackgroundColor(color); }
+    @Override public int[] getCursorPos() { return getTerminalRenderer() != null ? getTerminalRenderer().getCursorPos() : new int[]{0,0}; }
+    @Override public int[] getSize() { return getTerminalRenderer() != null ? getTerminalRenderer().getSize() : new int[]{0,0}; }
 }

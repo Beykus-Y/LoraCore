@@ -1,31 +1,31 @@
 -- =======================================================
--- LoraCore ModuOS Installer v4.0 (Corrected & Asynchronous)
+-- LoraCore ModuOS Installer v5.0 (Corrected Boot Script)
 -- =======================================================
--- Этот скрипт использует coroutine.yield для ожидания завершения
--- файловых операций и возвращает 'true' при успехе или 'false' при ошибке.
-
 local term = tablet.terminal
 local gpu = tablet.gpu
 local fs = _G.fs
 local colors = _G.colors
-local coroutine = _G.coroutine
+local os = _G.os
 
--- Очищаем экран и устанавливаем начальные цвета
 term.clear()
 gpu.setBackgroundColor(colors.black)
 gpu.setTextColor(colors.white)
 term.setCursorPos(1, 1)
 
-term.write("Starting ModuOS Installation...\n")
-term.write("-------------------------------\n\n")
+term.print("Starting ModuOS Installation...")
+term.print("-------------------------------")
 
--- Содержимое операционной системы, которое будет записано в /boot.lua
+-- ИСПРАВЛЕННЫЙ BOOT SCRIPT
 local boot_script_content = [[
--- /boot.lua - Minimal Operating System v1.1
+-- /boot.lua - Minimal Operating System v1.2 (Persistent)
+local term = tablet.terminal
+
 term.clear()
 term.setCursorPos(1, 1)
-print("ModuOS v0.1 Loaded.")
+print("ModuOS v0.2 Loaded.")
 print("Type 'help' for commands.")
+
+-- Главный цикл ОС
 while true do
     term.write("> ")
     local cmd = term.read()
@@ -33,46 +33,36 @@ while true do
         print("Commands: help, reboot, exit")
     elseif cmd == "reboot" then
         os.reboot()
+        break -- Выходим из цикла, чтобы BIOS перезагрузился
     elseif cmd == "exit" then
         term.clear()
-        print("System halted.")
-        break
+        term.print("System halted. Press any key to reboot.")
+        os.pullEvent("key") -- Ждем нажатия клавиши
+        os.reboot()
+        break -- Выходим из цикла
     else
-        print("Unknown command.")
+        print("Unknown command: " .. tostring(cmd))
     end
 end
 ]]
 
--- ШАГ 1: Запись файла ОС
-term.write("1. Writing boot file...")
--- ИСПОЛЬЗУЕМ YIELD: Ждем, пока сервер подтвердит запись файла
-local ok, err = coroutine.yield(fs.write("/boot.lua", boot_script_content))
-if not ok then
-    gpu.setTextColor(colors.red)
-    term.write("\n   ERROR: Failed to write boot file: " .. tostring(err) .. "\n")
-    return false -- Возвращаем неудачу
-end
-term.write(" [OK]\n")
+-- Процесс установки
+term.print("\n1. Writing boot file... ")
+fs.write("/boot.lua", boot_script_content)
+term.print("[OK]")
 
+term.print("2. Creating directories... ")
+fs.makeDir("/usr")
+fs.makeDir("/home")
+term.print("[OK]")
 
--- ШАГ 2: Создание директорий
-term.write("2. Creating directories...")
--- ИСПОЛЬЗУЕМ YIELD: Ждем создания каждой директории
-coroutine.yield(fs.makeDir("/usr"))
-coroutine.yield(fs.makeDir("/home"))
-term.write(" [OK]\n")
-
-
--- ШАГ 3: Проверка установки
-term.write("3. Verifying installation...")
--- ИСПОЛЬЗУЕМ YIELD: Ждем, пока сервер прочитает файл и вернет его содержимое
-local content = coroutine.yield(fs.read("/boot.lua"))
+term.print("3. Verifying installation... ")
+local content = fs.read("/boot.lua")
 if not content then
     gpu.setTextColor(colors.red)
-    term.write("\n   ERROR: Verification failed! Could not read boot file back.\n")
-    return false -- Возвращаем неудачу
+    term.print("\n   ERROR: Verification failed! Could not read boot file back.")
+    return false
 end
-term.write(" [OK]\n")
+term.print("[OK]")
 
--- Если все шаги прошли успешно, возвращаем true.
 return true

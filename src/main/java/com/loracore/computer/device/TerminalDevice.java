@@ -23,6 +23,11 @@ public class TerminalDevice {
         // проблем с многопоточностью, так как Lua VM работает в отдельном потоке.
         ClientApi.executeOnRenderThread(() -> terminal.print(text));
     }
+    @Callback(value = "print", doc = "Writes text to the current cursor position and adds a newline.")
+    public void print(String text) {
+        // Реализуем print как write + newline
+        ClientApi.executeOnRenderThread(() -> terminal.print(text + "\n"));
+    }
 
     @Callback(doc = "Clears the entire terminal screen.")
     public void clear() {

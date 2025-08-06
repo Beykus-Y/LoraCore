@@ -30,9 +30,21 @@ public class GpuDevice {
 
     @Callback(value = "fill", doc = "Fills a rectangular area with a character.")
     public void fill(int x, int y, int width, int height, String character) {
-        if (character == null || character.isEmpty()) return;
+        // ИСПРАВЛЕНИЕ: Добавлена проверка на корректность размеров в самом начале.
+        // Если ширина или высота меньше или равна нулю, мы просто ничего не делаем.
+        if (width <= 0 || height <= 0) {
+            return;
+        }
+
+        // Ваша проверка на символ остается, это хорошая практика.
+        if (character == null || character.isEmpty()) {
+            return;
+        }
+
+        // Теперь, когда мы уверены, что width > 0, эта строка полностью безопасна.
         final String repeatedChar = character.substring(0, 1).repeat(width);
 
+        // Отправка на отрисовку в основном потоке остается без изменений.
         ClientApi.executeOnRenderThread(() -> {
             for (int j = 0; j < height; j++) {
                 terminal.setCursorPos(x, y + j);

@@ -1,13 +1,13 @@
-// Файл: src/main/java/com/loracore/computer/VirtualMachine.java
+// Полный исправленный файл: src/main/java/com/loracore/computer/VirtualMachine.java
 package com.loracore.computer;
 
 import com.loracore.LoraCoreMod;
 import com.loracore.api.ClientApi;
 import com.loracore.computer.api.*;
 import com.loracore.computer.device.*;
-import com.loracore.network.vfs.VfsResponseS2CPacket;
 import org.luaj.vm2.*;
 import org.luaj.vm2.lib.OneArgFunction;
+import org.luaj.vm2.lib.VarArgFunction;
 import org.luaj.vm2.lib.jse.JsePlatform;
 
 import java.util.ArrayList;
@@ -15,23 +15,20 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
 
 public class VirtualMachine {
 
     private final Terminal terminal;
     private final ResourceLoader resourceLoader;
-    // ИЗМЕНЕНИЕ: Зависимость от IVfsRequester вместо конкретной реализации
-    private final IVfsRequester vfsRequester;
-    private final UUID fsUuid; // Храним UUID здесь
+    // ИСПРАВЛЕНИЕ: Убрали старый IVfsRequester. Теперь VM работает с простым интерфейсом.
+    private final IVirtualFileSystem vfs;
+    private final UUID fsUuid;
     private final List<Object> devices = new ArrayList<>();
     private final long startTime;
+    private String crashMessage = null;
 
     private final Map<Integer, LuaThreadRunner> threads = new ConcurrentHashMap<>();
     private static final int MAIN_THREAD_ID = 0;
-
-    private final Map<Integer, LuaThread> waitingCoroutines = new ConcurrentHashMap<>();
-    private final AtomicInteger nextCallbackId = new AtomicInteger(1);
 
     private static class CustomPrint extends OneArgFunction {
         private final Terminal term;
@@ -44,12 +41,12 @@ public class VirtualMachine {
         }
     }
 
-    // ИЗМЕНЕНИЕ: Конструктор теперь принимает IVfsRequester и UUID
-    public VirtualMachine(String architecture, int totalRamKb, Terminal terminal, ResourceLoader resourceLoader, IVfsRequester vfsRequester, UUID fsUuid) {
+    // ИСПРАВЛЕНИЕ: Конструктор теперь принимает простую IVirtualFileSystem.
+    public VirtualMachine(String architecture, int totalRamKb, Terminal terminal, ResourceLoader resourceLoader, IVirtualFileSystem vfs, UUID fsUuid) {
         this.terminal = terminal;
         this.resourceLoader = resourceLoader;
-        this.vfsRequester = vfsRequester; // Сохраняем Requester
-        this.fsUuid = fsUuid;             // Сохраняем UUID
+        this.vfs = vfs; // Присваиваем новую реализацию VFS
+        this.fsUuid = fsUuid;
         this.startTime = System.nanoTime();
 
         this.devices.add(new ThreadDevice(this));
@@ -65,10 +62,12 @@ public class VirtualMachine {
         g.load(new OsAPI(this));
         g.set("bios", new BiosAPI(this));
         g.set("colors", new ColorsAPI());
+        g.set("require", new CustomRequire(g));
 
-        // ИСПРАВЛЕНО: Убрана передача Globals в конструктор FsAPI, как вы и предложили
-        if (this.vfsRequester != null) {
-            g.set("fs", new FsAPI(this, g));
+        // ИСПРАВЛЕНИЕ: FsAPI теперь создается с простой реализацией VFS.
+        // Ему больше не нужен доступ к VM или Globals.
+        if (this.vfs != null) {
+            g.set("fs", new FsAPI(this.vfs));
         }
 
         LuaTable tabletApi = new LuaTable();
@@ -82,82 +81,33 @@ public class VirtualMachine {
         return g;
     }
 
-    // ИЗМЕНЕНИЕ: Метод boot теперь называется start и принимает готовый код
     public void start(String bootScriptContent) {
-        if (bootScriptContent == null || bootScriptContent.isEmpty()) {
-            LoraCoreMod.LOGGER.error("Boot script is empty!");
-            terminal.showCrashScreen("FATAL: Boot script is empty or could not be loaded.");
+        if (bootScriptContent == null || bootScriptContent.isEmpty() || "nil".equals(bootScriptContent)) {
+            final String error = "FATAL: Boot script is empty or could not be loaded.";
+            LoraCoreMod.LOGGER.error(error);
+            this.setCrashState(error);
             return;
         }
         startNewLuaThread(MAIN_THREAD_ID, bootScriptContent);
     }
 
-    public Varargs vfsRequest(LuaThread coroutine, com.loracore.network.vfs.VfsRequestC2SPacket.Operation op, Varargs args) {
-        if (vfsRequester == null) {
-            throw new LuaError("VFS is not available.");
-        }
-        int callbackId = nextCallbackId.getAndIncrement();
-        waitingCoroutines.put(callbackId, coroutine);
+    // ИСПРАВЛЕНИЕ: Полностью удалены методы vfsRequest и resolveCallback.
+    // Вся логика асинхронности и управления корутинами из VM убрана.
 
-        String path = args.checkjstring(1);
-        String content = args.optjstring(2, "");
-        LoraCoreMod.LOGGER.info(
-                "[VFS REQUEST] Preparing for Lua yield. CallbackID: {}, Operation: {}, Path: {}, FS_UUID: {}",
-                callbackId,
-                op,
-                path,
-                this.fsUuid
-        );
-        vfsRequester.sendRequest(callbackId, this.fsUuid, op, path, content);
-
-        // ИСПРАВЛЕНИЕ: Используем статический метод LuaThread.yield(), чтобы приостановить корутину из Java
-        return LuaValue.NIL;
-    }
-
-    public void resolveCallback(int callbackId, VfsResponseS2CPacket.ResponseType type, String data) {
-        LuaThread coroutine = waitingCoroutines.remove(callbackId);
-        if (coroutine != null) {
-            LuaValue responseValue = switch (type) {
-                case TRUE -> LuaValue.TRUE;
-                case FALSE -> LuaValue.FALSE;
-                case STRING, TABLE_JSON -> LuaValue.valueOf(data);
-                default -> LuaValue.NIL;
-            };
-
-            LuaThreadRunner runner = threads.get(MAIN_THREAD_ID);
-            if (runner != null) {
-                LoraCoreMod.LOGGER.info(
-                        "[VFS RESPONSE] Queuing coroutine for resumption. CallbackID: {}, Value: {}",
-                        callbackId,
-                        responseValue.tojstring() // .tojstring() для читаемого вывода
-                );
-                // Возобновляем корутину с полученным результатом
-                runner.resumeWith(coroutine, responseValue);
-            }
-        }
-    }
-
-    // ... Остальные методы (startNewLuaThread, pushEvent, shutdown и т.д.) без изменений ...
     public boolean startNewLuaThread(int threadId, String code) {
         if (threads.containsKey(threadId)) {
             return false;
         }
         try {
             Globals threadGlobals = createLuaGlobals();
-            LuaThreadRunner runner = new LuaThreadRunner(threadGlobals, this.terminal, code);
+            LuaThreadRunner runner = new LuaThreadRunner(this, threadGlobals, code);
             threads.put(threadId, runner);
             runner.start();
             return true;
         } catch (Exception e) {
             LoraCoreMod.LOGGER.error("Failed to start Lua thread {}", threadId, e);
+            setCrashState("Failed to start Lua thread: " + e.getMessage());
             return false;
-        }
-    }
-
-    public void pushEventToThread(int threadId, LuaValue[] event) {
-        LuaThreadRunner runner = threads.get(threadId);
-        if (runner != null) {
-            runner.pushEvent(event);
         }
     }
 
@@ -176,7 +126,19 @@ public class VirtualMachine {
             runner.pushEvent(event);
         }
     }
+    /**
+     * Отправляет событие (массив LuaValue) в очередь конкретного потока по его ID.
+     * @param threadId ID целевого потока.
+     * @param event    Массив значений Lua, представляющий событие.
+     */
+    public void pushEventToThread(int threadId, LuaValue[] event) {
+        LuaThreadRunner runner = threads.get(threadId);
+        if (runner != null) {
+            runner.pushEvent(event);
+        }
+    }
 
+    // ... Остальные геттеры и методы без изменений ...
     public void shutdown() {
         for (LuaThreadRunner runner : threads.values()) {
             runner.stop();
@@ -202,5 +164,58 @@ public class VirtualMachine {
             return mainRunner.getGlobals().get("collectgarbage").call("count").todouble();
         }
         return 0;
+    }
+
+    public void setCrashState(String message) {
+        this.crashMessage = message;
+    }
+
+    public boolean isRunning() {
+        LuaThreadRunner mainRunner = threads.get(MAIN_THREAD_ID);
+        return mainRunner != null && mainRunner.isAlive() && this.crashMessage == null;
+    }
+
+    public String getCrashMessage() {
+        return this.crashMessage;
+    }
+    // Вставьте этот код внутрь класса VirtualMachine
+
+    private class CustomRequire extends VarArgFunction {
+        private final Globals globals;
+
+        public CustomRequire(Globals globals) {
+            this.globals = globals;
+        }
+
+        @Override
+        public Varargs invoke(Varargs args) {
+            String path = args.checkjstring(1);
+
+            // 1. Проверяем, был ли модуль уже загружен (стандартное поведение require)
+            LuaValue loaded = globals.get("package").get("loaded").get(path);
+            if (!loaded.isnil()) {
+                return loaded;
+            }
+
+            // 2. Преобразуем путь модуля (например, "drivers.gpu") в путь к файлу ("drivers/gpu.lua")
+            String filePath = path.replace('.', '/') + ".lua";
+
+            // 3. Используем наш ResourceLoader для загрузки файла из ассетов мода
+            String scriptContent = resourceLoader.load(filePath);
+
+            if (scriptContent == null) {
+                // 4. Если файл не найден, выбрасываем ошибку, как и стандартный require
+                error("module '" + path + "' not found: " + path);
+            }
+
+            // 5. Компилируем и запускаем код модуля
+            LuaValue chunk = globals.load(scriptContent, "@" + filePath);
+            LuaValue result = chunk.call();
+
+            // 6. Кэшируем результат, чтобы не загружать модуль дважды
+            globals.get("package").get("loaded").set(path, result);
+
+            return result;
+        }
     }
 }
