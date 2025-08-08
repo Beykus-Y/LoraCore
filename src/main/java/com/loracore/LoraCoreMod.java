@@ -1,15 +1,20 @@
 package com.loracore;
 
+import com.loracore.component.ModComponents;
+import com.loracore.computer.ServerScreenState;
+import com.loracore.computer.TabletScreenManager;
 import com.loracore.computer.VirtualFileSystemManager;
-import com.loracore.computer.WorldStorageVFS;
 import com.loracore.item.ModItems;
+import com.loracore.item.TabletItem;
 import com.loracore.network.ModNetworking;
+import com.loracore.network.graphics.ScreenUpdateS2CPacket;
 import com.loracore.util.PromptManager;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerWorldEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
+import net.minecraft.item.ItemStack;
 import net.minecraft.network.packet.s2c.play.SubtitleS2CPacket;
 import net.minecraft.network.packet.s2c.play.TitleFadeS2CPacket;
 import net.minecraft.network.packet.s2c.play.TitleS2CPacket;
@@ -18,6 +23,7 @@ import net.minecraft.server.world.ServerWorld;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
 import net.minecraft.world.World;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -45,6 +51,30 @@ public class LoraCoreMod implements ModInitializer {
 			VirtualFileSystemManager.getInstance().initialize(server);
 		});
 
+		ServerTickEvents.END_SERVER_TICK.register(server -> {
+			if (server.getTicks() % 5 != 0) {
+				return;
+			}
+
+			// ИСПРАВЛЕНИЕ 2: Полностью переработана логика обновления экранов
+			for (ServerPlayerEntity player : server.getPlayerManager().getPlayerList()) {
+				// ИСПРАВЛЕНИЕ: Оптимизируем проверку - проверяем только активные планшеты
+				ItemStack mainHandStack = player.getMainHandStack();
+				if (mainHandStack.getItem() instanceof TabletItem) {
+					updateTabletScreen(player, mainHandStack);
+				}
+				
+				// Проверяем остальные предметы в инвентаре только если есть активные процессы
+				for (ItemStack stack : player.getInventory().main) {
+					if (stack.getItem() instanceof TabletItem && stack != mainHandStack) {
+						ServerScreenState screen = TabletScreenManager.getInstance().getOrCreateScreen(stack);
+						if (screen.isDirty()) {
+							updateTabletScreen(player, stack);
+						}
+					}
+				}
+			}
+		});
 		ServerWorldEvents.LOAD.register((server, world) -> {
 			if (world.getRegistryKey() == World.OVERWORLD) {
 				structureNameManager = StructureNameManager.get(world);
@@ -121,5 +151,24 @@ public class LoraCoreMod implements ModInitializer {
 			lastKnownStructurePosKeyForPlayer.remove(handler.player.getUuid());
 			lastStructureCheckTickForPlayer.remove(handler.player.getUuid());
 		});
+	}
+
+	// ИСПРАВЛЕНИЕ: Вспомогательный метод для обновления экрана планшета
+	private static void updateTabletScreen(ServerPlayerEntity player, ItemStack stack) {
+		try {
+			ServerScreenState screen = TabletScreenManager.getInstance().getOrCreateScreen(stack);
+			if (screen.isDirty() && screen.getPixelBuffer() != null) {
+				UUID tabletUuid = stack.get(ModComponents.TABLET_UUID);
+				if (tabletUuid != null) {
+					ServerPlayNetworking.send(player, new ScreenUpdateS2CPacket(
+						tabletUuid,
+						screen.getPixelBuffer()
+					));
+					screen.clearDirtyFlag();
+				}
+			}
+		} catch (Exception e) {
+			LOGGER.error("Error updating tablet screen for player {}: {}", player.getName().getString(), e.getMessage());
+		}
 	}
 }

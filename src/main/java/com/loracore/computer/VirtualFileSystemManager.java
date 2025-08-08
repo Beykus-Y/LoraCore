@@ -12,9 +12,11 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.WorldSavePath;
 import org.luaj.vm2.LuaValue;
-
+import java.util.Base64;
+import java.io.IOException;
 import java.nio.file.Path;
 import java.util.UUID;
+import java.nio.file.Files;
 
 public class VirtualFileSystemManager {
     private static VirtualFileSystemManager INSTANCE;
@@ -52,6 +54,12 @@ public class VirtualFileSystemManager {
     }
 
     public VFSResponse performOperation(UUID fsUuid, VfsRequestC2SPacket.Operation op, String path, String content) {
+        // ИСПРАВЛЕНИЕ: Добавляем проверку на null для fsUuid
+        if (fsUuid == null) {
+            LoraCoreMod.LOGGER.error("VFS Manager: fsUuid is null!");
+            return new VFSResponse(VfsResponseS2CPacket.ResponseType.NIL, "");
+        }
+        
         if (worldSavePath == null || resourceManager == null) {
             LoraCoreMod.LOGGER.error("VFS Manager not fully initialized! Cannot perform operations.");
             return new VFSResponse(VfsResponseS2CPacket.ResponseType.NIL, "");
@@ -74,6 +82,21 @@ public class VirtualFileSystemManager {
                 LuaValue romContent = rom.read(path);
                 if (!romContent.isnil()) {
                     return new VFSResponse(VfsResponseS2CPacket.ResponseType.STRING, romContent.tojstring());
+                }
+                return new VFSResponse(VfsResponseS2CPacket.ResponseType.NIL, "");
+
+            case READ_BYTES:
+                try {
+                    // Этот код почти идентичен тому, что мы делали раньше.
+                    // Но он выполняется только для нашей новой, специальной операции.
+                    Path filePath = new WorldStorageVFS(worldSavePath, fsUuid).getValidatedPath(path); // Используем внутренний метод для получения пути
+                    if (Files.exists(filePath) && !Files.isDirectory(filePath)) {
+                        byte[] bytes = Files.readAllBytes(filePath);
+                        String base64 = Base64.getEncoder().encodeToString(bytes);
+                        return new VFSResponse(VfsResponseS2CPacket.ResponseType.STRING, base64);
+                    }
+                } catch (IOException e) {
+                    LoraCoreMod.LOGGER.error("Failed to read bytes for VFS: {}", e.getMessage());
                 }
                 return new VFSResponse(VfsResponseS2CPacket.ResponseType.NIL, "");
 

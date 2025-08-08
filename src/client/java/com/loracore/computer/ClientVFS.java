@@ -10,7 +10,7 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
 // ИСПРАВЛЕНИЕ: Класс теперь реализует и старый IVfsRequester, и новый IBlockingVFS.
-public class ClientVFS implements IVfsRequester, IBlockingVFS {
+public class ClientVFS implements IVfsRequester, IBlockingVFS, IAsyncVFS {
     private final UUID fsUuid;
     private final ConcurrentHashMap<Integer, BlockingQueue<LuaValue>> responseQueues = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<Integer, CompletableFuture<LuaValue>> asyncResponseFutures = new ConcurrentHashMap<>();
@@ -86,6 +86,9 @@ public class ClientVFS implements IVfsRequester, IBlockingVFS {
         } finally {
             responseQueues.remove(callbackId);
         }
+    }
+    public CompletableFuture<LuaValue> readBytesAsync(String path) {
+        return sendAsyncRequest(VfsRequestC2SPacket.Operation.READ_BYTES, path, "");
     }
 
     // @Override отмечает, что мы реализуем методы из интерфейса IBlockingVFS

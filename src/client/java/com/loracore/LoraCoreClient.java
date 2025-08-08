@@ -2,12 +2,14 @@
 package com.loracore;
 
 import com.loracore.api.ClientApi;
+import com.loracore.api.GpuApi;
 import com.loracore.computer.ClientVFS;
-import com.loracore.computer.VirtualMachine;
 import com.loracore.gui.AskChatScreen;
 import com.loracore.gui.TabletScreen;
 import com.loracore.keybinding.ModKeyBindings;
 import com.loracore.network.BootTabletS2CPacket;
+import com.loracore.network.graphics.GpuCommandC2SPacket;
+import com.loracore.network.graphics.ScreenUpdateS2CPacket;
 import com.loracore.network.vfs.VfsResponseS2CPacket;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.api.EnvType;
@@ -16,6 +18,7 @@ import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallba
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.gui.screen.Screen;
 import org.luaj.vm2.LuaValue;
 
 import java.util.UUID;
@@ -28,10 +31,6 @@ public class LoraCoreClient implements ClientModInitializer {
             org.slf4j.LoggerFactory.getLogger(LoraCoreMod.MOD_ID + "_CLIENT");
 
     private static boolean openAskScreenFlag = false;
-
-    // ИСПРАВЛЕНИЕ: activeVM больше не нужен как глобальная статическая переменная,
-    // так как вся логика теперь инкапсулирована в экранах.
-    // Оставляем только activeVfsInstance для обработки ответов.
     private static ClientVFS activeVfsInstance;
 
     @Override
@@ -41,7 +40,12 @@ public class LoraCoreClient implements ClientModInitializer {
         ModKeyBindings.register();
         registerClientCommands();
         registerTickEvents();
+
+        // --- Инициализация API ---
         ClientApi.renderThreadExecutor = MinecraftClient.getInstance()::execute;
+        // Реализуем действие для отправки GPU команд
+        GpuApi.sendCommandAction = (uuid, command) -> ClientPlayNetworking.send(new GpuCommandC2SPacket(uuid, command));
+
         LOGGER.info("LoraCore Client successfully initialized!");
     }
 
@@ -51,11 +55,9 @@ public class LoraCoreClient implements ClientModInitializer {
     }
 
     private void registerPacketHandlers() {
+        // Обработчик для VFS
         ClientPlayNetworking.registerGlobalReceiver(VfsResponseS2CPacket.ID, (payload, context) -> {
             context.client().execute(() -> {
-                // ИСПРАВЛЕНИЕ: Упрощена вся логика.
-                // Теперь ЛЮБОЙ ответ от VFS направляется в активный экземпляр ClientVFS.
-                // ClientVFS сам разберется, положить ответ в блокирующую очередь или завершить Future.
                 if (activeVfsInstance != null) {
                     LuaValue responseValue = switch (payload.type()) {
                         case TRUE -> LuaValue.TRUE;
@@ -63,19 +65,35 @@ public class LoraCoreClient implements ClientModInitializer {
                         case STRING, TABLE_JSON -> LuaValue.valueOf(payload.data());
                         default -> LuaValue.NIL;
                     };
-                    // Просто передаем ответ в обработчик.
                     activeVfsInstance.handleResponse(payload.callbackId(), responseValue);
                 }
             });
         });
 
+        // Обработчик для загрузки планшета
         ClientPlayNetworking.registerGlobalReceiver(BootTabletS2CPacket.ID, (payload, context) -> {
-            UUID fsUuid = payload.fileSystemUuid();
             context.client().execute(() -> {
-                ClientVFS vfs = new ClientVFS(fsUuid);
-                // Устанавливаем этот экземпляр VFS как активный, чтобы он мог получать ответы от сервера.
+                ClientVFS vfs = new ClientVFS(payload.fileSystemUuid());
                 setActiveVfsInstance(vfs);
-                context.client().setScreen(new TabletScreen(vfs));
+                // Передаем оба UUID в конструктор TabletScreen
+                context.client().setScreen(new TabletScreen(vfs, payload.tabletUuid()));
+            });
+        });
+
+        // ИСПРАВЛЕНИЕ: Обработчик обновления экрана теперь находится ВНУТРИ метода
+        ClientPlayNetworking.registerGlobalReceiver(ScreenUpdateS2CPacket.ID, (payload, context) -> {
+            context.client().execute(() -> {
+                try {
+                    Screen currentScreen = MinecraftClient.getInstance().currentScreen;
+                    if (currentScreen instanceof TabletScreen tabletScreen) {
+                        // Проверяем, что пакет предназначен для текущего открытого планшета
+                        if (tabletScreen.getTabletUuid().equals(payload.tabletUuid())) {
+                            tabletScreen.onScreenUpdate(payload.pixelBuffer());
+                        }
+                    }
+                } catch (Exception e) {
+                    LOGGER.error("Error processing screen update packet: {}", e.getMessage(), e);
+                }
             });
         });
     }

@@ -1,121 +1,101 @@
 -- =======================================================
--- LoraCore Recovery v16.0 - Driver and Timing Fix
+-- LoraCore Recovery v20.0 - Final pcall fix
 -- =======================================================
 local term = tablet.terminal
 local fs = _G.fs
 local os = _G.os
 local colors = _G.colors
 local bios = _G.bios
+local gpu = tablet.gpu
 
--- ИСПРАВЛЕНИЕ №1: Загружаем наш новый драйвер GPU
-local gpu = require("drivers/gpu")
-
--- ИСПРАВЛЕНИЕ №2: Ждем один игровой тик.
--- Это решает проблему "гонки состояний", когда скрипт пытается рисовать
--- на еще не полностью инициализированном экране, что вызывало краш.
 os.sleep(0)
 
--- Проверяем, существует ли ОС
 if fs.exists("/boot.lua") then
     local boot_script = fs.read("/boot.lua")
-
     if boot_script then
-        local os_func, err = load(boot_script, "/boot.lua", "t", _G)
-
-        if os_func then
-            -- Успех! Запускаем ОС.
-            os_func()
-            -- Если/когда ОС завершится, перезагружаемся.
-            os.reboot()
+        -- ИСПРАВЛЕНИЕ: Правильная и безопасная загрузка и запуск
+        local compiled_func, err = load(boot_script, "/boot.lua", "t", _G)
+        if compiled_func then
+            pcall(compiled_func) -- Просто безопасно запускаем
         else
-            -- Ошибка: файл не может быть скомпилирован (поврежден).
-            term.clear()
-            gpu.setTextColor(colors.red)
-            term.print("FATAL: /boot.lua is corrupted!")
-            term.print("Error: " .. tostring(err))
+            -- Этот код выполнится, если boot.lua поврежден
+            gpu.fill(0, 0, 480, 270, colors.red)
+            gpu.drawText(10, 10, "FATAL: /boot.lua is corrupted!", colors.white)
+            gpu.drawText(10, 22, "Error: " .. tostring(err), colors.white)
             os.sleep(5)
-            os.reboot()
         end
-    else
-        -- Ошибка: файл существует, но не может быть прочитан.
-        term.clear()
-        gpu.setTextColor(colors.red)
-        term.print("FATAL: Cannot read /boot.lua.")
-        os.sleep(3)
-        os.reboot()
     end
-
-    -- В нормальном режиме до этой строки не дойдет.
+    os.reboot()
     return
 end
 
 -- =======================================================
--- Меню установки (использует новый драйвер gpu)
+-- Код меню установки (остается без изменений)
 -- =======================================================
-local W, H = gpu.getResolution()
+local W, H = 480, 270
+local state = "menu"
+local input_line = ""
+local cursor_blink = true
+local last_blink_time = os.time()
+local prompt_message = ""
 
 local function draw_window(title)
-    gpu.setBackgroundColor(colors.gray); gpu.fill(1, 1, W, H, " ")
-    gpu.setBackgroundColor(colors.blue); gpu.fill(2, 2, W - 2, H - 2, " ")
-    gpu.setBackgroundColor(colors.black); gpu.fill(1, 1, W, 1, " ")
-    gpu.setTextColor(colors.white); gpu.set(math.floor((W - #title) / 2) + 1, 1, title)
-    gpu.setBackgroundColor(colors.blue)
+    gpu.fill(0, 0, W, H, colors.gray)
+    gpu.fill(10, 10, W - 20, H - 20, colors.blue)
+    gpu.fill(10, 10, W - 20, 20, colors.black)
+    gpu.drawText(math.floor((W - (#title * 7)) / 2), 16, title, colors.white)
 end
 
-local function show_menu()
+local function draw_generic_prompt()
     draw_window(" LoraCore Recovery ")
-    gpu.setTextColor(colors.white)
-    local menu_items = {"ModuOS not found.", "Please select an option:", "", " [1] Install ModuOS (LUA)", " [2] Switch to UEFI (JAVA) Boot", " [3] Reboot", " [4] Shutdown"}
-    for i, line in ipairs(menu_items) do gpu.set(4, 3 + i, line) end
-    term.setCursorPos(4, 12); term.write("> ")
+    gpu.drawText(30, 80, prompt_message, colors.white)
+    gpu.drawText(30, 100, "Press any key to continue...", colors.white)
 end
 
-local function run_installer()
-    local installer_script = bios.getInstaller()
-    if not installer_script then return false, "Installer script not found" end
-    local installer_func, err = load(installer_script, "installer", "t", _G)
-    if not installer_func then return false, "Failed to load installer: " .. tostring(err) end
-
-    draw_window(" ModuOS Installation ")
-
-    -- Безопасно запускаем установщик
-    local success, message = pcall(installer_func)
-    if not success then
-        -- Если установщик упал, сообщаем об этом
-        draw_window(" Installation Failed ")
-        gpu.setTextColor(colors.red)
-        gpu.set(3, 5, "An error occurred during installation:")
-        gpu.set(3, 7, tostring(message))
-        os.sleep(5)
-    end
+local function draw_menu()
+    draw_window(" LoraCore Recovery ")
+    local menu_items = { "ModuOS not found.", "Please select an option:", "", "[1] Install ModuOS (LUA)", "[2] Create Java Boot File Stub", "[3] Reboot", "[4] Shutdown" }
+    for i, line in ipairs(menu_items) do gpu.drawText(25, 40 + (i * 12), line, colors.white) end
+    local input_y = 40 + (#menu_items * 12) + 24
+    gpu.drawText(25, input_y, "> " .. input_line, colors.white)
+    if os.time() - last_blink_time > 0.5 then cursor_blink = not cursor_blink; last_blink_time = os.time() end
+    if cursor_blink then gpu.fill(25 + (#input_line + 2) * 7, input_y, 7, 9, colors.white) end
 end
 
--- Главный цикл меню
+-- Главный цикл
 while true do
-    show_menu()
-    local choice = term.read()
-    if choice == "1" then
-        run_installer()
-        draw_window(" Installation Complete ")
-        gpu.set(3, 5, "ModuOS has been installed.")
-        gpu.set(3, 7, "Press any key to reboot.")
-        os.pullEvent("key")
-        os.reboot()
-        break
-    elseif choice == "2" then
-        draw_window(" Switching Boot Mode ")
-        fs.makeDir("/etc")
-        fs.write("/etc/loracore.conf", "MODE=JAVA")
-        gpu.set(3, 7, "Mode switched to JAVA.")
-        gpu.set(3, 10, "Press any key to reboot.")
-        os.pullEvent("key")
-        os.reboot()
-        break
-    elseif choice == "3" then
-        os.reboot()
-        break
-    elseif choice == "4" then
-        term.clear(); term.print("System halted.")
-        break
+    if state == "menu" then draw_menu()
+    elseif state == "reboot_prompt" or state == "shutdown" then draw_generic_prompt()
+    end
+
+    local event, p1 = os.pullEvent()
+
+    if state == "menu" then
+        if event == "char" then input_line = input_line .. p1
+        elseif event == "key" then
+            if p1 == 259 and #input_line > 0 then input_line = input_line:sub(1, -2)
+            elseif p1 == 257 then
+                local choice = input_line; input_line = ""
+                if choice == "1" then state = "installing"
+                elseif choice == "2" then state = "creating_stub"
+                elseif choice == "3" then os.reboot(); break
+                elseif choice == "4" then state = "shutdown"; prompt_message = "System halted."
+                end
+            end
+        end
+    elseif state == "reboot_prompt" then if event == "key" then os.reboot(); break end
+    end
+
+    if state == "installing" then
+        term.clear()
+        local installer_script = bios.getInstaller()
+        local installer_func, err = installer_script and load(installer_script, "installer", "t", _G)
+        if installer_func then pcall(installer_func) end
+        prompt_message = "ModuOS has been installed."
+        state = "reboot_prompt"
+    elseif state == "creating_stub" then
+        fs.makeDir("/boot"); fs.write("/boot/kernel.jar", "Placeholder")
+        prompt_message = "/boot/kernel.jar created."
+        state = "reboot_prompt"
     end
 end

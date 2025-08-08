@@ -15,7 +15,7 @@ import java.util.concurrent.TimeUnit;
 public class LuaThreadRunner implements Runnable {
 
     private final VirtualMachine vm;
-    private final Globals globals;
+    private Globals globals;
     private final String bootScript;
 
     private final BlockingQueue<LuaValue[]> eventQueue = new LinkedBlockingQueue<>();
@@ -37,6 +37,9 @@ public class LuaThreadRunner implements Runnable {
 
     public boolean isAlive() {
         return workerThread != null && workerThread.isAlive();
+    }
+    public void setGlobals(Globals globals) {
+        this.globals = globals;
     }
 
     /**

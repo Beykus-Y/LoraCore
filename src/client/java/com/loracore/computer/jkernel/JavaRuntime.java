@@ -13,7 +13,8 @@ public class JavaRuntime implements IRuntimeEnvironment {
     private final KernelManager kernelManager;
 
     public JavaRuntime(TabletScreen parentScreen, ClientVFS vfs) {
-        this.kernelManager = new KernelManager(vfs, parentScreen);
+        // ИСПРАВЛЕНО: Передаем UUID планшета из родительского экрана в KernelManager
+        this.kernelManager = new KernelManager(vfs, parentScreen.getTabletUuid(), parentScreen);
     }
 
     @Override
@@ -23,7 +24,9 @@ public class JavaRuntime implements IRuntimeEnvironment {
 
     @Override
     public void render(DrawContext context, int mouseX, int mouseY, float delta) {
-        kernelManager.render(context, mouseX, mouseY, delta);
+        if (kernelManager != null && kernelManager.isRunning()) {
+            kernelManager.render(context, mouseX, mouseY, delta);
+        }
     }
 
     @Override
@@ -67,18 +70,18 @@ public class JavaRuntime implements IRuntimeEnvironment {
     @Override
     public boolean onMouseScrolled(double mouseX, double mouseY, double hAmount, double vAmount) {
         kernelManager.onEvent(new KernelEvent.MouseScrolled(mouseX, mouseY, hAmount, vAmount));
-        return true;
+        return false;
     }
 
     @Override
     public boolean onMouseClicked(double mouseX, double mouseY, int button) {
         kernelManager.onEvent(new KernelEvent.MouseClicked(mouseX, mouseY, button));
-        return true;
+        return false;
     }
 
     @Override
     public boolean onMouseReleased(double mouseX, double mouseY, int button) {
         kernelManager.onEvent(new KernelEvent.MouseReleased(mouseX, mouseY, button));
-        return true;
+        return false;
     }
 }

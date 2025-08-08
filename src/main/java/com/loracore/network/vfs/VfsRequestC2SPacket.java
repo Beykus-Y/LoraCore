@@ -19,7 +19,7 @@ public record VfsRequestC2SPacket(
         String path,
         String content
 ) implements CustomPayload {
-    public enum Operation { EXISTS, READ, WRITE, MAKEDIR, ISDIR, LIST, DELETE }
+    public enum Operation { EXISTS, READ, WRITE, MAKEDIR, ISDIR, LIST, DELETE, READ_BYTES }
 
     public static final CustomPayload.Id<VfsRequestC2SPacket> ID = new CustomPayload.Id<>(new Identifier(LoraCoreMod.MOD_ID, "vfs_request"));
     public static final PacketCodec<RegistryByteBuf, VfsRequestC2SPacket> CODEC = PacketCodec.tuple(

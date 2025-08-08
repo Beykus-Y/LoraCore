@@ -1,65 +1,32 @@
-// Файл: src/main/java/com/loracore/computer/device/GpuDevice.java
+// Полный исправленный файл: src/main/java/com/loracore/computer/device/GpuDevice.java
 package com.loracore.computer.device;
 
-import com.loracore.api.ClientApi;
-import com.loracore.computer.Terminal;
+import com.loracore.api.GpuApi;
 import com.loracore.computer.api.Callback;
+import com.loracore.network.graphics.GpuCommand;
+import java.util.UUID;
 
-/**
- * Предоставляет низкоуровневый API для рендеринга на экране.
- */
 public class GpuDevice {
-    private final Terminal terminal;
 
-    public GpuDevice(Terminal terminal) {
-        this.terminal = terminal;
+    private final UUID tabletUuid;
+
+    // ИСПРАВЛЕНО: Конструктор принимает UUID
+    public GpuDevice(UUID tabletUuid) {
+        this.tabletUuid = tabletUuid;
     }
 
-    @Callback(value = "getResolution", doc = "Returns the screen resolution in characters as (width, height).")
-    public int[] getResolution() {
-        return terminal.getSize();
+    @Callback(value = "fill", doc = "Fills a rectangular area with a color.")
+    public void fill(int x, int y, int width, int height, int color) {
+        GpuApi.sendCommand(this.tabletUuid, new GpuCommand.Fill(x, y, width, height, color));
     }
 
-    @Callback(value = "set", doc = "Draws text at a specific (x, y) coordinate.")
-    public void set(int x, int y, String text) {
-        ClientApi.executeOnRenderThread(() -> {
-            terminal.setCursorPos(x, y);
-            terminal.print(text);
-        });
+    @Callback(value = "drawText", doc = "Draws text at a specific (x, y) coordinate.")
+    public void drawText(int x, int y, String text, int color) {
+        GpuApi.sendCommand(this.tabletUuid, new GpuCommand.DrawText(x, y, text, color));
     }
 
-    @Callback(value = "fill", doc = "Fills a rectangular area with a character.")
-    public void fill(int x, int y, int width, int height, String character) {
-        // ИСПРАВЛЕНИЕ: Добавлена проверка на корректность размеров в самом начале.
-        // Если ширина или высота меньше или равна нулю, мы просто ничего не делаем.
-        if (width <= 0 || height <= 0) {
-            return;
-        }
-
-        // Ваша проверка на символ остается, это хорошая практика.
-        if (character == null || character.isEmpty()) {
-            return;
-        }
-
-        // Теперь, когда мы уверены, что width > 0, эта строка полностью безопасна.
-        final String repeatedChar = character.substring(0, 1).repeat(width);
-
-        // Отправка на отрисовку в основном потоке остается без изменений.
-        ClientApi.executeOnRenderThread(() -> {
-            for (int j = 0; j < height; j++) {
-                terminal.setCursorPos(x, y + j);
-                terminal.print(repeatedChar);
-            }
-        });
-    }
-
-    @Callback(value = "setTextColor", doc = "Sets the foreground color.")
-    public void setForegroundColor(int color) { // Переименовано для ясности
-        ClientApi.executeOnRenderThread(() -> terminal.setTextColor(color));
-    }
-
-    @Callback(value = "setBackgroundColor", doc = "Sets the background color.")
-    public void setBackgroundColor(int color) {
-        ClientApi.executeOnRenderThread(() -> terminal.setBackgroundColor(color));
+    @Callback(value = "copy", doc = "Copies a rectangular area of the screen to another position.")
+    public void copy(int x, int y, int width, int height, int toX, int toY) {
+        GpuApi.sendCommand(this.tabletUuid, new GpuCommand.Copy(x, y, width, height, toX, toY));
     }
 }

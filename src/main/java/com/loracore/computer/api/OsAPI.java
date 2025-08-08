@@ -1,4 +1,4 @@
-// [ИСПРАВЛЕНО]
+// Полный исправленный файл: src/main/java/com/loracore/computer/api/OsAPI.java
 package com.loracore.computer.api;
 
 import com.loracore.computer.RebootSignalException;
@@ -10,33 +10,35 @@ import org.luaj.vm2.lib.LibFunction;
 import org.luaj.vm2.lib.OneArgFunction;
 import org.luaj.vm2.lib.VarArgFunction;
 import org.luaj.vm2.lib.ZeroArgFunction;
+
 import java.util.Timer;
 import java.util.TimerTask;
 
-/**
- * Предоставляет Lua-скриптам базовые функции операционной системы,
- * такие как перезагрузка и обработка событий.
- * Регистрируется как глобальная таблица 'os'.
- */
 public class OsAPI extends LibFunction {
     private final VirtualMachine vm;
-    private static final Timer timer = new Timer("LoraCore-LuaTimers", true);
-    // [ИЗМЕНЕНО] Конструктор теперь публичный
+    private static final Timer LUA_TIMER = new Timer("LoraCore-LuaTimers", true);
+    // ИСПРАВЛЕНИЕ 1: Переменная для хранения ссылки на библиотеку 'coroutine'
+    private LuaValue coroutine_yield;
+
     public OsAPI(VirtualMachine vm) {
         this.vm = vm;
     }
 
     @Override
     public LuaValue call(LuaValue modname, LuaValue env) {
-        LuaTable os = new LuaTable();
-        os.set("reboot", new reboot(vm));
-        os.set("sleep", new sleep(vm));
-        os.set("pullEvent", new pullEvent(vm));
-        env.set("os", os);
-        return os;
+        // ИСПРАВЛЕНИЕ 2: Получаем и сохраняем функцию 'yield' из библиотеки 'coroutine'
+        // Это нужно сделать один раз при инициализации.
+        this.coroutine_yield = env.get("coroutine").get("yield");
+
+        LuaTable osTable = (LuaTable) env.get("os");
+        osTable.set("reboot", new reboot(vm));
+        osTable.set("sleep", new sleep(vm, coroutine_yield)); // Передаем 'yield' в конструктор
+        osTable.set("pullEvent", new pullEvent(coroutine_yield)); // Передаем 'yield' в конструктор
+
+        env.get("package").get("loaded").set("loracore_os", osTable);
+        return osTable;
     }
 
-    // Внутренние классы остаются без изменений
     private static class reboot extends ZeroArgFunction {
         private final VirtualMachine vm;
         public reboot(VirtualMachine vm) { this.vm = vm; }
@@ -46,40 +48,41 @@ public class OsAPI extends LibFunction {
             throw new RebootSignalException();
         }
     }
+
     private static class sleep extends OneArgFunction {
         private final VirtualMachine vm;
-        public sleep(VirtualMachine vm) { this.vm = vm; }
+        private final LuaValue yield; // Храним ссылку на функцию yield
+
+        // Конструктор теперь принимает LuaValue
+        public sleep(VirtualMachine vm, LuaValue yield) {
+            this.vm = vm;
+            this.yield = yield;
+        }
 
         @Override
         public LuaValue call(LuaValue arg) {
             double seconds = arg.checkdouble();
-            long millis = (long)(seconds * 1000);
+            LUA_TIMER.schedule(new TimerTask() {
+                @Override public void run() { vm.pushEvent("timer"); }
+            }, (long)(seconds * 1000));
 
-            // Создаем событие "timer", которое будет отправлено в VM через X миллисекунд
-            timer.schedule(new TimerTask() {
-                @Override
-                public void run() {
-                    // Отправляем событие в основной поток VM
-                    vm.pushEvent("timer");
-                }
-            }, millis);
-
-            // Теперь в Lua нужно дождаться этого события
-            return NIL;
+            // ИСПРАВЛЕНИЕ 3: Вызываем сохраненную функцию yield
+            return yield.call(valueOf("timer"));
         }
     }
+
     private static class pullEvent extends VarArgFunction {
-        private final VirtualMachine vm;
-        public pullEvent(VirtualMachine vm) { this.vm = vm; }
+        private final LuaValue yield; // Храним ссылку на функцию yield
+
+        // Конструктор теперь не нуждается в 'vm' и убирает предупреждения
+        public pullEvent(LuaValue yield) {
+            this.yield = yield;
+        }
 
         @Override
         public Varargs invoke(Varargs args) {
-            // Теперь эта функция ничего не делает в Java.
-            // Она просто существует, чтобы `os.pullEvent` был доступен.
-            // Вся магия будет происходить в Lua через `coroutine.yield`.
-            return LuaValue.varargsOf(new LuaValue[]{
-                    LuaValue.valueOf("yield_placeholder")
-            });
+            // ИСПРАВЛЕНИЕ 3: Вызываем сохраненную функцию yield
+            return yield.invoke(args);
         }
     }
 }

@@ -2,6 +2,7 @@ package com.loracore.computer.device;
 
 import com.loracore.computer.VirtualMachine;
 import com.loracore.computer.api.Callback;
+import org.luaj.vm2.Globals;
 import org.luaj.vm2.LuaValue;
 import org.luaj.vm2.Varargs;
 
@@ -16,9 +17,9 @@ public class ThreadDevice {
     }
 
     @Callback(value = "create", doc = "Creates and starts a new Lua thread from a code string.")
-    public Object[] create(String code) {
+    public Object[] create(String code, Globals globals) {
         int threadId = nextThreadId.getAndIncrement();
-        boolean success = vm.startNewLuaThread(threadId, code);
+        boolean success = vm.startNewLuaThread(threadId, code, null);
         if (success) {
             return new Object[]{threadId};
         } else {

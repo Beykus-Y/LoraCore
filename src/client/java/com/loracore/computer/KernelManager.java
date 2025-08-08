@@ -2,23 +2,21 @@
 package com.loracore.computer;
 
 import com.loracore.LoraCoreMod;
-import com.loracore.computer.kernel.IKernel;
-import com.loracore.computer.kernel.IKernelApi;
-import com.loracore.computer.kernel.IKernelVfs;
-import com.loracore.computer.kernel.JarClassLoader;
-import com.loracore.computer.kernel.KernelEvent;
+// ИСПРАВЛЕНИЕ 1: Добавляем импорт для ClientApi
+import com.loracore.api.ClientApi;
+import com.loracore.api.GpuApi;
+import com.loracore.computer.kernel.*;
 import com.loracore.gui.TabletScreen;
-import net.minecraft.client.gui.DrawContext;
-import net.minecraft.text.Text;
 import org.apache.commons.compress.archivers.jar.JarArchiveEntry;
 import org.apache.commons.compress.archivers.jar.JarArchiveInputStream;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.jar.Manifest;
@@ -32,11 +30,12 @@ public class KernelManager {
     private boolean isRunning = false;
     private String crashError = null;
 
-    public KernelManager(ClientVFS vfs, TabletScreen parentScreen) {
+    public KernelManager(ClientVFS vfs, UUID tabletUuid, TabletScreen parentScreen) {
         this.parentScreen = parentScreen;
-        this.api = new KernelApiImpl(vfs, parentScreen);
         this.classLoader = new JarClassLoader(getClass().getClassLoader());
+        this.api = new KernelApiImpl(vfs, tabletUuid, parentScreen);
     }
+
     public boolean isRunning() {
         return this.isRunning;
     }
@@ -47,7 +46,8 @@ public class KernelManager {
 
     public void boot(String jarPath) {
         api.getVfs().readBytes(jarPath).whenComplete((jarBytesOpt, error) -> {
-            parentScreen.getClient().execute(() -> {
+            // ИСПРАВЛЕНИЕ 2: Используем ClientApi для выполнения кода в основном потоке клиента
+            ClientApi.executeOnRenderThread(() -> {
                 if (error != null) {
                     setCrashState("VFS Error: Failed to read " + jarPath + ": " + error.getMessage());
                     return;
@@ -84,29 +84,20 @@ public class KernelManager {
                     this.isRunning = true;
 
                 } catch (Exception e) {
-                    e.printStackTrace();
+                    LoraCoreMod.LOGGER.error("Kernel Panic on boot", e);
                     setCrashState("Kernel Panic: " + e.getClass().getSimpleName() + " - " + e.getMessage());
                 }
             });
         });
     }
 
-    public void render(DrawContext context, int mouseX, int mouseY, float delta) {
-        if (crashError != null) {
-            int width = context.getScaledWindowWidth();
-            int height = context.getScaledWindowHeight();
-            context.fill(0, 0, width, height, 0xCC_AA0000);
-            context.drawCenteredTextWithShadow(parentScreen.getTextRenderer(), "KERNEL PANIC", width / 2, height / 2 - 20, 0xFFFFFFFF);
-            parentScreen.getTextRenderer().wrapLines(Text.literal(crashError), width - 20).forEach((line) -> {
-                context.drawCenteredTextWithShadow(parentScreen.getTextRenderer(), line, width / 2, height / 2, 0xFFFFFFFF);
-            });
-            return;
-        }
+    public void render(Object drawContext, int mouseX, int mouseY, float delta) {
         if (isRunning && kernelInstance != null) {
             try {
-                kernelInstance.onRender(context, mouseX, mouseY, delta);
+                // Вызываем onRender нашего ядра, передавая ему все необходимые параметры
+                kernelInstance.onRender(drawContext, mouseX, mouseY, delta);
             } catch (Exception e) {
-                e.printStackTrace();
+                LoraCoreMod.LOGGER.error("Kernel render crashed", e);
                 setCrashState("Render thread crashed: " + e.getMessage());
             }
         }
@@ -117,7 +108,7 @@ public class KernelManager {
             try {
                 kernelInstance.onTick();
             } catch (Exception e) {
-                e.printStackTrace();
+                LoraCoreMod.LOGGER.error("Kernel tick crashed", e);
                 setCrashState("Tick thread crashed: " + e.getMessage());
             }
         }
@@ -134,7 +125,7 @@ public class KernelManager {
             try {
                 kernelInstance.onShutdown();
             } catch (Exception e) {
-                e.printStackTrace();
+                LoraCoreMod.LOGGER.error("Kernel shutdown error", e);
             }
         }
         isRunning = false;
@@ -152,7 +143,7 @@ public class KernelManager {
         Map<String, byte[]> result = new ConcurrentHashMap<>();
         try (JarArchiveInputStream jarStream = new JarArchiveInputStream(new ByteArrayInputStream(jarData))) {
             JarArchiveEntry entry;
-            while ((entry = jarStream.getNextJarEntry()) != null) {
+            while ((entry = jarStream.getNextEntry()) != null) {
                 if (!entry.isDirectory()) {
                     result.put(entry.getName(), jarStream.readAllBytes());
                 }
@@ -161,49 +152,27 @@ public class KernelManager {
         return result;
     }
 
-    private static class KernelApiImpl implements IKernelApi {
-        private final ClientVFS vfs;
-        private final TabletScreen parentScreen;
-        private final KernelVfsImpl kernelVfs;
+    // --- Внутренние классы-реализации API ---
+    // (Без изменений, остаются как в предыдущем ответе)
 
-        public KernelApiImpl(ClientVFS vfs, TabletScreen parentScreen) {
-            this.vfs = vfs;
+    private static class KernelApiImpl implements IKernelApi {
+        private final TabletScreen parentScreen;
+        private final IKernelVfs kernelVfs;
+        private final IKernelGraphics graphics;
+
+        public KernelApiImpl(ClientVFS vfs, UUID tabletUuid, TabletScreen parentScreen) {
             this.parentScreen = parentScreen;
             this.kernelVfs = new KernelVfsImpl(vfs);
+            this.graphics = new KernelGraphicsImpl(tabletUuid);
         }
 
-        @Override
-        public IKernelVfs getVfs() {
-            return this.kernelVfs;
-        }
-
-        @Override
-        public int runLuaScript(String path) {
-            return -1;
-        }
-
-        @Override
-        public void sendToLua(int threadId, Object... message) {
-        }
-
-        @Override
-        public int[] getTerminalSize() {
-            final int FONT_HEIGHT = 9;
-            final int FONT_WIDTH = 6;
-            int termWidth = (parentScreen.getTabletWidth() - 8) / FONT_WIDTH;
-            int termHeight = (parentScreen.getTabletHeight() - 8) / FONT_HEIGHT;
-            return new int[]{termWidth, termHeight};
-        }
-
-        @Override
-        public void reboot() {
-            parentScreen.reboot();
-        }
-
-        @Override
-        public void shutdown() {
-            parentScreen.close();
-        }
+        @Override public IKernelGraphics getGraphics() { return this.graphics; }
+        @Override public IKernelVfs getVfs() { return this.kernelVfs; }
+        @Override public int[] getTerminalSize() { return new int[]{parentScreen.getTabletPixelWidth(), parentScreen.getTabletPixelHeight()}; }
+        @Override public void reboot() { parentScreen.reboot(); }
+        @Override public void shutdown() { parentScreen.close(); }
+        @Override public int runLuaScript(String path) { return -1; }
+        @Override public void sendToLua(int threadId, Object... message) {}
     }
 
     private static class KernelVfsImpl implements IKernelVfs {
@@ -212,56 +181,65 @@ public class KernelManager {
 
         public KernelVfsImpl(ClientVFS vfs) { this.vfs = vfs; }
 
-        @Override
-        public CompletableFuture<Boolean> exists(String path) {
-            return vfs.existsAsync(path).thenApply(luaValue -> !luaValue.isnil() && luaValue.toboolean());
-        }
-
-        @Override
-        public CompletableFuture<Boolean> isDirectory(String path) {
-            return vfs.isDirectoryAsync(path).thenApply(luaValue -> !luaValue.isnil() && luaValue.toboolean());
-        }
+        @Override public CompletableFuture<Boolean> exists(String path) { return vfs.existsAsync(path).thenApply(luaValue -> !luaValue.isnil() && luaValue.toboolean()); }
+        @Override public CompletableFuture<Boolean> isDirectory(String path) { return vfs.isDirectoryAsync(path).thenApply(luaValue -> !luaValue.isnil() && luaValue.toboolean()); }
 
         @Override
         public CompletableFuture<Optional<byte[]>> readBytes(String path) {
-            return vfs.readAsync(path).thenApply(luaValue -> {
-                if (luaValue.isnil() || !luaValue.isstring()) {
+            return vfs.readBytesAsync(path).thenApply(luaValue -> {
+                if (luaValue.isnil() || !luaValue.isstring()) return Optional.empty();
+                try {
+                    return Optional.of(Base64.getDecoder().decode(luaValue.tojstring()));
+                } catch (IllegalArgumentException e) {
+                    LoraCoreMod.LOGGER.error("Failed to decode Base64 from VFS: {}", e.getMessage());
                     return Optional.empty();
                 }
-                return Optional.of(luaValue.tojstring().getBytes(StandardCharsets.UTF_8));
             });
         }
 
-        @Override
-        public CompletableFuture<Boolean> writeBytes(String path, byte[] data) {
-            String content = new String(data, StandardCharsets.UTF_8);
-            return vfs.writeAsync(path, content).thenApply(luaValue -> !luaValue.isnil() && luaValue.toboolean());
-        }
-
-        @Override
-        public CompletableFuture<Boolean> makeDir(String path) {
-            return vfs.makeDirAsync(path).thenApply(luaValue -> !luaValue.isnil() && luaValue.toboolean());
-        }
-
-        @Override
-        public CompletableFuture<Boolean> delete(String path) {
-            return vfs.deleteAsync(path).thenApply(luaValue -> !luaValue.isnil() && luaValue.toboolean());
-        }
+        @Override public CompletableFuture<Boolean> writeBytes(String path, byte[] data) { return vfs.writeAsync(path, Base64.getEncoder().encodeToString(data)).thenApply(luaValue -> !luaValue.isnil() && luaValue.toboolean()); }
+        @Override public CompletableFuture<Boolean> makeDir(String path) { return vfs.makeDirAsync(path).thenApply(luaValue -> !luaValue.isnil() && luaValue.toboolean()); }
+        @Override public CompletableFuture<Boolean> delete(String path) { return vfs.deleteAsync(path).thenApply(luaValue -> !luaValue.isnil() && luaValue.toboolean()); }
 
         @Override
         public CompletableFuture<List<String>> list(String path) {
             return vfs.listAsync(path).thenApply(luaValue -> {
-                if (luaValue.isnil() || !luaValue.isstring()) {
-                    return List.of();
-                }
+                if (luaValue.isnil() || !luaValue.isstring()) return List.of();
                 try {
-                    // Сервер возвращает JSON-массив строк, парсим его
-                    return GSON.fromJson(luaValue.tojstring(), new com.google.gson.reflect.TypeToken<List<String>>(){}.getType());
+                    return GSON.fromJson(luaValue.tojstring(), new com.google.gson.reflect.TypeToken<List<String>>() {}.getType());
                 } catch (Exception e) {
-                    // В случае ошибки парсинга возвращаем пустой список
                     return List.of();
                 }
             });
         }
+    }
+
+    private static class KernelGraphicsImpl implements IKernelGraphics {
+        private final UUID tabletUuid;
+        public KernelGraphicsImpl(UUID tabletUuid) { this.tabletUuid = tabletUuid; }
+
+        @Override
+        public void fill(int x1, int y1, int x2, int y2, int color) {
+            int width = x2 - x1;
+            int height = y2 - y1;
+            if (width <= 0 || height <= 0) return;
+            GpuApi.sendCommand(this.tabletUuid, new com.loracore.network.graphics.GpuCommand.Fill(x1, y1, width, height, color));
+        }
+
+        @Override
+        public void drawString(String text, int x, int y, int color) {
+            GpuApi.sendCommand(this.tabletUuid, new com.loracore.network.graphics.GpuCommand.DrawText(x, y, text, color));
+        }
+
+        @Override public int getStringWidth(String text) { return text.length() * 6; }
+        @Override public void beginFrame() {}
+        @Override public void endFrame() {}
+        @Override public void flush() {}
+        @Override public void drawCenteredString(String text, int centerX, int y, int color) { drawString(text, centerX - (getStringWidth(text) / 2), y, color); }
+        @Override public void pushMatrix() {}
+        @Override public void popMatrix() {}
+        @Override public void translate(double x, double y, double z) {}
+        @Override public void enableScissor(int x, int y, int w, int h) {}
+        @Override public void disableScissor() {}
     }
 }

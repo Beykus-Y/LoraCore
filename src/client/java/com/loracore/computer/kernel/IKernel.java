@@ -16,14 +16,8 @@ public interface IKernel {
      */
     void onBoot(IKernelApi api);
 
-    /**
-     * Вызывается каждый тик рендера. Используется для отрисовки GUI.
-     * @param context Контекст отрисовки Minecraft, позволяет рисовать на экране.
-     * @param mouseX Текущая X-координата мыши.
-     * @param mouseY Текущая Y-координата мыши.
-     * @param delta Время с последнего кадра, для плавных анимаций.
-     */
-    void onRender(DrawContext context, int mouseX, int mouseY, float delta);
+
+    void onRender(Object drawContext, int mouseX, int mouseY, float delta);
 
     /**
      * Вызывается каждый игровой тик. Для логики, не связанной с рендером.

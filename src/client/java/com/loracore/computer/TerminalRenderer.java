@@ -2,6 +2,7 @@
 package com.loracore.computer;
 
 import com.loracore.gui.CrashScreen;
+import com.loracore.gui.TabletScreen;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.font.TextRenderer;
 import net.minecraft.client.gui.DrawContext;
@@ -14,7 +15,8 @@ import java.util.concurrent.LinkedBlockingQueue;
  * Отвечает ИСКЛЮЧИТЕЛЬНО за состояние и отрисовку текстового терминала.
  * Является "драйвером" для TabletScreen, когда тот работает в Lua-режиме.
  */
-public class TerminalRenderer {
+public class TerminalRenderer implements Terminal {
+
 
     private static final int TEXT_COLOR = 0xFFE0E0E0;
     private static final int FONT_HEIGHT = 9;
@@ -192,7 +194,14 @@ public class TerminalRenderer {
     }
 
     public void showCrashScreen(String message) {
-        MinecraftClient.getInstance().execute(() -> MinecraftClient.getInstance().setScreen(new CrashScreen(message, this.parentScreen)));
+        MinecraftClient.getInstance().execute(() -> {
+            // ИСПРАВЛЕНИЕ: Закрываем текущий TabletScreen перед открытием CrashScreen.
+            // Мы передаем null в качестве "родителя", так как старый экран больше не действителен.
+            if (this.parentScreen instanceof TabletScreen) {
+                this.parentScreen.close();
+            }
+            MinecraftClient.getInstance().setScreen(new CrashScreen(message, null));
+        });
     }
 
     public void setTextColor(int color) { this.currentTextColor = 0xFF000000 | color; }
@@ -213,6 +222,11 @@ public class TerminalRenderer {
         this.cursorVisible = true;
         this.tickCounter = 0;
     }
+    @Override
+    public void reboot() {
+        // Пока не используется
+    }
+
 
     private static class TerminalChar {
         char character;

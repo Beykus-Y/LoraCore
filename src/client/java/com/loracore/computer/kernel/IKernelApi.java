@@ -36,4 +36,5 @@ public interface IKernelApi {
      * Выключает виртуальную машину.
      */
     void shutdown();
+    IKernelGraphics getGraphics();
 }

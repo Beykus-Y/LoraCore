@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import java.util.Base64;
 
 public class WorldStorageVFS implements IFileSystem {
     private final Path rootDirectory;
@@ -31,7 +32,7 @@ public class WorldStorageVFS implements IFileSystem {
         return rootDirectory.resolve(fsUuid.toString());
     }
 
-    private Path getValidatedPath(String relativePath) throws IOException {
+    public Path getValidatedPath(String relativePath) throws IOException {
         // Убираем потенциальную точку из базового пути СРАЗУ
         Path deviceRoot = getDeviceRoot().normalize();
 

@@ -15,6 +15,7 @@ public record BootTabletS2CPacket(
         UUID fileSystemUuid,
         String bootScriptPath,
         String architecture,
+        UUID tabletUuid,
         int totalRamKb // [НОВОЕ ПОЛЕ]
 ) implements CustomPayload {
     public static final CustomPayload.Id<BootTabletS2CPacket> ID = new CustomPayload.Id<>(new Identifier(LoraCoreMod.MOD_ID, "boot_tablet"));
@@ -23,7 +24,8 @@ public record BootTabletS2CPacket(
             Uuids.PACKET_CODEC, BootTabletS2CPacket::fileSystemUuid,
             PacketCodecs.STRING, BootTabletS2CPacket::bootScriptPath,
             PacketCodecs.STRING, BootTabletS2CPacket::architecture,
-            PacketCodecs.VAR_INT, BootTabletS2CPacket::totalRamKb, // [НОВЫЙ КОДЕК]
+            Uuids.PACKET_CODEC, BootTabletS2CPacket::tabletUuid,
+            PacketCodecs.VAR_INT, BootTabletS2CPacket::totalRamKb,
             BootTabletS2CPacket::new
     );
 

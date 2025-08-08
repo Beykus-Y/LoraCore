@@ -20,9 +20,9 @@ public class VirtualMachine {
 
     private final Terminal terminal;
     private final ResourceLoader resourceLoader;
-    // ИСПРАВЛЕНИЕ: Убрали старый IVfsRequester. Теперь VM работает с простым интерфейсом.
-    private final IVirtualFileSystem vfs;
+    private final IAsyncVFS vfs;
     private final UUID fsUuid;
+    private final UUID tabletUuid; // <-- НОВОЕ ПОЛЕ
     private final List<Object> devices = new ArrayList<>();
     private final long startTime;
     private String crashMessage = null;
@@ -30,10 +30,25 @@ public class VirtualMachine {
     private final Map<Integer, LuaThreadRunner> threads = new ConcurrentHashMap<>();
     private static final int MAIN_THREAD_ID = 0;
 
+    // ИСПРАВЛЕНО: Конструктор теперь принимает оба UUID
+    public VirtualMachine(String architecture, int totalRamKb, Terminal terminal, ResourceLoader resourceLoader, IAsyncVFS vfs, UUID fsUuid, UUID tabletUuid) {
+        this.terminal = terminal;
+        this.resourceLoader = resourceLoader;
+        this.vfs = vfs;
+        this.fsUuid = fsUuid;
+        this.tabletUuid = tabletUuid; // <-- СОХРАНЯЕМ
+        this.startTime = System.nanoTime();
+
+        this.devices.add(new ThreadDevice(this));
+        this.devices.add(new CpuDevice(this, architecture));
+        this.devices.add(new RamDevice(this, totalRamKb));
+        this.devices.add(new TerminalDevice(terminal));
+        this.devices.add(new GpuDevice(this.tabletUuid)); // <-- ИСПРАВЛЕНО: Передаем UUID
+    }
+
     private static class CustomPrint extends OneArgFunction {
         private final Terminal term;
         public CustomPrint(Terminal term) { this.term = term; }
-
         @Override
         public LuaValue call(LuaValue arg) {
             ClientApi.executeOnRenderThread(() -> term.print(arg.tojstring()));
@@ -41,22 +56,7 @@ public class VirtualMachine {
         }
     }
 
-    // ИСПРАВЛЕНИЕ: Конструктор теперь принимает простую IVirtualFileSystem.
-    public VirtualMachine(String architecture, int totalRamKb, Terminal terminal, ResourceLoader resourceLoader, IVirtualFileSystem vfs, UUID fsUuid) {
-        this.terminal = terminal;
-        this.resourceLoader = resourceLoader;
-        this.vfs = vfs; // Присваиваем новую реализацию VFS
-        this.fsUuid = fsUuid;
-        this.startTime = System.nanoTime();
-
-        this.devices.add(new ThreadDevice(this));
-        this.devices.add(new CpuDevice(this, architecture));
-        this.devices.add(new RamDevice(this, totalRamKb));
-        this.devices.add(new TerminalDevice(terminal));
-        this.devices.add(new GpuDevice(terminal));
-    }
-
-    private Globals createLuaGlobals() {
+    private Globals createLuaGlobals(LuaThreadRunner runner) {
         Globals g = JsePlatform.standardGlobals();
         g.set("print", new CustomPrint(this.terminal));
         g.load(new OsAPI(this));
@@ -64,10 +64,9 @@ public class VirtualMachine {
         g.set("colors", new ColorsAPI());
         g.set("require", new CustomRequire(g));
 
-        // ИСПРАВЛЕНИЕ: FsAPI теперь создается с простой реализацией VFS.
-        // Ему больше не нужен доступ к VM или Globals.
         if (this.vfs != null) {
-            g.set("fs", new FsAPI(this.vfs));
+            // Теперь мы передаем runner, который гарантированно не null
+            g.set("fs", new FsAPI(runner, this.vfs));
         }
 
         LuaTable tabletApi = new LuaTable();
@@ -88,19 +87,24 @@ public class VirtualMachine {
             this.setCrashState(error);
             return;
         }
-        startNewLuaThread(MAIN_THREAD_ID, bootScriptContent);
+        // ИСПРАВЛЕНИЕ 2: Мы передаем null для Globals при создании раннера,
+        // так как Globals теперь зависят от самого раннера.
+        startNewLuaThread(MAIN_THREAD_ID, bootScriptContent, null);
     }
 
-    // ИСПРАВЛЕНИЕ: Полностью удалены методы vfsRequest и resolveCallback.
-    // Вся логика асинхронности и управления корутинами из VM убрана.
+    // ... (остальные методы без изменений: startNewLuaThread, pushEvent, shutdown, etc.)
 
-    public boolean startNewLuaThread(int threadId, String code) {
-        if (threads.containsKey(threadId)) {
-            return false;
-        }
+    public boolean startNewLuaThread(int threadId, String code, Globals parentGlobals) {
+        if (threads.containsKey(threadId)) return false;
         try {
-            Globals threadGlobals = createLuaGlobals();
-            LuaThreadRunner runner = new LuaThreadRunner(this, threadGlobals, code);
+            // ИСПРАВЛЕНИЕ 3: Переработан порядок инициализации
+            // Сначала создаем раннер
+            LuaThreadRunner runner = new LuaThreadRunner(this, null, code);
+            // Затем создаем Globals, передавая в них уже созданный раннер
+            Globals threadGlobals = (parentGlobals != null) ? parentGlobals : createLuaGlobals(runner);
+            // Устанавливаем Globals в раннер
+            runner.setGlobals(threadGlobals);
+
             threads.put(threadId, runner);
             runner.start();
             return true;
@@ -126,11 +130,7 @@ public class VirtualMachine {
             runner.pushEvent(event);
         }
     }
-    /**
-     * Отправляет событие (массив LuaValue) в очередь конкретного потока по его ID.
-     * @param threadId ID целевого потока.
-     * @param event    Массив значений Lua, представляющий событие.
-     */
+
     public void pushEventToThread(int threadId, LuaValue[] event) {
         LuaThreadRunner runner = threads.get(threadId);
         if (runner != null) {
@@ -138,7 +138,6 @@ public class VirtualMachine {
         }
     }
 
-    // ... Остальные геттеры и методы без изменений ...
     public void shutdown() {
         for (LuaThreadRunner runner : threads.values()) {
             runner.stop();
@@ -178,43 +177,22 @@ public class VirtualMachine {
     public String getCrashMessage() {
         return this.crashMessage;
     }
-    // Вставьте этот код внутрь класса VirtualMachine
 
     private class CustomRequire extends VarArgFunction {
         private final Globals globals;
-
-        public CustomRequire(Globals globals) {
-            this.globals = globals;
-        }
+        public CustomRequire(Globals globals) { this.globals = globals; }
 
         @Override
         public Varargs invoke(Varargs args) {
             String path = args.checkjstring(1);
-
-            // 1. Проверяем, был ли модуль уже загружен (стандартное поведение require)
             LuaValue loaded = globals.get("package").get("loaded").get(path);
-            if (!loaded.isnil()) {
-                return loaded;
-            }
-
-            // 2. Преобразуем путь модуля (например, "drivers.gpu") в путь к файлу ("drivers/gpu.lua")
+            if (!loaded.isnil()) return loaded;
             String filePath = path.replace('.', '/') + ".lua";
-
-            // 3. Используем наш ResourceLoader для загрузки файла из ассетов мода
             String scriptContent = resourceLoader.load(filePath);
-
-            if (scriptContent == null) {
-                // 4. Если файл не найден, выбрасываем ошибку, как и стандартный require
-                error("module '" + path + "' not found: " + path);
-            }
-
-            // 5. Компилируем и запускаем код модуля
+            if (scriptContent == null) error("module '" + path + "' not found: " + path);
             LuaValue chunk = globals.load(scriptContent, "@" + filePath);
             LuaValue result = chunk.call();
-
-            // 6. Кэшируем результат, чтобы не загружать модуль дважды
             globals.get("package").get("loaded").set(path, result);
-
             return result;
         }
     }

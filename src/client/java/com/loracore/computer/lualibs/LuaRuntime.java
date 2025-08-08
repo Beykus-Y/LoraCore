@@ -1,11 +1,9 @@
 // Полный исправленный файл: src/client/java/com/loracore/computer/lualibs/LuaRuntime.java
 package com.loracore.computer.lualibs;
 
-import com.loracore.LoraCoreClient;
 import com.loracore.computer.*;
 import com.loracore.gui.TabletScreen;
 import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.font.TextRenderer;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.resource.Resource;
 import net.minecraft.util.Identifier;
@@ -14,18 +12,19 @@ import org.lwjgl.glfw.GLFW;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Optional;
+import java.util.UUID;
 
 public class LuaRuntime implements IRuntimeEnvironment {
 
     private final VirtualMachine vm;
     private final TerminalRenderer terminalRenderer;
-    private final TextRenderer textRenderer;
     private final ClientVFS vfs;
 
-    public LuaRuntime(TabletScreen parentScreen, ClientVFS vfs, TextRenderer textRenderer) {
-        this.terminalRenderer = new TerminalRenderer(parentScreen);
-        this.textRenderer = textRenderer;
+    public LuaRuntime(TabletScreen parentScreen, ClientVFS vfs) {
         this.vfs = vfs;
+        // Lua в текстовом режиме все еще использует TerminalRenderer как реализацию интерфейса Terminal
+        this.terminalRenderer = new TerminalRenderer(parentScreen);
+        UUID tabletUuid = parentScreen.getTabletUuid();
 
         ResourceLoader loader = (path) -> {
             try {
@@ -37,67 +36,53 @@ public class LuaRuntime implements IRuntimeEnvironment {
                     }
                 }
             } catch (Exception e) {
-                // Игнорируем ошибки, возвращаем null
+                // Игнорировать
             }
             return null;
         };
 
-        IVirtualFileSystem syncVfsImpl = new SyncVFS(vfs);
-
+        // Создаем VM с правильными аргументами
         this.vm = new VirtualMachine(
                 "lora_v1_lua",
-                1024,
-                parentScreen,
+                1024, // RAM
+                terminalRenderer, // TerminalRenderer реализует интерфейс Terminal
                 loader,
-                syncVfsImpl,
-                vfs.getFsUuid()
+                vfs, // Блокирующая обертка над асинхронным VFS
+                vfs.getFsUuid(),
+                tabletUuid // <-- UUID самого планшета
         );
-
-        // ИСПРАВЛЕНИЕ: Эта строка удалена, так как метод setActiveVM больше не существует.
-        // LoraCoreClient.setActiveVM(this.vm);
-    }
-
-    public TerminalRenderer getTerminalRenderer() {
-        return terminalRenderer;
-    }
-
-    public void resizeTerminal(int tabletWidth, int tabletHeight) {
-        if (this.terminalRenderer != null) {
-            this.terminalRenderer.resize(tabletWidth, tabletHeight);
-        }
     }
 
     @Override
     public void boot(String bootPath) {
         String bootScriptContent;
-        if (bootPath.startsWith("/")) {
-            bootScriptContent = this.vfs.readBlocking(bootPath).tojstring();
-        } else {
+        // Lua-режим для простоты всегда грузит скрипт восстановления из ресурсов
+        if (vm.getResourceLoader() != null) {
             bootScriptContent = vm.getResourceLoader().load(bootPath);
+            vm.start(bootScriptContent);
+        } else {
+            vm.setCrashState("ResourceLoader not available.");
         }
-
-        vm.start(bootScriptContent);
     }
 
     @Override
     public void render(DrawContext context, int mouseX, int mouseY, float delta) {
-        terminalRenderer.render(context, textRenderer, 0, 0);
+        // Вся логика рендера теперь на сервере. Этот метод пуст.
+        // Lua-скрипты отправляют команды через GPU API.
     }
 
     @Override
     public void tick() {
-        // Не используется
+        if (vm.getCrashMessage() != null) {
+            terminalRenderer.showCrashScreen(vm.getCrashMessage());
+        }
     }
 
     @Override
     public void shutdown() {
-        // ИСПРАВЛЕНИЕ: Теперь LuaRuntime сам отвечает за выключение своей VM.
-        // Он больше не обращается к глобальному методу в LoraCoreClient.
         if (this.vm != null) {
             this.vm.shutdown();
         }
-        // Также сообщим LoraCoreClient, что VFS этого рантайма больше не активен.
-
     }
 
     @Override
@@ -110,22 +95,14 @@ public class LuaRuntime implements IRuntimeEnvironment {
         return vm.getCrashMessage();
     }
 
-    // --- Логика ввода без изменений ---
-
+    // --- Обработка ввода для текстового режима ---
     @Override
     public boolean onKeyPressed(int keyCode, int scanCode, int modifiers) {
         if (modifiers == GLFW.GLFW_MOD_CONTROL && keyCode == GLFW.GLFW_KEY_C) {
             vm.pushEvent("signal", "interrupt");
             return true;
         }
-        if (keyCode == GLFW.GLFW_KEY_ENTER || keyCode == GLFW.GLFW_KEY_KP_ENTER) {
-            terminalRenderer.onEnterPressed();
-            return true;
-        }
-        if (keyCode == GLFW.GLFW_KEY_BACKSPACE) {
-            terminalRenderer.onBackspacePressed();
-            return true;
-        }
+        vm.pushEvent("key", keyCode);
         return true;
     }
 
@@ -141,6 +118,7 @@ public class LuaRuntime implements IRuntimeEnvironment {
         return true;
     }
 
+    // В текстовом режиме мышь не используется
     @Override public boolean onMouseScrolled(double mouseX, double mouseY, double hAmount, double vAmount) { return false; }
     @Override public boolean onMouseClicked(double mouseX, double mouseY, int button) { return false; }
     @Override public boolean onMouseReleased(double mouseX, double mouseY, int button) { return false; }

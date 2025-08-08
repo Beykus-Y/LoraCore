@@ -7,12 +7,20 @@ import com.loracore.api.dto.OpenAiApiDto.Message;
 import com.loracore.component.*;
 import com.loracore.component.data.*;
 // ИСПРАВЛЕНО: Полностью переработан обработчик VFS
+import com.loracore.computer.ServerScreenState;
+import com.loracore.computer.TabletScreenManager;
 import com.loracore.computer.VirtualFileSystemManager;
+import com.loracore.item.TabletItem;
+import com.loracore.network.graphics.GpuCommand;
+import com.loracore.network.graphics.GpuCommandC2SPacket;
+import com.loracore.network.graphics.ScreenUpdateS2CPacket;
 import com.loracore.network.vfs.VfsRequestC2SPacket;
 import com.loracore.network.vfs.VfsResponseS2CPacket;
 import com.loracore.quest.Quest;
 import com.loracore.service.AiService;
 import com.loracore.service.GiftService;
+import com.loracore.service.ServerFont;
+import com.loracore.service.TabletRenderService;
 import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.entity.Entity;
@@ -27,6 +35,7 @@ import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
 import net.minecraft.util.Identifier;
 import net.minecraft.village.VillagerProfession;
+
 
 import java.util.*;
 
@@ -45,11 +54,15 @@ public class ModNetworking {
         PayloadTypeRegistry.playC2S().register(GiveGiftC2SPacket.ID, GiveGiftC2SPacket.CODEC);
         PayloadTypeRegistry.playC2S().register(VfsRequestC2SPacket.ID, VfsRequestC2SPacket.CODEC);
         PayloadTypeRegistry.playS2C().register(VfsResponseS2CPacket.ID, VfsResponseS2CPacket.CODEC);
+        PayloadTypeRegistry.playC2S().register(GpuCommandC2SPacket.ID, GpuCommandC2SPacket.CODEC);
+        PayloadTypeRegistry.playS2C().register(ScreenUpdateS2CPacket.ID, ScreenUpdateS2CPacket.CODEC);
+
 
         // Регистрация обработчиков
         registerTabletHandlers();
         registerDialogueAndQuestHandlers();
         registerVfsHandlers(); // ИСПРАВЛЕНО: Этот метод теперь содержит правильную логику
+        registerGpuHandlers();
     }
 
     /**
@@ -78,6 +91,34 @@ public class ModNetworking {
             });
         });
     }
+    private static void registerGpuHandlers() {
+        ServerPlayNetworking.registerGlobalReceiver(GpuCommandC2SPacket.ID, (payload, context) -> {
+            ServerPlayerEntity player = context.player();
+            MinecraftServer server = player.getServer();
+            if (server == null) return;
+
+            server.execute(() -> {
+                // ИСПРАВЛЕНИЕ 3: Используем UUID из пакета для получения нужного экрана
+                UUID tabletUuid = payload.tabletUuid();
+                ServerScreenState screen = TabletScreenManager.getInstance().getScreen(tabletUuid);
+
+                // Если экран для этого UUID существует, обрабатываем команду
+                if (screen != null) {
+                    TabletRenderService service = TabletRenderService.getInstance();
+                    GpuCommand command = payload.command();
+
+                    switch (command) {
+                        case GpuCommand.Fill fill ->
+                                service.processFill(screen, fill.x(), fill.y(), fill.width(), fill.height(), fill.color());
+                        case GpuCommand.DrawText text ->
+                                service.processDrawText(screen, text.x(), text.y(), text.text(), text.color());
+                        case GpuCommand.Copy copy ->
+                                service.processCopy(screen, copy.x(), copy.y(), copy.width(), copy.height(), copy.toX(), copy.toY());
+                    }
+                }
+            });
+        });
+    }
 
     // Остальные методы (registerTabletHandlers, registerDialogueAndQuestHandlers) остаются без изменений
     // ... (скопируйте их из вашего текущего файла, они были корректны)
@@ -92,69 +133,45 @@ public class ModNetworking {
 
             server.execute(() -> {
                 ItemStack stack = player.getMainHandStack();
-                if (!(stack.getItem() instanceof com.loracore.item.TabletItem)) return;
+                if (!(stack.getItem() instanceof TabletItem)) return;
+
+                // ИСПРАВЛЕНИЕ 4: Логика получения/создания UUID теперь в TabletScreenManager
+                TabletScreenManager.getInstance().getOrCreateScreen(stack);
 
                 MotherboardData mobo = stack.get(ModComponents.MOTHERBOARD_DATA);
-                if (mobo == null) {
-                    player.sendMessage(Text.literal("Device is critically damaged. Motherboard not found.").formatted(Formatting.RED), true);
+                if (mobo == null || mobo.storage().isEmpty()) {
+                    player.sendMessage(Text.literal("Device error: No motherboard or storage found.").formatted(Formatting.RED), true);
                     return;
                 }
 
-                // =========================================================================
-                //                         НОВАЯ КЛЮЧЕВАЯ ЛОГИКА
-                // =========================================================================
+                String bootScriptPath = mobo.firmware().get().get(ModComponents.FIRMWARE_DATA).recoveryScript().toString();
+                String architecture = mobo.cpu().get().get(ModComponents.CPU_DATA).architecture();
+                int totalRamKb = mobo.ram().stream()
+                        .mapToInt(ramStack -> ramStack.get(ModComponents.RAM_DATA).sizeKb())
+                        .sum();
 
-                // ШАГ 1: Найти жесткий диск внутри планшета (берем первый).
-                Optional<ItemStack> storageStackOpt = mobo.storage().stream().findFirst();
-                if (storageStackOpt.isEmpty()) {
-                    player.sendMessage(Text.literal("No storage device found.").formatted(Formatting.RED), true);
-                    return;
-                }
-
-                // ШАГ 2: Получаем наш новый компонент с картой UUID с самого планшета.
                 FileSystemsData fsData = stack.get(ModComponents.FILE_SYSTEMS_DATA);
                 if (fsData == null) {
-                    // Такого быть не должно, если мы правильно добавили компонент в ModItems, но это защита.
-                    fsData = new FileSystemsData(new java.util.HashMap<>());
+                    fsData = new FileSystemsData(new HashMap<>());
                 }
-                final UUID fsUuid;
-                // ШАГ 3: Проверяем, есть ли у диска в слоте 0 уже присвоенный UUID.
-                if (!fsData.uuids().containsKey("0")) {
-                    LoraCoreMod.LOGGER.info("[VFS] Tablet unformatted. Generating new VFS UUID and saving it to ItemStack NBT...");
 
+                String primaryStorageSlot = "0";
+                UUID fsUuid = fsData.uuids().get(primaryStorageSlot);
+
+                if (fsUuid == null) {
                     fsUuid = UUID.randomUUID();
-                    LoraCoreMod.LOGGER.info("[VFS UUID] Generated NEW UUID for tablet: {}", fsUuid);
-
-                    // [ИЗМЕНЕНО] Тип карты теперь Map<String, UUID>
-                    Map<String, UUID> newUuids = new java.util.HashMap<>(fsData.uuids());
-                    // [ИЗМЕНЕНО] Кладем ключ "0" как СТРОКУ
-                    newUuids.put("0", fsUuid);
-
-                    FileSystemsData newFsData = new FileSystemsData(newUuids);
-
-                    stack.set(ModComponents.FILE_SYSTEMS_DATA, newFsData);
-                    player.getInventory().setStack(player.getInventory().selectedSlot, stack.copy());
-                    player.getInventory().markDirty();
-
-                } else {
-                    // [ИЗМЕНЕНО] Получаем ключ "0" как СТРОКУ
-                    fsUuid = fsData.uuids().get("0");
-                    LoraCoreMod.LOGGER.info("[VFS UUID] Using EXISTING UUID for tablet: {}", fsUuid);
+                    LoraCoreMod.LOGGER.info("[VFS] Tablet requires formatting. Assigning new FileSystem UUID: {}", fsUuid);
+                    Map<String, UUID> newUuids = new HashMap<>(fsData.uuids());
+                    newUuids.put(primaryStorageSlot, fsUuid);
+                    stack.set(ModComponents.FILE_SYSTEMS_DATA, new FileSystemsData(newUuids));
                 }
 
-                // ШАГ 4: Теперь, когда у нас гарантированно есть UUID, продолжаем загрузку как обычно.
-                Optional<CpuData> cpuDataOpt = mobo.cpu().map(s -> s.get(ModComponents.CPU_DATA));
-                Optional<FirmwareData> firmwareDataOpt = mobo.firmware().map(s -> s.get(ModComponents.FIRMWARE_DATA));
-                int totalRamKb = mobo.ram().stream().mapToInt(s -> s.getOrDefault(ModComponents.RAM_DATA, new RamData(0)).sizeKb()).sum();
+                // Получаем UUID самого планшета, который теперь гарантированно существует
+                UUID tabletUuid = stack.get(ModComponents.TABLET_UUID);
 
-                if (cpuDataOpt.isEmpty() || firmwareDataOpt.isEmpty()) {
-                    player.sendMessage(Text.literal("Device is bricked. Missing CPU or Firmware.").formatted(Formatting.RED), true);
-                    return;
-                }
+                LoraCoreMod.LOGGER.info("Booting tablet. FS_UUID: {}, TABLET_UUID: {}", fsUuid, tabletUuid);
 
-                String bootScriptPath = firmwareDataOpt.get().recoveryScript().toString();
-
-                ServerPlayNetworking.send(player, new BootTabletS2CPacket(fsUuid, bootScriptPath, cpuDataOpt.get().architecture(), totalRamKb));
+                ServerPlayNetworking.send(player, new BootTabletS2CPacket(fsUuid, bootScriptPath, architecture, tabletUuid, totalRamKb));
             });
         });
     }
