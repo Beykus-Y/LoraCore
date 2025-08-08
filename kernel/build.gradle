@@ -2,6 +2,7 @@
 plugins {
     id 'fabric-loom'
     id 'java-library'
+    id 'maven-publish'
 }
 
 // Шаг 2: Указываем базовую информацию, чтобы Loom был доволен.
@@ -27,11 +28,27 @@ dependencies {
     mappings "net.fabricmc:yarn:${project.rootProject.yarn_mappings}:v2"
 }
 
-// Шаг 5: Все, что ниже, остается без изменений. Это уже было правильно.
+// Шаг 5: Настройка Java
+java {
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
+    withSourcesJar()
+}
+
+// Шаг 6: Публикация API
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            from components.java
+        }
+    }
+}
+
+// Шаг 7: Манифест
 jar {
     manifest {
         attributes(
-                'Kernel-Main-Class': 'com.lora.tabletos.LoraOSKernel'
+                'Kernel-Main-Class': 'com.lora.tabletos.core.LoraOSKernel'
         )
     }
 }

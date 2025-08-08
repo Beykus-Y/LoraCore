@@ -121,6 +121,9 @@ public class LoraOSKernel implements IKernel {
             this.desktop = new Desktop(api, this.windowManager);
             this.navigationBar = new NavigationBar(api);
             
+            // Устанавливаем ссылку на WindowManager в NavigationBar
+            this.navigationBar.setWindowManager(this.windowManager);
+            
             desktop.initialize().whenComplete((success, throwable) -> {
                 if (throwable != null) {
                     LOGGER.error("UI initialization failed", throwable);
@@ -151,9 +154,16 @@ public class LoraOSKernel implements IKernel {
             
             // Если система в рабочем состоянии, отрисовываем UI
             if (stateManager.getCurrentState() == KernelState.RUNNING) {
-                // Рисуем рабочий стол
-                desktop.render(graphics, mouseX, mouseY, delta);
-                windowManager.render(graphics, mouseX, mouseY, delta);
+                // Проверяем, есть ли активное приложение
+                if (windowManager.hasActiveApp()) {
+                    // Если есть активное приложение, рисуем только его
+                    windowManager.render(graphics, mouseX, mouseY, delta);
+                } else {
+                    // Если нет активного приложения, рисуем рабочий стол
+                    desktop.render(graphics, mouseX, mouseY, delta);
+                    windowManager.render(graphics, mouseX, mouseY, delta);
+                }
+                // Навигационная панель всегда рисуется поверх
                 navigationBar.render(graphics, mouseX, mouseY, delta);
             } else {
                 // Во всех остальных случаях (загрузка, сбой) рисуем системный экран
@@ -177,8 +187,19 @@ public class LoraOSKernel implements IKernel {
         
         try {
             // Передаем событие компонентам по порядку приоритета
-            if (navigationBar.handleEvent(event) || windowManager.handleEvent(event) || desktop.handleEvent(event)) {
-                return; // Если кто-то обработал, выходим
+            // Сначала проверяем навигационную панель (кнопка "Домой")
+            if (navigationBar.handleEvent(event)) {
+                return; // Если навигационная панель обработала событие, выходим
+            }
+            
+            // Затем проверяем активное приложение
+            if (windowManager.handleEvent(event)) {
+                return; // Если приложение обработало событие, выходим
+            }
+            
+            // Если нет активного приложения, проверяем рабочий стол
+            if (!windowManager.hasActiveApp() && desktop.handleEvent(event)) {
+                return; // Если рабочий стол обработал событие, выходим
             }
         } catch (Exception e) {
             LOGGER.error("KERNEL PANIC! Unhandled exception in event loop.", e);

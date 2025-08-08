@@ -2,7 +2,7 @@
   "providers": [
     {
       "type": "bitmap",
-      "file": "loracore:textures/font/eng.png",
+      "file": "loracore:font/eng.png",
       "ascent": 7,
       "chars": [
         "\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",

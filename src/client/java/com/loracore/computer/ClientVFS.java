@@ -11,6 +11,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
+import com.loracore.LoraCoreMod;
 
 // ИСПРАВЛЕНИЕ: Класс теперь реализует и старый IVfsRequester, и новый IBlockingVFS, и IAsyncVFS.
 // УДАЛЕН Closeable - ClientVFS теперь управляется как синглтон.
@@ -21,6 +22,9 @@ public class ClientVFS implements IVfsRequester, IBlockingVFS, IAsyncVFS {
     private final ConcurrentHashMap<Integer, BlockingQueue<LuaValue>> responseQueues = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<Integer, CompletableFuture<LuaValue>> asyncResponseFutures = new ConcurrentHashMap<>();
     private final AtomicInteger nextCallbackId = new AtomicInteger(0);
+    
+    // ИСПРАВЛЕНО: Добавляем поддержку больших файлов
+    private final ConcurrentHashMap<Integer, StringBuilder> largeFileBuffers = new ConcurrentHashMap<>();
 
     // Сделаем конструктор приватным - теперь используется только через getInstance
     private ClientVFS(UUID fsUuid) {
@@ -38,6 +42,13 @@ public class ClientVFS implements IVfsRequester, IBlockingVFS, IAsyncVFS {
             if (vfs == null) {
                 return;
             }
+            
+            // ИСПРАВЛЕНО: Обработка больших файлов
+            if (payload.type() == VfsResponseS2CPacket.ResponseType.LARGE_DATA) {
+                vfs.handleLargeFileResponse(payload.callbackId(), payload.data(), payload.chunkIndex(), payload.totalChunks());
+                return;
+            }
+            
             LuaValue responseValue = switch (payload.type()) {
                 case TRUE -> LuaValue.TRUE;
                 case FALSE -> LuaValue.FALSE;
@@ -48,6 +59,30 @@ public class ClientVFS implements IVfsRequester, IBlockingVFS, IAsyncVFS {
         } catch (Exception e) {
             com.loracore.LoraCoreClient.LOGGER.error("Failed to dispatch VFS response for fs_uuid {}", payload.fsUuid(), e);
         }
+    }
+    
+    /**
+     * Обрабатывает ответы для больших файлов, собирая их по частям
+     */
+    private void handleLargeFileResponse(int callbackId, String chunkData, int chunkIndex, int totalChunks) {
+        LoraCoreMod.LOGGER.info("[ClientVFS] Received chunk {}/{} for callbackId: {}", chunkIndex + 1, totalChunks, callbackId);
+        
+        StringBuilder buffer = largeFileBuffers.computeIfAbsent(callbackId, k -> new StringBuilder());
+        buffer.append(chunkData);
+        
+        // Если это последний чанк, собираем полный файл
+        if (chunkIndex >= totalChunks - 1) {
+            String completeData = buffer.toString();
+            largeFileBuffers.remove(callbackId);
+            
+            LoraCoreMod.LOGGER.info("[ClientVFS] Completed large file for callbackId: {} ({} chars)", callbackId, completeData.length());
+            
+            // Отправляем полный файл как обычный ответ
+            handleResponse(callbackId, LuaValue.valueOf(completeData));
+        } else {
+            LoraCoreMod.LOGGER.info("[ClientVFS] Waiting for more chunks for callbackId: {}", callbackId);
+        }
+        // Иначе ждем следующий чанк
     }
 
     public UUID getFsUuid() {
@@ -103,7 +138,7 @@ public class ClientVFS implements IVfsRequester, IBlockingVFS, IAsyncVFS {
         try {
             BlockingQueue<LuaValue> queue = responseQueues.get(callbackId);
             if (queue != null) {
-                LuaValue response = queue.poll(10, TimeUnit.SECONDS);
+                LuaValue response = queue.poll(30, TimeUnit.SECONDS); // ИСПРАВЛЕНО: Увеличиваем таймаут для больших файлов
                 return response != null ? response : LuaValue.NIL;
             }
             return LuaValue.NIL;

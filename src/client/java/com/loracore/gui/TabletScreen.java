@@ -179,7 +179,7 @@ public class TabletScreen extends Screen {
         super.render(context, mouseX, mouseY, delta);
         context.fill(0, 0, this.width, this.height, BACKGROUND_OVERLAY_COLOR);
         context.fill(tabletX, tabletY, tabletX + tabletWidth, tabletY + tabletHeight, TABLET_BORDER_COLOR);
-        context.fill(tabletX + 2, tabletY + 2, tabletX + tabletWidth - 2, tabletY + tabletHeight - 2, TABLET_BG_COLOR);
+        // context.fill(tabletX + 2, tabletY + 2, tabletX + tabletWidth - 2, tabletY + tabletHeight - 2, TABLET_BG_COLOR);
 
         // Всегда: загружаем обновлённые пиксели из NativeImage на GPU
         if (this.screenTexture != null) {

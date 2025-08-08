@@ -1,0 +1,46 @@
+package com.lora.tabletos.core;
+
+import com.loracore.computer.kernel.IKernelApi;
+import com.loracore.computer.kernel.IKernelGraphics;
+import com.loracore.computer.kernel.IKernelVfs;
+
+import java.util.concurrent.CompletableFuture;
+
+/**
+ * Реализация IApplicationApi, которая предоставляет безопасный доступ к системным ресурсам.
+ */
+public class ApplicationApiImpl implements IApplicationApi {
+    
+    private final IKernelApi kernelApi;
+    
+    public ApplicationApiImpl(IKernelApi kernelApi) {
+        this.kernelApi = kernelApi;
+    }
+    
+    @Override
+    public IKernelVfs getVfs() {
+        return kernelApi.getVfs();
+    }
+    
+    @Override
+    public IKernelGraphics getGraphics() {
+        return kernelApi.getGraphics();
+    }
+    
+    @Override
+    public CompletableFuture<String> askAI(String prompt) {
+        // TODO: Реализовать интеграцию с ИИ API
+        // Пока возвращаем заглушку
+        return CompletableFuture.completedFuture("AI Assistant: " + prompt);
+    }
+    
+    @Override
+    public int[] getScreenSize() {
+        return kernelApi.getTerminalSize();
+    }
+    
+    @Override
+    public CompletableFuture<Boolean> runLuaScript(String path) {
+        return kernelApi.runLuaScript(path);
+    }
+}

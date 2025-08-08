@@ -52,9 +52,10 @@ public class LoraCoreMod implements ModInitializer {
 		});
 
 		ServerTickEvents.END_SERVER_TICK.register(server -> {
-			if (server.getTicks() % 5 != 0) {
-				return;
-			}
+			// Обновляем экраны каждый тик для плавности
+			// if (server.getTicks() % 5 != 0) {
+			//     return;
+			// }
 
 			// ИСПРАВЛЕНИЕ 2: Полностью переработана логика обновления экранов
 			for (ServerPlayerEntity player : server.getPlayerManager().getPlayerList()) {

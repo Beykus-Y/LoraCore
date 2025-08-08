@@ -179,11 +179,8 @@ public class KernelManager {
         public KernelApiImpl(ClientVFS vfs, UUID tabletUuid, TabletScreen parentScreen, net.minecraft.client.texture.NativeImage screenImage) {
             this.parentScreen = parentScreen;
             this.kernelVfs = new KernelVfsImpl(vfs);
-            if (screenImage != null) {
-                this.graphics = new ClientSideGraphics(screenImage);
-            } else {
-                this.graphics = new KernelGraphicsImpl(tabletUuid);
-            }
+            // Для Java-приложений всегда используем серверную отрисовку
+            this.graphics = new KernelGraphicsImpl(tabletUuid);
         }
 
         @Override 
@@ -360,7 +357,26 @@ public class KernelManager {
 
         @Override
         public void drawString(String text, int x, int y, int color) {
-            // TODO: Растеризация шрифта при необходимости полноценного GUI
+            // Простая отрисовка текста как прямоугольников
+            if (text == null || text.isEmpty()) return;
+            
+            int charWidth = 6;
+            int charHeight = 8;
+            
+            for (int i = 0; i < text.length(); i++) {
+                char c = text.charAt(i);
+                int charX = x + i * charWidth;
+                
+                // Рисуем простой прямоугольник для каждого символа
+                if (charX >= 0 && charX < screenImage.getWidth() && y >= 0 && y + charHeight < screenImage.getHeight()) {
+                    int abgr = (color & 0xFF000000) | ((color & 0x00FF0000) >> 16) | (color & 0x0000FF00) | ((color & 0x000000FF) << 16);
+                    for (int dy = 0; dy < charHeight; dy++) {
+                        for (int dx = 0; dx < charWidth; dx++) {
+                            screenImage.setColor(charX + dx, y + dy, abgr);
+                        }
+                    }
+                }
+            }
         }
 
         @Override public int getStringWidth(String text) { return text == null ? 0 : text.length() * 6; }

@@ -17,7 +17,8 @@ public class DesktopIcon {
     private static final int TEXT_COLOR = 0xFFFFFFFF;
     
     public DesktopIcon(String fileName, String directoryPath) {
-        this.label = fileName.replace(".lua", "");
+        // Убираем расширение файла для отображения имени
+        this.label = fileName.replace(".lua", "").replace(".jar", "");
         this.scriptPath = directoryPath + "/" + fileName;
         this.width = 64;
         this.height = 64;

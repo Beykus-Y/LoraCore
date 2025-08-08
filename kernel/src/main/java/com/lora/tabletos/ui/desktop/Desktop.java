@@ -54,7 +54,7 @@ public class Desktop {
             // Очищаем старый список на случай перезагрузки UI
             icons.clear();
             for (String fileName : fileList) {
-                if (fileName.endsWith(".lua")) {
+                if (fileName.endsWith(".lua") || fileName.endsWith(".jar")) {
                     icons.add(new DesktopIcon(fileName, appsPath));
                 }
             }

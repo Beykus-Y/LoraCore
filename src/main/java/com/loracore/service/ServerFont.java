@@ -89,6 +89,10 @@ public class ServerFont {
     }
 
     public void drawString(byte[] buffer, int x, int y, String text, int color) {
+        if (text == null || text.isEmpty()) {
+            return;
+        }
+        
         int currentX = x;
         for (char c : text.toCharArray()) {
             drawChar(buffer, currentX, y, c, color);
@@ -98,7 +102,9 @@ public class ServerFont {
 
     private void drawChar(byte[] buffer, int x, int y, char c, int color) {
         Glyph glyph = glyphMap.get(c);
-        if (glyph == null) return;
+        if (glyph == null) {
+            return;
+        }
 
         byte r = (byte) ((color >> 16) & 0xFF);
         byte g = (byte) ((color >> 8) & 0xFF);

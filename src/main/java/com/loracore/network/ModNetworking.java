@@ -86,10 +86,55 @@ public class ModNetworking {
                         payload.content()
                 );
                 LoraCoreMod.LOGGER.info("[VFS] Operation result: [{}]. Sending response to client for callbackId: {}", response.type(), payload.callbackId());
-                // Отправляем результат обратно клиенту
-                ServerPlayNetworking.send(player, new VfsResponseS2CPacket(payload.fsUuid(), payload.callbackId(), response.type(), response.data()));
+                
+                // ИСПРАВЛЕНО: Обработка больших файлов
+                if (response.type() == VfsResponseS2CPacket.ResponseType.LARGE_DATA) {
+                    sendLargeFileInChunks(player, payload.fsUuid(), payload.callbackId(), response.data());
+                } else {
+                    // Отправляем результат обратно клиенту
+                    ServerPlayNetworking.send(player, new VfsResponseS2CPacket(payload.fsUuid(), payload.callbackId(), response.type(), response.data()));
+                }
             });
         });
+    }
+    
+    /**
+     * Отправляет большой файл по частям
+     */
+    private static void sendLargeFileInChunks(ServerPlayerEntity player, UUID fsUuid, int callbackId, String data) {
+        final int CHUNK_SIZE = 25000; // Размер одного чанка (безопасно для Minecraft)
+        int totalChunks = (data.length() + CHUNK_SIZE - 1) / CHUNK_SIZE; // Округление вверх
+        
+        LoraCoreMod.LOGGER.info("[VFS] Sending large file: {} chars, {} chunks, chunk size: {}", data.length(), totalChunks, CHUNK_SIZE);
+        
+        for (int i = 0; i < totalChunks; i++) {
+            int start = i * CHUNK_SIZE;
+            int end = Math.min(start + CHUNK_SIZE, data.length());
+            String chunk = data.substring(start, end);
+            
+            LoraCoreMod.LOGGER.info("[VFS] Sending chunk {}/{}: {} chars ({} to {})", i + 1, totalChunks, chunk.length(), start, end);
+            
+            VfsResponseS2CPacket packet = new VfsResponseS2CPacket(
+                fsUuid, 
+                callbackId, 
+                VfsResponseS2CPacket.ResponseType.LARGE_DATA, 
+                chunk, 
+                i, 
+                totalChunks
+            );
+            
+            ServerPlayNetworking.send(player, packet);
+            
+            // Небольшая задержка между чанками для предотвращения переполнения буфера
+            try {
+                Thread.sleep(10);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+        }
+        
+        LoraCoreMod.LOGGER.info("[VFS] Finished sending large file in {} chunks", totalChunks);
     }
     private static void registerGpuHandlers() {
         ServerPlayNetworking.registerGlobalReceiver(GpuCommandC2SPacket.ID, (payload, context) -> {

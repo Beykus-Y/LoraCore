@@ -3,6 +3,7 @@ package com.lora.tabletos.ui.navigation;
 import com.loracore.computer.kernel.IKernelApi;
 import com.loracore.computer.kernel.IKernelGraphics;
 import com.loracore.computer.kernel.KernelEvent;
+import com.lora.tabletos.ui.window.WindowManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -13,11 +14,19 @@ public class NavigationBar {
     
     private static final Logger LOGGER = LoggerFactory.getLogger(NavigationBar.class);
     private final IKernelApi api;
+    private WindowManager windowManager;
     private static final int BAR_HEIGHT = 30; // Высота панели
     private static final int BAR_COLOR = 0xFF2C3A47; // Очень темно-серый, почти черный
     
     public NavigationBar(IKernelApi api) {
         this.api = api;
+    }
+    
+    /**
+     * Устанавливает WindowManager для взаимодействия с приложениями.
+     */
+    public void setWindowManager(WindowManager windowManager) {
+        this.windowManager = windowManager;
     }
     
     /**

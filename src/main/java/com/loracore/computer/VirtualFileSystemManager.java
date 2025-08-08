@@ -22,6 +22,10 @@ public class VirtualFileSystemManager {
     private static VirtualFileSystemManager INSTANCE;
     private ResourceManager resourceManager;
     private Path worldSavePath;
+    
+    // ИСПРАВЛЕНО: Уменьшаем лимит до безопасного значения для Minecraft
+    private static final int MAX_CHUNK_SIZE = 30000; // ~22KB в base64 (безопасно для Minecraft)
+    private static final int CHUNK_SIZE = 25000; // Размер одного чанка (безопасно для Minecraft)
 
     // Приватный конструктор для синглтона
     private VirtualFileSystemManager() {}
@@ -87,12 +91,22 @@ public class VirtualFileSystemManager {
 
             case READ_BYTES:
                 try {
-                    // Этот код почти идентичен тому, что мы делали раньше.
-                    // Но он выполняется только для нашей новой, специальной операции.
-                    Path filePath = new WorldStorageVFS(worldSavePath, fsUuid).getValidatedPath(path); // Используем внутренний метод для получения пути
+                    Path filePath = new WorldStorageVFS(worldSavePath, fsUuid).getValidatedPath(path);
                     if (Files.exists(filePath) && !Files.isDirectory(filePath)) {
                         byte[] bytes = Files.readAllBytes(filePath);
                         String base64 = Base64.getEncoder().encodeToString(bytes);
+                        
+                        LoraCoreMod.LOGGER.info("File {}: {} bytes, {} base64 chars, limit: {}", 
+                            path, bytes.length, base64.length(), MAX_CHUNK_SIZE);
+                        
+                        // ИСПРАВЛЕНО: Возвращаем весь файл как LARGE_DATA, если он большой
+                        if (base64.length() > MAX_CHUNK_SIZE) {
+                            LoraCoreMod.LOGGER.info("File {} is large ({} base64 chars), will be sent as LARGE_DATA", path, base64.length());
+                            // Возвращаем ВЕСЬ файл, а не только первый чанк
+                            return new VFSResponse(VfsResponseS2CPacket.ResponseType.LARGE_DATA, base64);
+                        }
+                        
+                        LoraCoreMod.LOGGER.info("File {} is small enough ({} base64 chars), sending as STRING", path, base64.length());
                         return new VFSResponse(VfsResponseS2CPacket.ResponseType.STRING, base64);
                     }
                 } catch (IOException e) {

@@ -9,4 +9,10 @@ pluginManagement {
 		gradlePluginPortal()
 	}
 }
-include("kernel")
+include("kernel", "ai-assistant", "minimal-kernel")
+
+// Устанавливаем правильные имена проектов
+rootProject.name = 'loracore'
+project(':kernel').name = 'kernel'
+project(':ai-assistant').name = 'ai-assistant'
+project(':minimal-kernel').name = 'minimal-kernel'
