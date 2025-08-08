@@ -1,6 +1,9 @@
 // Новый файл: src/client/java/com/loracore/computer/kernel/IKernelApi.java
 package com.loracore.computer.kernel;
 
+import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
+
 /**
  * API, предоставляемое ядру для безопасного взаимодействия с модом.
  */
@@ -12,9 +15,16 @@ public interface IKernelApi {
 
     /**
      * Запускает Lua-скрипт в изолированном окружении.
-     * @return ID потока для дальнейшего взаимодействия.
+     * @param path Путь к Lua-скрипту в VFS
+     * @return CompletableFuture<Boolean> который завершается true при успешном запуске, false при ошибке
      */
-    int runLuaScript(String path);
+    CompletableFuture<Boolean> runLuaScript(String path);
+
+    /**
+     * Устанавливает исполнитель Lua-кода для ядра
+     * @param executor Consumer<String> который принимает содержимое Lua-скрипта и выполняет его
+     */
+    void setLuaExecutor(Consumer<String> executor);
 
     /**
      * Отправляет сообщение в указанный Lua-поток.
@@ -36,5 +46,11 @@ public interface IKernelApi {
      * Выключает виртуальную машину.
      */
     void shutdown();
+
+    /**
+     * Возвращает доступ к графическому API ядра.
+     */
     IKernelGraphics getGraphics();
+
+
 }

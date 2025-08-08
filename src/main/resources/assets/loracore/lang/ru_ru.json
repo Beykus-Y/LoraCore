@@ -64,6 +64,10 @@
   "gui.loracore.dialogue.gift.liked": "О, спасибо, это мне пригодится.",
   "gui.loracore.dialogue.gift.neutral": "Спасибо.",
   "gui.loracore.dialogue.gift.disliked": "Эм... спасибо, наверное.",
-  "chat.loracore.villager.hit_penalty": "Ваша дружба с %s уменьшилась на %s."
+  "chat.loracore.villager.hit_penalty": "Ваша дружба с %s уменьшилась на %s.",
+
+  "gui.loracore.crash.close": "Закрыть",
+  "structure.loracore.unknown.name": "Неизвестная структура",
+  "structure.loracore.unknown.description": "Описание генерируется..."
 
 }

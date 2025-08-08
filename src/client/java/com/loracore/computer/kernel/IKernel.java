@@ -3,8 +3,6 @@
 
 package com.loracore.computer.kernel;
 
-import net.minecraft.client.gui.DrawContext;
-
 /**
  * Контракт, который должно реализовывать любое Java-ядро для планшета.
  * Этот интерфейс находится на стороне клиента, так как он напрямую связан с рендером.
@@ -16,8 +14,13 @@ public interface IKernel {
      */
     void onBoot(IKernelApi api);
 
-
-    void onRender(Object drawContext, int mouseX, int mouseY, float delta);
+    /**
+     * Вызывается каждый кадр для отрисовки.
+     * @param mouseX координата X мыши
+     * @param mouseY координата Y мыши
+     * @param delta время между кадрами
+     */
+    void onRender(int mouseX, int mouseY, float delta);
 
     /**
      * Вызывается каждый игровой тик. Для логики, не связанной с рендером.
@@ -34,4 +37,17 @@ public interface IKernel {
      * Вызывается перед выключением VM.
      */
     void onShutdown();
+
+    // НОВЫЕ МЕТОДЫ ДЛЯ RENDERER'А
+    /**
+     * Возвращает текущее состояние ядра.
+     * @return Object - текущее состояние (enum)
+     */
+    Object getState();
+
+    /**
+     * Возвращает результаты проверок системы.
+     * @return Map<String, Boolean> - результаты проверок
+     */
+    java.util.Map<String, Boolean> getCheckResults();
 }

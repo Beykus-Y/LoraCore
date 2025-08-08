@@ -51,6 +51,10 @@
 
   "quest.loracore.debug.title": "Farmer's Request",
   "quest.loracore.debug.description": "I need 10 carrots for my stew. Can you help?",
-  "gui.loracore.dialogue.friendship": "Friendship: %s"
+  "gui.loracore.dialogue.friendship": "Friendship: %s",
+
+  "gui.loracore.crash.close": "Close",
+  "structure.loracore.unknown.name": "Unknown Structure",
+  "structure.loracore.unknown.description": "Description is being generated..."
 
 }

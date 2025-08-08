@@ -4,7 +4,6 @@ package com.loracore.computer.lualibs;
 import com.loracore.computer.*;
 import com.loracore.gui.TabletScreen;
 import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.gui.DrawContext;
 import net.minecraft.resource.Resource;
 import net.minecraft.util.Identifier;
 import org.lwjgl.glfw.GLFW;
@@ -41,7 +40,7 @@ public class LuaRuntime implements IRuntimeEnvironment {
             return null;
         };
 
-        // Создаем VM с правильными аргументами
+        // Создаем VM с правильными аргументами, включая новый обработчик перезагрузки
         this.vm = new VirtualMachine(
                 "lora_v1_lua",
                 1024, // RAM
@@ -49,7 +48,8 @@ public class LuaRuntime implements IRuntimeEnvironment {
                 loader,
                 vfs, // Блокирующая обертка над асинхронным VFS
                 vfs.getFsUuid(),
-                tabletUuid // <-- UUID самого планшета
+                tabletUuid, // <-- UUID самого планшета
+                parentScreen::rebootIntoJava // <-- Передаем ссылку на метод
         );
     }
 
@@ -65,8 +65,31 @@ public class LuaRuntime implements IRuntimeEnvironment {
         }
     }
 
+    /**
+     * Загружает и выполняет Lua-скрипт из строки
+     */
+    public void bootFromString(String scriptContent) {
+        if (scriptContent != null && !scriptContent.trim().isEmpty()) {
+            vm.start(scriptContent);
+        } else {
+            vm.setCrashState("Empty script content provided.");
+        }
+    }
+
+    /**
+     * Выполняет Lua-скрипт в уже настроенной виртуальной машине
+     * @param scriptContent Содержимое Lua-скрипта для выполнения
+     */
+    public void executeScript(String scriptContent) {
+        if (scriptContent != null && !scriptContent.trim().isEmpty()) {
+            vm.start(scriptContent);
+        } else {
+            vm.setCrashState("Empty script content provided.");
+        }
+    }
+
     @Override
-    public void render(DrawContext context, int mouseX, int mouseY, float delta) {
+    public void render(int mouseX, int mouseY, float delta) {
         // Вся логика рендера теперь на сервере. Этот метод пуст.
         // Lua-скрипты отправляют команды через GPU API.
     }
@@ -122,4 +145,15 @@ public class LuaRuntime implements IRuntimeEnvironment {
     @Override public boolean onMouseScrolled(double mouseX, double mouseY, double hAmount, double vAmount) { return false; }
     @Override public boolean onMouseClicked(double mouseX, double mouseY, int button) { return false; }
     @Override public boolean onMouseReleased(double mouseX, double mouseY, int button) { return false; }
+
+    @Override
+    public boolean needsClientSideRendering() {
+        return false; // Lua всегда рендерится на сервере
+    }
+    /**
+     * Возвращает виртуальную машину для доступа к pushEvent
+     */
+    public VirtualMachine getVm() {
+        return this.vm;
+    }
 }

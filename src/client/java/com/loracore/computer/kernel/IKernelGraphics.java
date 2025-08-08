@@ -27,4 +27,32 @@ public interface IKernelGraphics {
 
     // НОВЫЙ МЕТОД: Выключает отсечение, возвращая рендеринг в полноэкранный режим.
     void disableScissor();
+
+    // ===== НОВЫЕ НИЗКОУРОВНЕВЫЕ МЕТОДЫ =====
+
+    /**
+     * Устанавливает цвет одного пикселя.
+     * @param x Координата X
+     * @param y Координата Y
+     * @param color Цвет в формате 0xAARRGGBB
+     */
+    void setPixel(int x, int y, int color);
+
+    /**
+     * Получает цвет одного пикселя.
+     * @param x Координата X
+     * @param y Координата Y
+     * @return Цвет в формате 0xAARRGGBB
+     */
+    int getPixel(int x, int y);
+
+    /**
+     * Возвращает ширину экрана в пикселях.
+     */
+    int getWidth();
+
+    /**
+     * Возвращает высоту экрана в пикселях.
+     */
+    int getHeight();
 }

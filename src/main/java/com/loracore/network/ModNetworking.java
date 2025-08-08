@@ -87,7 +87,7 @@ public class ModNetworking {
                 );
                 LoraCoreMod.LOGGER.info("[VFS] Operation result: [{}]. Sending response to client for callbackId: {}", response.type(), payload.callbackId());
                 // Отправляем результат обратно клиенту
-                ServerPlayNetworking.send(player, new VfsResponseS2CPacket(payload.callbackId(), response.type(), response.data()));
+                ServerPlayNetworking.send(player, new VfsResponseS2CPacket(payload.fsUuid(), payload.callbackId(), response.type(), response.data()));
             });
         });
     }
@@ -168,6 +168,10 @@ public class ModNetworking {
 
                 // Получаем UUID самого планшета, который теперь гарантированно существует
                 UUID tabletUuid = stack.get(ModComponents.TABLET_UUID);
+
+                // Очищаем буфер перед новой загрузкой
+                ServerScreenState screen = TabletScreenManager.getInstance().getOrCreateScreen(stack);
+                screen.clearBuffer();
 
                 LoraCoreMod.LOGGER.info("Booting tablet. FS_UUID: {}, TABLET_UUID: {}", fsUuid, tabletUuid);
 

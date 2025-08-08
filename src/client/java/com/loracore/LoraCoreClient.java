@@ -19,9 +19,6 @@ import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.screen.Screen;
-import org.luaj.vm2.LuaValue;
-
-import java.util.UUID;
 
 import static net.fabricmc.fabric.api.client.command.v2.ClientCommandManager.literal;
 
@@ -31,7 +28,6 @@ public class LoraCoreClient implements ClientModInitializer {
             org.slf4j.LoggerFactory.getLogger(LoraCoreMod.MOD_ID + "_CLIENT");
 
     private static boolean openAskScreenFlag = false;
-    private static ClientVFS activeVfsInstance;
 
     @Override
     public void onInitializeClient() {
@@ -49,34 +45,19 @@ public class LoraCoreClient implements ClientModInitializer {
         LOGGER.info("LoraCore Client successfully initialized!");
     }
 
-
-    public static void setActiveVfsInstance(ClientVFS vfs) {
-        activeVfsInstance = vfs;
-    }
-
     private void registerPacketHandlers() {
         // Обработчик для VFS
         ClientPlayNetworking.registerGlobalReceiver(VfsResponseS2CPacket.ID, (payload, context) -> {
             context.client().execute(() -> {
-                if (activeVfsInstance != null) {
-                    LuaValue responseValue = switch (payload.type()) {
-                        case TRUE -> LuaValue.TRUE;
-                        case FALSE -> LuaValue.FALSE;
-                        case STRING, TABLE_JSON -> LuaValue.valueOf(payload.data());
-                        default -> LuaValue.NIL;
-                    };
-                    activeVfsInstance.handleResponse(payload.callbackId(), responseValue);
-                }
+                ClientVFS.dispatchResponse(payload);
             });
         });
 
         // Обработчик для загрузки планшета
         ClientPlayNetworking.registerGlobalReceiver(BootTabletS2CPacket.ID, (payload, context) -> {
             context.client().execute(() -> {
-                ClientVFS vfs = new ClientVFS(payload.fileSystemUuid());
-                setActiveVfsInstance(vfs);
                 // Передаем оба UUID в конструктор TabletScreen
-                context.client().setScreen(new TabletScreen(vfs, payload.tabletUuid()));
+                context.client().setScreen(new TabletScreen(payload.fileSystemUuid(), payload.tabletUuid()));
             });
         });
 

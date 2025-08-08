@@ -7,9 +7,12 @@ import net.minecraft.network.codec.PacketCodec;
 import net.minecraft.network.codec.PacketCodecs;
 import net.minecraft.network.packet.CustomPayload;
 import net.minecraft.util.Identifier;
+import net.minecraft.util.Uuids;
+
+import java.util.UUID;
 
 public record VfsResponseS2CPacket(
-        // +++ НОВОЕ ПОЛЕ +++
+        UUID fsUuid,
         int callbackId,
         ResponseType type,
         String data
@@ -18,7 +21,7 @@ public record VfsResponseS2CPacket(
 
     public static final CustomPayload.Id<VfsResponseS2CPacket> ID = new CustomPayload.Id<>(new Identifier(LoraCoreMod.MOD_ID, "vfs_response"));
     public static final PacketCodec<RegistryByteBuf, VfsResponseS2CPacket> CODEC = PacketCodec.tuple(
-            // +++ НОВЫЙ КОДЕК ДЛЯ ID +++
+            Uuids.PACKET_CODEC, VfsResponseS2CPacket::fsUuid,
             PacketCodecs.VAR_INT, VfsResponseS2CPacket::callbackId,
             PacketCodecs.STRING.xmap(ResponseType::valueOf, ResponseType::name), VfsResponseS2CPacket::type,
             PacketCodecs.STRING, VfsResponseS2CPacket::data,

@@ -8,6 +8,7 @@ import com.loracore.computer.device.*;
 import org.luaj.vm2.*;
 import org.luaj.vm2.lib.OneArgFunction;
 import org.luaj.vm2.lib.VarArgFunction;
+import org.luaj.vm2.lib.ZeroArgFunction;
 import org.luaj.vm2.lib.jse.JsePlatform;
 
 import java.util.ArrayList;
@@ -15,6 +16,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Consumer;
 
 public class VirtualMachine {
 
@@ -23,6 +25,7 @@ public class VirtualMachine {
     private final IAsyncVFS vfs;
     private final UUID fsUuid;
     private final UUID tabletUuid; // <-- НОВОЕ ПОЛЕ
+    private final Consumer<String> javaBootHandler; // <-- Новое поле
     private final List<Object> devices = new ArrayList<>();
     private final long startTime;
     private String crashMessage = null;
@@ -30,13 +33,14 @@ public class VirtualMachine {
     private final Map<Integer, LuaThreadRunner> threads = new ConcurrentHashMap<>();
     private static final int MAIN_THREAD_ID = 0;
 
-    // ИСПРАВЛЕНО: Конструктор теперь принимает оба UUID
-    public VirtualMachine(String architecture, int totalRamKb, Terminal terminal, ResourceLoader resourceLoader, IAsyncVFS vfs, UUID fsUuid, UUID tabletUuid) {
+    // ИСПРАВЛЕНО: Конструктор теперь принимает оба UUID и обработчик перезагрузки
+    public VirtualMachine(String architecture, int totalRamKb, Terminal terminal, ResourceLoader resourceLoader, IAsyncVFS vfs, UUID fsUuid, UUID tabletUuid, Consumer<String> javaBootHandler) {
         this.terminal = terminal;
         this.resourceLoader = resourceLoader;
         this.vfs = vfs;
         this.fsUuid = fsUuid;
         this.tabletUuid = tabletUuid; // <-- СОХРАНЯЕМ
+        this.javaBootHandler = javaBootHandler; // <-- Сохраняем обработчик
         this.startTime = System.nanoTime();
 
         this.devices.add(new ThreadDevice(this));
@@ -63,11 +67,36 @@ public class VirtualMachine {
         g.set("bios", new BiosAPI(this));
         g.set("colors", new ColorsAPI());
         g.set("require", new CustomRequire(g));
+        g.set("loadfile", new CustomLoadFile(g));
 
         if (this.vfs != null) {
             // Теперь мы передаем runner, который гарантированно не null
             g.set("fs", new FsAPI(runner, this.vfs));
         }
+
+        // Добавляем API term для терминала
+        LuaTable termApi = new LuaTable();
+        termApi.set("write", new OneArgFunction() {
+            @Override
+            public LuaValue call(LuaValue arg) {
+                ClientApi.executeOnRenderThread(() -> terminal.print(arg.tojstring()));
+                return LuaValue.NIL;
+            }
+        });
+        termApi.set("read", new ZeroArgFunction() {
+            @Override
+            public LuaValue call() {
+                return LuaValue.valueOf(terminal.read());
+            }
+        });
+        termApi.set("clear", new ZeroArgFunction() {
+            @Override
+            public LuaValue call() {
+                ClientApi.executeOnRenderThread(terminal::clear);
+                return LuaValue.NIL;
+            }
+        });
+        g.set("term", termApi);
 
         LuaTable tabletApi = new LuaTable();
         for (Object device : this.devices) {
@@ -178,6 +207,15 @@ public class VirtualMachine {
         return this.crashMessage;
     }
 
+    /**
+     * Вызывается из Lua API для перезагрузки в Java-режим
+     */
+    public void bootJava(String path) {
+        if (this.javaBootHandler != null) {
+            this.javaBootHandler.accept(path);
+        }
+    }
+
     private class CustomRequire extends VarArgFunction {
         private final Globals globals;
         public CustomRequire(Globals globals) { this.globals = globals; }
@@ -194,6 +232,26 @@ public class VirtualMachine {
             LuaValue result = chunk.call();
             globals.get("package").get("loaded").set(path, result);
             return result;
+        }
+    }
+
+    private class CustomLoadFile extends OneArgFunction {
+        private final Globals globals;
+        public CustomLoadFile(Globals globals) { this.globals = globals; }
+
+        @Override
+        public LuaValue call(LuaValue arg) {
+            String filePath = arg.checkjstring();
+            String scriptContent = resourceLoader.load(filePath);
+            if (scriptContent == null) {
+                return NIL; // loadfile возвращает nil при ошибке
+            }
+            try {
+                LuaValue chunk = globals.load(scriptContent, "@" + filePath);
+                return chunk;
+            } catch (Exception e) {
+                return NIL; // loadfile возвращает nil при ошибке
+            }
         }
     }
 }

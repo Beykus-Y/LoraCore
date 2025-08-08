@@ -49,4 +49,12 @@ public class ServerScreenState {
     public void clearDirtyFlag() {
         this.isDirty = false;
     }
+
+    public void clearBuffer() {
+        java.util.Arrays.fill(this.pixelBuffer, (byte)0);
+        for (int i = 3; i < this.pixelBuffer.length; i += 4) {
+            this.pixelBuffer[i] = (byte)255; // Alpha
+        }
+        this.isDirty = true;
+    }
 }

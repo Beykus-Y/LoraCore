@@ -2,22 +2,52 @@
 package com.loracore.computer;
 
 import com.loracore.network.vfs.VfsRequestC2SPacket;
+import com.loracore.network.vfs.VfsResponseS2CPacket;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
+import org.luaj.vm2.LuaTable;
 import org.luaj.vm2.LuaValue;
 
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
-// ИСПРАВЛЕНИЕ: Класс теперь реализует и старый IVfsRequester, и новый IBlockingVFS.
+// ИСПРАВЛЕНИЕ: Класс теперь реализует и старый IVfsRequester, и новый IBlockingVFS, и IAsyncVFS.
+// УДАЛЕН Closeable - ClientVFS теперь управляется как синглтон.
 public class ClientVFS implements IVfsRequester, IBlockingVFS, IAsyncVFS {
+    private static final Map<UUID, ClientVFS> INSTANCES = new ConcurrentHashMap<>();
+
     private final UUID fsUuid;
     private final ConcurrentHashMap<Integer, BlockingQueue<LuaValue>> responseQueues = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<Integer, CompletableFuture<LuaValue>> asyncResponseFutures = new ConcurrentHashMap<>();
     private final AtomicInteger nextCallbackId = new AtomicInteger(0);
 
-    public ClientVFS(UUID fsUuid) {
+    // Сделаем конструктор приватным - теперь используется только через getInstance
+    private ClientVFS(UUID fsUuid) {
         this.fsUuid = fsUuid;
+    }
+
+    // Статический метод для получения экземпляра синглтона
+    public static synchronized ClientVFS getInstance(UUID fsUuid) {
+        return INSTANCES.computeIfAbsent(fsUuid, ClientVFS::new);
+    }
+
+    public static void dispatchResponse(VfsResponseS2CPacket payload) {
+        try {
+            ClientVFS vfs = INSTANCES.get(payload.fsUuid());
+            if (vfs == null) {
+                return;
+            }
+            LuaValue responseValue = switch (payload.type()) {
+                case TRUE -> LuaValue.TRUE;
+                case FALSE -> LuaValue.FALSE;
+                case STRING, TABLE_JSON -> LuaValue.valueOf(payload.data());
+                default -> LuaValue.NIL;
+            };
+            vfs.handleResponse(payload.callbackId(), responseValue);
+        } catch (Exception e) {
+            com.loracore.LoraCoreClient.LOGGER.error("Failed to dispatch VFS response for fs_uuid {}", payload.fsUuid(), e);
+        }
     }
 
     public UUID getFsUuid() {
@@ -30,7 +60,6 @@ public class ClientVFS implements IVfsRequester, IBlockingVFS, IAsyncVFS {
             return;
         }
         if (responseQueues.containsKey(callbackId)) {
-            // ИСПРАВЛЕНИЕ: Добавлена проверка на случай, если очередь уже удалена.
             BlockingQueue<LuaValue> queue = responseQueues.get(callbackId);
             if (queue != null) {
                 queue.offer(response);
@@ -47,17 +76,16 @@ public class ClientVFS implements IVfsRequester, IBlockingVFS, IAsyncVFS {
         return nextCallbackId.getAndIncrement();
     }
 
-    // --- Секция асинхронных методов (без изменений) ---
-    public CompletableFuture<LuaValue> existsAsync(String path) {
-        return sendAsyncRequest(VfsRequestC2SPacket.Operation.EXISTS, path, "");
-    }
-    // ... и остальные асинхронные методы ...
+    // --- Секция асинхронных методов ---
+    public CompletableFuture<LuaValue> existsAsync(String path) { return sendAsyncRequest(VfsRequestC2SPacket.Operation.EXISTS, path, ""); }
     public CompletableFuture<LuaValue> isDirectoryAsync(String path) { return sendAsyncRequest(VfsRequestC2SPacket.Operation.ISDIR, path, ""); }
     public CompletableFuture<LuaValue> readAsync(String path) { return sendAsyncRequest(VfsRequestC2SPacket.Operation.READ, path, ""); }
     public CompletableFuture<LuaValue> writeAsync(String path, String content) { return sendAsyncRequest(VfsRequestC2SPacket.Operation.WRITE, path, content); }
     public CompletableFuture<LuaValue> makeDirAsync(String path) { return sendAsyncRequest(VfsRequestC2SPacket.Operation.MAKEDIR, path, ""); }
     public CompletableFuture<LuaValue> deleteAsync(String path) { return sendAsyncRequest(VfsRequestC2SPacket.Operation.DELETE, path, ""); }
     public CompletableFuture<LuaValue> listAsync(String path) { return sendAsyncRequest(VfsRequestC2SPacket.Operation.LIST, path, ""); }
+    public CompletableFuture<LuaValue> readBytesAsync(String path) { return sendAsyncRequest(VfsRequestC2SPacket.Operation.READ_BYTES, path, ""); }
+
     private CompletableFuture<LuaValue> sendAsyncRequest(VfsRequestC2SPacket.Operation op, String path, String content) {
         int callbackId = getNextCallbackId();
         CompletableFuture<LuaValue> future = new CompletableFuture<>();
@@ -66,8 +94,7 @@ public class ClientVFS implements IVfsRequester, IBlockingVFS, IAsyncVFS {
         return future;
     }
 
-    // --- Секция блокирующих методов, реализующая интерфейс IBlockingVFS ---
-
+    // --- Блокирующие методы IBlockingVFS ---
     private LuaValue requestBlocking(VfsRequestC2SPacket.Operation op, String path, String... data) {
         int callbackId = getNextCallbackId();
         responseQueues.put(callbackId, new LinkedBlockingQueue<>(1));
@@ -87,11 +114,7 @@ public class ClientVFS implements IVfsRequester, IBlockingVFS, IAsyncVFS {
             responseQueues.remove(callbackId);
         }
     }
-    public CompletableFuture<LuaValue> readBytesAsync(String path) {
-        return sendAsyncRequest(VfsRequestC2SPacket.Operation.READ_BYTES, path, "");
-    }
 
-    // @Override отмечает, что мы реализуем методы из интерфейса IBlockingVFS
     @Override public LuaValue readBlocking(String path) { return requestBlocking(VfsRequestC2SPacket.Operation.READ, path); }
     @Override public LuaValue existsBlocking(String path) { return requestBlocking(VfsRequestC2SPacket.Operation.EXISTS, path); }
     @Override public LuaValue writeBlocking(String path, String content) { return requestBlocking(VfsRequestC2SPacket.Operation.WRITE, path, content); }

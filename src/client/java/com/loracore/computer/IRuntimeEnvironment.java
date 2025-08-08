@@ -1,8 +1,6 @@
 // Полный исправленный файл: src/client/java/com/loracore/computer/IRuntimeEnvironment.java
 package com.loracore.computer;
 
-import net.minecraft.client.gui.DrawContext;
-
 /**
  * Абстракция над средой выполнения планшета (Lua VM или Java Kernel).
  * Позволяет TabletScreen управлять любой средой через единый интерфейс.
@@ -18,7 +16,7 @@ public interface IRuntimeEnvironment {
     /**
      * Вызывается каждый кадр для отрисовки содержимого.
      */
-    void render(DrawContext context, int mouseX, int mouseY, float delta);
+    void render(int mouseX, int mouseY, float delta);
 
     /**
      * Вызывается каждый игровой тик для фоновой логики.
@@ -78,4 +76,14 @@ public interface IRuntimeEnvironment {
      * @return true, если событие было обработано.
      */
     boolean onMouseReleased(double mouseX, double mouseY, int button);
+
+
+    /**
+     * [НОВЫЙ МЕТОД]
+     * Определяет, должен ли TabletScreen вызывать метод render() этой среды.
+     * LuaRuntime вернет false (рендеринг на сервере).
+     * JavaRuntime вернет true, только когда находится в состоянии загрузки.
+     * @return true, если требуется прямой рендеринг на клиенте.
+     */
+    boolean needsClientSideRendering();
 }

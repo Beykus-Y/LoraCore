@@ -34,6 +34,7 @@ public class OsAPI extends LibFunction {
         osTable.set("reboot", new reboot(vm));
         osTable.set("sleep", new sleep(vm, coroutine_yield)); // Передаем 'yield' в конструктор
         osTable.set("pullEvent", new pullEvent(coroutine_yield)); // Передаем 'yield' в конструктор
+        osTable.set("boot_java", new boot_java(vm)); // <-- Добавь эту строку
 
         env.get("package").get("loaded").set("loracore_os", osTable);
         return osTable;
@@ -83,6 +84,21 @@ public class OsAPI extends LibFunction {
         public Varargs invoke(Varargs args) {
             // ИСПРАВЛЕНИЕ 3: Вызываем сохраненную функцию yield
             return yield.invoke(args);
+        }
+    }
+
+    // Добавь новый внутренний класс для команды
+    private static class boot_java extends OneArgFunction {
+        private final VirtualMachine vm;
+        public boot_java(VirtualMachine vm) { this.vm = vm; }
+        
+        @Override
+        public LuaValue call(LuaValue arg) {
+            String path = arg.checkjstring();
+            vm.bootJava(path);
+            // Эта функция не должна возвращать управление, так как VM перезагружается.
+            // Но на всякий случай вернем nil.
+            throw new RebootSignalException();
         }
     }
 }

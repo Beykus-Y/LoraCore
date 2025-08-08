@@ -5,6 +5,7 @@ import com.loracore.LoraCoreClient;
 import com.loracore.LoraCoreMod; // Импортируем, чтобы получить MOD_ID
 import com.loracore.computer.ClientVFS;
 import com.loracore.computer.IRuntimeEnvironment;
+import com.loracore.computer.LuaExecutor;
 import com.loracore.computer.jkernel.JavaRuntime;
 import com.loracore.computer.lualibs.LuaRuntime;
 import com.mojang.blaze3d.systems.RenderSystem;
@@ -24,7 +25,8 @@ import java.util.UUID;
 public class TabletScreen extends Screen {
 
     private final UUID tabletUuid;
-    private final ClientVFS vfs;
+    private final UUID fileSystemUuid;
+    private ClientVFS vfs;
 
     private static final int BACKGROUND_OVERLAY_COLOR = 0xB0000000;
     private static final int TABLET_BORDER_COLOR = 0xFF0A0A0A;
@@ -42,6 +44,12 @@ public class TabletScreen extends Screen {
 
     private IRuntimeEnvironment runtime;
 
+    // Централизованный исполнитель Lua-скриптов
+    private LuaExecutor luaExecutor;
+    
+    // Активный шелл для выполнения Lua-скриптов
+    private IRuntimeEnvironment activeShell = null;
+
     private int tabletX, tabletY, tabletWidth, tabletHeight;
 
     // ИСПРАВЛЕНИЕ 1: Меняем тип с DynamicTexture на конкретный класс NativeImageBackedTexture
@@ -49,9 +57,9 @@ public class TabletScreen extends Screen {
     private NativeImageBackedTexture screenTexture;
     private Identifier screenTextureId;
 
-    public TabletScreen(ClientVFS vfs, UUID tabletUuid) {
+    public TabletScreen(UUID fileSystemUuid, UUID tabletUuid) {
         super(Text.literal("LoraOS"));
-        this.vfs = vfs;
+        this.fileSystemUuid = fileSystemUuid;
         this.tabletUuid = tabletUuid;
         // ИСПРАВЛЕНИЕ 2: Создаем уникальный Identifier для текстуры нашего экрана
         this.screenTextureId = new Identifier(LoraCoreMod.MOD_ID, "tablet_screen/" + this.tabletUuid.toString());
@@ -60,19 +68,71 @@ public class TabletScreen extends Screen {
     public UUID getTabletUuid() { return this.tabletUuid; }
     public int getTabletPixelWidth() { return SCREEN_PIXEL_WIDTH; }
     public int getTabletPixelHeight() { return SCREEN_PIXEL_HEIGHT; }
+    public ClientVFS getVfs() { return this.vfs; }
+    public NativeImage getScreenImage() { return this.screenImage; }
+
+    /**
+     * Устанавливает активный шелл для управления жизненным циклом
+     */
+    public void setActiveShell(IRuntimeEnvironment shell) {
+        // Закрываем предыдущий шелл, если он существует
+        if (this.activeShell != null) {
+            this.activeShell.shutdown();
+        }
+        this.activeShell = shell;
+        this.currentState = State.RUNNING;
+    }
+
+    /**
+     * Возвращает централизованный Lua-исполнитель
+     */
+    public LuaExecutor getLuaExecutor() {
+        return this.luaExecutor;
+    }
+
+    /**
+     * Устанавливает состояние краша с сообщением
+     */
+    public void setCrashState(String message) {
+        this.currentState = State.CRASHED;
+        this.statusMessage = message;
+        LoraCoreClient.LOGGER.error("TabletScreen crash state: {}", message);
+    }
+
+    /**
+     * Вызывается из Lua, чтобы перезагрузить планшет напрямую в Java-режим.
+     */
+    public void rebootIntoJava(String jarPath) {
+        if (this.runtime != null) {
+            this.runtime.shutdown(); // Выключаем текущий LuaRuntime
+        }
+        
+        this.statusMessage = "JAVA mode detected. Booting kernel...";
+        
+        // Создаем и запускаем JavaRuntime
+        this.runtime = new JavaRuntime(this, vfs);
+        this.runtime.boot(jarPath);
+    }
+
+    /**
+     * Отправляет событие в активный Lua-шелл
+     */
+
 
     @Override
     protected void init() {
         super.init();
-        LoraCoreClient.setActiveVfsInstance(this.vfs);
         calculateTabletDimensions();
 
-        // ИСПРАВЛЕНИЕ 3: Полностью переработана логика создания текстуры
-        // Создаем "холст" для рисования (NativeImage)
+        // Создаем новый экземпляр ClientVFS для каждого открытия экрана
+        this.vfs = ClientVFS.getInstance(this.fileSystemUuid);
+
+        // Инициализируем централизованный Lua-исполнитель
+        this.luaExecutor = new LuaExecutor(this, vfs);
+
+        // Создаем буфер пикселей и текстуру
         this.screenImage = new NativeImage(NativeImage.Format.RGBA, SCREEN_PIXEL_WIDTH, SCREEN_PIXEL_HEIGHT, false);
-        // Создаем текстуру, которая будет отображать наш холст
         this.screenTexture = new NativeImageBackedTexture(this.screenImage);
-        // Регистрируем нашу текстуру в менеджере текстур игры, чтобы ее можно было рисовать
         this.client.getTextureManager().registerTexture(this.screenTextureId, this.screenTexture);
 
         initializeRuntime();
@@ -80,22 +140,13 @@ public class TabletScreen extends Screen {
 
     private void initializeRuntime() {
         this.currentState = State.LOADING;
-        this.statusMessage = "Reading boot config...";
+        this.statusMessage = "LoraBIOS initializing...";
 
-        vfs.existsAsync(JAVA_BOOT_PATH).whenComplete((exists, error) -> {
-            client.execute(() -> {
-                if (error == null && exists.toboolean()) {
-                    this.statusMessage = "JAVA mode detected. Booting kernel...";
-                    this.runtime = new JavaRuntime(this, vfs);
-                    this.runtime.boot(JAVA_BOOT_PATH);
-                } else {
-                    this.statusMessage = "LUA mode detected. Booting recovery...";
-                    this.runtime = new LuaRuntime(this, vfs);
-                    this.runtime.boot(LUA_BOOT_PATH);
-                }
-                this.currentState = State.RUNNING;
-            });
-        });
+        // Безусловно запускаем LuaRuntime с новым BIOS-скриптом
+        this.runtime = new LuaRuntime(this, vfs);
+        this.runtime.boot("os/bios.lua"); // <-- Новый путь к BIOS
+
+        // Состояние изменится на RUNNING, когда Lua-код начнет выполняться
     }
 
     public void onScreenUpdate(byte[] pixelBuffer) {
@@ -130,15 +181,23 @@ public class TabletScreen extends Screen {
         context.fill(tabletX, tabletY, tabletX + tabletWidth, tabletY + tabletHeight, TABLET_BORDER_COLOR);
         context.fill(tabletX + 2, tabletY + 2, tabletX + tabletWidth - 2, tabletY + tabletHeight - 2, TABLET_BG_COLOR);
 
+        // Всегда: загружаем обновлённые пиксели из NativeImage на GPU
+        if (this.screenTexture != null) {
+            this.screenTexture.upload();
+        }
+
+        // Всегда: рисуем текстуру экрана планшета
         if (screenTextureId != null) {
             RenderSystem.setShader(GameRenderer::getPositionTexProgram);
             RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
             RenderSystem.enableBlend();
-            // ИСПРАВЛЕНИЕ 5: Используем правильный Identifier вместо строки
             context.drawTexture(screenTextureId, tabletX + 2, tabletY + 2, 0, 0, tabletWidth - 4, tabletHeight - 4, tabletWidth - 4, tabletHeight - 4);
             RenderSystem.disableBlend();
         }
 
+        // Больше не есть прямого рисования поверх: ядро обновляет пиксельный буфер
+
+        // Рисуем оверлей с сообщениями о загрузке/краше, если нужно
         if (currentState == State.LOADING || currentState == State.CRASHED) {
             context.getMatrices().push();
             context.getMatrices().translate(tabletX + (tabletWidth / 2f), tabletY + (tabletHeight / 2f), 10);
@@ -164,21 +223,31 @@ public class TabletScreen extends Screen {
 
     @Override
     public void tick() {
-        if (currentState == State.RUNNING && runtime != null) {
+        if (runtime != null) {
+            // Важно: запрос ядра на обновление буфера происходит в тике
+            if (runtime instanceof JavaRuntime) {
+                runtime.render(0, 0, 0);
+            }
+
             runtime.tick();
             if (runtime.getCrashMessage() != null) {
                 this.currentState = State.CRASHED;
                 this.statusMessage = runtime.getCrashMessage();
                 runtime.shutdown();
-            } else if (!runtime.isRunning()) {
-                this.currentState = State.HALTED;
+            } else if (runtime.isRunning()) {
+                this.currentState = State.RUNNING;
             }
         }
     }
 
     public void reboot() {
         if (this.client != null) {
-            this.client.execute(() -> this.client.setScreen(new TabletScreen(this.vfs, this.tabletUuid)));
+            // Закрываем активный шелл перед перезагрузкой
+            if (activeShell != null) {
+                activeShell.shutdown();
+                activeShell = null;
+            }
+            this.client.execute(() -> this.client.setScreen(new TabletScreen(this.fileSystemUuid, this.tabletUuid)));
         }
     }
 
@@ -192,6 +261,13 @@ public class TabletScreen extends Screen {
             this.screenTexture.close();
         }
 
+        // Закрываем активный шелл
+        if (activeShell != null) {
+            activeShell.shutdown();
+            activeShell = null;
+        }
+        // УДАЛЕНО: vfs.close() - ClientVFS теперь управляется как синглтон
+
         super.close();
     }
 
@@ -200,7 +276,12 @@ public class TabletScreen extends Screen {
         if (runtime != null) {
             runtime.shutdown();
         }
-        LoraCoreClient.setActiveVfsInstance(null);
+        // Закрываем активный шелл
+        if (activeShell != null) {
+            activeShell.shutdown();
+            activeShell = null;
+        }
+        // УДАЛЕНО: vfs.close() - ClientVFS теперь управляется как синглтон
         super.removed();
     }
 
@@ -210,22 +291,41 @@ public class TabletScreen extends Screen {
             this.close();
             return true;
         }
-        if (runtime != null && currentState == State.RUNNING) {
+
+        // ПРИОРИТЕТ 1: Если запущен Lua-шелл, весь ввод идет ему.
+        if (activeShell != null && activeShell.isRunning()) {
+            return activeShell.onKeyPressed(keyCode, scanCode, modifiers);
+        }
+
+        // ПРИОРИТЕТ 2: Если шелла нет, но есть ядро (в процессе загрузки), ввод идет ему.
+        if (runtime != null && currentState != State.HALTED) {
             return runtime.onKeyPressed(keyCode, scanCode, modifiers);
         }
+
         return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
-    // ... Остальные методы ввода (charTyped, mouseClicked, etc.) без изменений ...
     @Override
     public boolean charTyped(char chr, int modifiers) {
-        if (runtime != null && currentState == State.RUNNING) return runtime.onCharTyped(chr, modifiers);
+        if (activeShell != null && activeShell.isRunning()) {
+            return activeShell.onCharTyped(chr, modifiers);
+        }
+        if (runtime != null && currentState != State.HALTED) {
+            return runtime.onCharTyped(chr, modifiers);
+        }
         return super.charTyped(chr, modifiers);
     }
-
+    
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        if (runtime != null && currentState == State.RUNNING) {
+        if (activeShell != null && activeShell.isRunning()) {
+            double localX = (mouseX - (tabletX + 2)) * ((double)SCREEN_PIXEL_WIDTH / (tabletWidth - 4));
+            double localY = (mouseY - (tabletY + 2)) * ((double)SCREEN_PIXEL_HEIGHT / (tabletHeight - 4));
+            if (localX >= 0 && localX < SCREEN_PIXEL_WIDTH && localY >= 0 && localY < SCREEN_PIXEL_HEIGHT) {
+                return activeShell.onMouseClicked(localX, localY, button);
+            }
+        }
+        if (runtime != null && currentState != State.HALTED) {
             double localX = (mouseX - (tabletX + 2)) * ((double)SCREEN_PIXEL_WIDTH / (tabletWidth - 4));
             double localY = (mouseY - (tabletY + 2)) * ((double)SCREEN_PIXEL_HEIGHT / (tabletHeight - 4));
             if (localX >= 0 && localX < SCREEN_PIXEL_WIDTH && localY >= 0 && localY < SCREEN_PIXEL_HEIGHT) {

@@ -6,15 +6,19 @@ import com.loracore.computer.IRuntimeEnvironment;
 import com.loracore.computer.KernelManager;
 import com.loracore.computer.kernel.KernelEvent;
 import com.loracore.gui.TabletScreen;
-import net.minecraft.client.gui.DrawContext;
 
 public class JavaRuntime implements IRuntimeEnvironment {
 
     private final KernelManager kernelManager;
+    // Поле parentScreen больше не нужно, удаляем его
+    // private final TabletScreen parentScreen;
 
     public JavaRuntime(TabletScreen parentScreen, ClientVFS vfs) {
-        // ИСПРАВЛЕНО: Передаем UUID планшета из родительского экрана в KernelManager
-        this.kernelManager = new KernelManager(vfs, parentScreen.getTabletUuid(), parentScreen);
+        // this.parentScreen = parentScreen; // Удаляем присваивание
+        this.kernelManager = new KernelManager(vfs, parentScreen.getTabletUuid(), parentScreen, parentScreen.getScreenImage());
+
+        // Эта строка остается, она важна для моста Java -> Lua
+        this.kernelManager.setLuaExecutor(parentScreen.getLuaExecutor()::execute);
     }
 
     @Override
@@ -23,11 +27,22 @@ public class JavaRuntime implements IRuntimeEnvironment {
     }
 
     @Override
-    public void render(DrawContext context, int mouseX, int mouseY, float delta) {
-        if (kernelManager != null && kernelManager.isRunning()) {
-            kernelManager.render(context, mouseX, mouseY, delta);
-        }
+    public void render(int mouseX, int mouseY, float delta) {
+        // Вся логика рендеринга инкапсулирована в KernelManager.
+        // Он сам решает, что рисовать (экран загрузки, BSOD или ничего).
+        kernelManager.render(mouseX, mouseY, delta);
     }
+
+    // --- Новый, исправленный метод ---
+    @Override
+    public boolean needsClientSideRendering() {
+        // Если мы работаем в JavaRuntime, мы ВСЕГДА предполагаем,
+        // что рендеринг происходит на клиенте. Это самое простое и гибкое решение
+        // для поддержки будущих полноценных GUI в ядре.
+        return true;
+    }
+
+    // --- Остальные методы остаются без изменений ---
 
     @Override
     public void tick() {
@@ -49,6 +64,7 @@ public class JavaRuntime implements IRuntimeEnvironment {
         return kernelManager.getCrashMessage();
     }
 
+    // ... (все методы onKeyPressed, onMouseClicked и т.д. остаются как есть)
     @Override
     public boolean onKeyPressed(int keyCode, int scanCode, int modifiers) {
         kernelManager.onEvent(new KernelEvent.KeyPressed(keyCode, scanCode, modifiers));
