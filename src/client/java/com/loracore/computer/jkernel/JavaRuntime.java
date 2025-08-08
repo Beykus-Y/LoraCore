@@ -10,12 +10,14 @@ import com.loracore.gui.TabletScreen;
 public class JavaRuntime implements IRuntimeEnvironment {
 
     private final KernelManager kernelManager;
+    private final boolean isOwner;
     // Поле parentScreen больше не нужно, удаляем его
     // private final TabletScreen parentScreen;
 
-    public JavaRuntime(TabletScreen parentScreen, ClientVFS vfs) {
+    public JavaRuntime(TabletScreen parentScreen, ClientVFS vfs, boolean isOwner) {
         // this.parentScreen = parentScreen; // Удаляем присваивание
-        this.kernelManager = new KernelManager(vfs, parentScreen.getTabletUuid(), parentScreen, parentScreen.getScreenImage());
+        this.isOwner = isOwner;
+        this.kernelManager = new KernelManager(vfs, parentScreen.getTabletUuid(), parentScreen, parentScreen.getScreenImage(), isOwner);
 
         // Эта строка остается, она важна для моста Java -> Lua
         this.kernelManager.setLuaExecutor(parentScreen.getLuaExecutor()::execute);
@@ -36,10 +38,8 @@ public class JavaRuntime implements IRuntimeEnvironment {
     // --- Новый, исправленный метод ---
     @Override
     public boolean needsClientSideRendering() {
-        // Если мы работаем в JavaRuntime, мы ВСЕГДА предполагаем,
-        // что рендеринг происходит на клиенте. Это самое простое и гибкое решение
-        // для поддержки будущих полноценных GUI в ядре.
-        return true;
+        // Возвращаем true только если это владелец планшета
+        return isOwner;
     }
 
     // --- Остальные методы остаются без изменений ---

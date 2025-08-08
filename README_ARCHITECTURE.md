@@ -40,9 +40,15 @@ kernel/
 │   ├── core/              # Основные компоненты ядра
 │   │   ├── IApplication.java
 │   │   ├── IApplicationApi.java
+│   │   ├── ApplicationApiImpl.java
+│   │   ├── JarClassLoader.java
 │   │   └── LoraOSKernel.java
 │   ├── ui/                # Пользовательский интерфейс
-│   └── state/             # Управление состоянием
+│   │   ├── desktop/       # Рабочий стол
+│   │   ├── navigation/    # Навигационная панель
+│   │   └── window/        # Управление окнами
+│   ├── state/             # Управление состоянием
+│   └── util/              # Утилиты
 ```
 
 ### AI Assistant (ai-assistant)
@@ -96,29 +102,57 @@ public interface IApplicationApi {
 }
 ```
 
+### ApplicationApiImpl
+Реализация безопасного API для приложений с ограниченным доступом к системным ресурсам.
+
+### JarClassLoader
+Загрузчик классов из JAR-файлов с поддержкой манифестов и автоматической загрузкой приложений.
+
+### WindowManager
+Управление активными приложениями с поддержкой .lua и .jar файлов.
+
 ## Создание приложений
 
 ### 1. Создайте класс приложения
 ```java
 public class MyApp implements IApplication {
+    private IApplicationApi api;
+    private IKernelGraphics graphics;
+    
     @Override
     public void onLoad(IApplicationApi api) {
-        // Инициализация
+        this.api = api;
+        this.graphics = api.getGraphics();
+        // Инициализация приложения
     }
     
     @Override
     public void onRender(IKernelGraphics g, int mouseX, int mouseY, float delta) {
-        // Отрисовка
+        // Отрисовка интерфейса
+        g.beginFrame();
+        g.fill(0, 0, 480, 270, 0x1E1E1E); // Черный фон
+        g.drawCenteredString("My Application", 240, 135, 0xF0F0F0);
+        g.endFrame();
     }
     
     @Override
     public void onEvent(KernelEvent event) {
         // Обработка событий
+        switch (event) {
+            case KernelEvent.KeyPressed keyEvent -> {
+                if (keyEvent.keyCode() == GLFW.GLFW_KEY_ESCAPE) {
+                    // Закрытие приложения
+                }
+            }
+            case KernelEvent.MouseClicked mouseEvent -> {
+                // Обработка клика мыши
+            }
+        }
     }
     
     @Override
     public void onClose() {
-        // Очистка
+        // Очистка ресурсов
     }
 }
 ```
@@ -136,15 +170,22 @@ jar -cf myapp.jar -C bin . META-INF/
 
 ## Следующие шаги
 
-1. **Исправить проблему с размером пакетов**:
-   - Реализовать разделение больших файлов на части
-   - Обновить клиентскую сторону для сборки частей
+1. **Дополнительные приложения**:
+   - Создать больше примеров приложений (калькулятор, календарь, файловый менеджер)
+   - Добавить библиотеку стандартных компонентов UI
 
-2. **Улучшить архитектуру приложений**:
-   - Создать систему зависимостей для приложений
-   - Добавить версионирование приложений
+2. **Система уведомлений**:
+   - Реализовать систему уведомлений для приложений
+   - Добавить центр уведомлений
 
-3. **Добавить функциональность**:
-   - Система уведомлений
-   - Многозадачность
-   - Система плагинов
+3. **Многозадачность**:
+   - Улучшить управление несколькими активными приложениями
+   - Добавить переключение между приложениями
+
+4. **Система плагинов**:
+   - Расширить API для создания плагинов
+   - Добавить систему зависимостей для приложений
+
+5. **Улучшенная графика**:
+   - Добавить новые визуальные эффекты и анимации
+   - Реализовать систему тем оформления

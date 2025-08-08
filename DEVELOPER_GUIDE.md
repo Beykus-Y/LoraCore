@@ -54,6 +54,16 @@ BIOS (Basic Input/Output System) - это первичный загрузчик,
 
 Java-ядро - это основная компонента операционной системы, которая управляет жизненным циклом приложений и взаимодействует с оборудованием планшета. Любое Java-ядро должно реализовывать интерфейс `IKernel`.
 
+### Новые возможности в версии 1.3.0
+
+В версии 1.3.0 добавлена поддержка Java-приложений через интерфейс `IApplication`:
+
+- **`IApplication`** - Контракт для всех Java-приложений
+- **`IApplicationApi`** - Безопасный API для приложений
+- **`ApplicationApiImpl`** - Реализация безопасного API
+- **`JarClassLoader`** - Загрузчик классов из JAR-файлов
+- **`WindowManager`** - Управление активными приложениями
+
 ### Жизненный цикл ядра
 
 #### `onBoot(IKernelApi api)`
@@ -129,6 +139,13 @@ Java-ядро получает доступ к трем основным API ч�
 - **`drawString(String text, int x, int y, int color)`**: Рисование текста
 - **`drawCenteredString(String text, int centerX, int y, int color)`**: Рисование центрированного текста
 - **`getStringWidth(String text)`**: Получение ширины текста
+
+
+#### Рисование по пикселям
+- **`setPixel(int x, int y, int color)**: установка цвета отдельного пикселя
+- **`getPixel(int x, int y)**: получение цвета пикселя
+- **`getWidth()**: получение ширины экрана
+- **`getHeight()**: получение высоты экрана
 
 #### Трансформации
 - **`translate(double x, double y, double z)`**: Смещение системы координат
@@ -231,6 +248,75 @@ jar {
 ### Установка ядра
 
 Скопируйте JAR-файл в `/boot/kernel.jar` в виртуальной файловой системе планшета.
+
+## Создание Java-приложений: Интерфейс IApplication
+
+### Создание Java-приложения
+
+Java-приложения должны реализовывать интерфейс `IApplication`:
+
+```java
+public class MyApp implements IApplication {
+    private IApplicationApi api;
+    private IKernelGraphics graphics;
+    
+    @Override
+    public void onLoad(IApplicationApi api) {
+        this.api = api;
+        this.graphics = api.getGraphics();
+        // Инициализация приложения
+    }
+    
+    @Override
+    public void onRender(IKernelGraphics g, int mouseX, int mouseY, float delta) {
+        // Отрисовка интерфейса
+        g.beginFrame();
+        g.fill(0, 0, 480, 270, 0x1E1E1E); // Черный фон
+        g.drawCenteredString("My Application", 240, 135, 0xF0F0F0);
+        g.endFrame();
+    }
+    
+    @Override
+    public void onEvent(KernelEvent event) {
+        // Обработка событий
+        switch (event) {
+            case KernelEvent.KeyPressed keyEvent -> {
+                if (keyEvent.keyCode() == GLFW.GLFW_KEY_ESCAPE) {
+                    // Закрытие приложения
+                }
+            }
+            case KernelEvent.MouseClicked mouseEvent -> {
+                // Обработка клика мыши
+            }
+        }
+    }
+    
+    @Override
+    public void onClose() {
+        // Очистка ресурсов
+    }
+}
+```
+
+### API для приложений
+
+Приложения получают доступ к безопасному API через `IApplicationApi`:
+
+- **`getVfs()`** - доступ к файловой системе
+- **`getGraphics()`** - графический API
+- **`askAI(String prompt)`** - запрос к ИИ
+- **`getScreenSize()`** - размер экрана
+- **`runLuaScript(String path)`** - запуск Lua-скриптов
+
+### Сборка и установка
+
+1. Создайте манифест `META-INF/MANIFEST.MF`:
+```
+Manifest-Version: 1.0
+App-Main-Class: com.example.MyApp
+```
+
+2. Упакуйте в JAR-файл и поместите в `/home/user/apps/`
 
 ## Создание Lua-приложений: Глобальные API
 

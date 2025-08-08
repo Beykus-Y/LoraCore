@@ -33,10 +33,10 @@ public class KernelManager {
     private boolean isRunning = false;
     private String crashError = null;
 
-    public KernelManager(ClientVFS vfs, UUID tabletUuid, TabletScreen parentScreen, net.minecraft.client.texture.NativeImage screenImage) {
+    public KernelManager(ClientVFS vfs, UUID tabletUuid, TabletScreen parentScreen, net.minecraft.client.texture.NativeImage screenImage, boolean isOwner) {
         this.parentScreen = parentScreen;
         this.classLoader = new JarClassLoader(getClass().getClassLoader());
-        this.api = new KernelApiImpl(vfs, tabletUuid, parentScreen, screenImage);
+        this.api = new KernelApiImpl(vfs, tabletUuid, parentScreen, screenImage, isOwner);
     }
 
     public boolean isRunning() {
@@ -176,11 +176,18 @@ public class KernelManager {
         private final IKernelGraphics graphics;
         private Consumer<String> luaExecutor;
 
-        public KernelApiImpl(ClientVFS vfs, UUID tabletUuid, TabletScreen parentScreen, net.minecraft.client.texture.NativeImage screenImage) {
+        public KernelApiImpl(ClientVFS vfs, UUID tabletUuid, TabletScreen parentScreen, net.minecraft.client.texture.NativeImage screenImage, boolean isOwner) {
             this.parentScreen = parentScreen;
             this.kernelVfs = new KernelVfsImpl(vfs);
-            // Для Java-приложений всегда используем серверную отрисовку
-            this.graphics = new KernelGraphicsImpl(tabletUuid);
+            
+            // Логика выбора драйвера
+            if (isOwner) {
+                // Для владельца планшета используем клиентский рендеринг
+                this.graphics = new com.loracore.computer.jkernel.ClientSideGraphics(screenImage, net.minecraft.client.MinecraftClient.getInstance().getResourceManager());
+            } else {
+                // Для других игроков используем серверный рендеринг
+                this.graphics = new com.loracore.computer.jkernel.ServerSideGraphics(tabletUuid);
+            }
         }
 
         @Override 
@@ -288,137 +295,7 @@ public class KernelManager {
         }
     }
 
-    private static class KernelGraphicsImpl implements IKernelGraphics {
-        private final UUID tabletUuid;
-        public KernelGraphicsImpl(UUID tabletUuid) { this.tabletUuid = tabletUuid; }
 
-        @Override
-        public void fill(int x1, int y1, int x2, int y2, int color) {
-            // Отправляем команду на сервер через GPU API
-            int width = x2 - x1;
-            int height = y2 - y1;
-            if (width <= 0 || height <= 0) return;
-            GpuApi.sendCommand(this.tabletUuid, new com.loracore.network.graphics.GpuCommand.Fill(x1, y1, width, height, color));
-        }
 
-        @Override
-        public void drawString(String text, int x, int y, int color) {
-            // Отправляем команду на сервер через GPU API
-            GpuApi.sendCommand(this.tabletUuid, new com.loracore.network.graphics.GpuCommand.DrawText(x, y, text, color));
-        }
 
-        @Override public int getStringWidth(String text) { return text.length() * 6; }
-        @Override public void beginFrame() {}
-        @Override public void endFrame() {}
-        @Override public void flush() {}
-        @Override public void drawCenteredString(String text, int centerX, int y, int color) { drawString(text, centerX - (getStringWidth(text) / 2), y, color); }
-        @Override public void pushMatrix() {}
-        @Override public void popMatrix() {}
-        @Override public void translate(double x, double y, double z) {}
-        @Override public void enableScissor(int x, int y, int w, int h) {}
-        @Override public void disableScissor() {}
-
-        // ===== ЗАГЛУШКИ ДЛЯ НИЗКОУРОВНЕВЫХ МЕТОДОВ =====
-        @Override public void setPixel(int x, int y, int color) { /* Не реализовано для серверного рендеринга */ }
-        @Override public int getPixel(int x, int y) { return 0; }
-        @Override public int getWidth() { return 480; /* Возвращаем стандартный размер */ }
-        @Override public int getHeight() { return 270; }
-    }
-
-    // Клиентская реализация графики, напрямую рисующая в NativeImage
-    private static class ClientSideGraphics implements IKernelGraphics {
-        private final net.minecraft.client.texture.NativeImage screenImage;
-        private final net.minecraft.client.font.TextRenderer textRenderer;
-
-        public ClientSideGraphics(net.minecraft.client.texture.NativeImage screenImage) {
-            this.screenImage = screenImage;
-            this.textRenderer = net.minecraft.client.MinecraftClient.getInstance().textRenderer;
-        }
-
-        @Override
-        public void fill(int x1, int y1, int x2, int y2, int color) {
-            // Перевод ARGB (MC) -> ABGR (NativeImage)
-            int abgr = (color & 0xFF000000)
-                    | ((color & 0x00FF0000) >> 16)
-                    | (color & 0x0000FF00)
-                    | ((color & 0x000000FF) << 16);
-            int width = Math.max(0, x2 - x1);
-            int height = Math.max(0, y2 - y1);
-            int maxX = Math.min(screenImage.getWidth(), x1 + width);
-            int maxY = Math.min(screenImage.getHeight(), y1 + height);
-            int startX = Math.max(0, x1);
-            int startY = Math.max(0, y1);
-            for (int y = startY; y < maxY; y++) {
-                for (int x = startX; x < maxX; x++) {
-                    screenImage.setColor(x, y, abgr);
-                }
-            }
-        }
-
-        @Override
-        public void drawString(String text, int x, int y, int color) {
-            // Простая отрисовка текста как прямоугольников
-            if (text == null || text.isEmpty()) return;
-            
-            int charWidth = 6;
-            int charHeight = 8;
-            
-            for (int i = 0; i < text.length(); i++) {
-                char c = text.charAt(i);
-                int charX = x + i * charWidth;
-                
-                // Рисуем простой прямоугольник для каждого символа
-                if (charX >= 0 && charX < screenImage.getWidth() && y >= 0 && y + charHeight < screenImage.getHeight()) {
-                    int abgr = (color & 0xFF000000) | ((color & 0x00FF0000) >> 16) | (color & 0x0000FF00) | ((color & 0x000000FF) << 16);
-                    for (int dy = 0; dy < charHeight; dy++) {
-                        for (int dx = 0; dx < charWidth; dx++) {
-                            screenImage.setColor(charX + dx, y + dy, abgr);
-                        }
-                    }
-                }
-            }
-        }
-
-        @Override public int getStringWidth(String text) { return text == null ? 0 : text.length() * 6; }
-        @Override public void drawCenteredString(String text, int centerX, int y, int color) { drawString(text, centerX - (getStringWidth(text) / 2), y, color); }
-        @Override public void beginFrame() {}
-        @Override public void endFrame() {}
-        @Override public void flush() {}
-        @Override public void pushMatrix() {}
-        @Override public void popMatrix() {}
-        @Override public void translate(double x, double y, double z) {}
-        @Override public void enableScissor(int x, int y, int w, int h) {}
-        @Override public void disableScissor() {}
-
-        // ===== РЕАЛИЗАЦИЯ НИЗКОУРОВНЕВЫХ МЕТОДОВ =====
-
-        @Override
-        public void setPixel(int x, int y, int color) {
-            if (x >= 0 && x < screenImage.getWidth() && y >= 0 && y < screenImage.getHeight()) {
-                // Конвертируем стандартный ARGB в ABGR, который использует NativeImage
-                int abgr = (color & 0xFF000000) | ((color & 0x00FF0000) >> 16) | (color & 0x0000FF00) | ((color & 0x000000FF) << 16);
-                screenImage.setColor(x, y, abgr);
-            }
-        }
-
-        @Override
-        public int getPixel(int x, int y) {
-            if (x >= 0 && x < screenImage.getWidth() && y >= 0 && y < screenImage.getHeight()) {
-                int abgr = screenImage.getColor(x, y);
-                // Конвертируем обратно из ABGR в ARGB для пользователя API
-                return (abgr & 0xFF000000) | ((abgr & 0x00FF0000) >> 16) | (abgr & 0x0000FF00) | ((abgr & 0x000000FF) << 16);
-            }
-            return 0; // Возвращаем черный цвет, если вышли за пределы
-        }
-
-        @Override
-        public int getWidth() {
-            return screenImage.getWidth();
-        }
-
-        @Override
-        public int getHeight() {
-            return screenImage.getHeight();
-        }
-    }
 }

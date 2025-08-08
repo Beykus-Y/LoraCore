@@ -110,7 +110,7 @@ public class TabletScreen extends Screen {
         this.statusMessage = "JAVA mode detected. Booting kernel...";
         
         // Создаем и запускаем JavaRuntime
-        this.runtime = new JavaRuntime(this, vfs);
+        this.runtime = new JavaRuntime(this, vfs, true);
         this.runtime.boot(jarPath);
     }
 
@@ -195,7 +195,10 @@ public class TabletScreen extends Screen {
             RenderSystem.disableBlend();
         }
 
-        // Больше не есть прямого рисования поверх: ядро обновляет пиксельный буфер
+        // Проверяем, нужен ли клиентский рендеринг
+        if (runtime != null && runtime.needsClientSideRendering()) {
+            runtime.render(mouseX, mouseY, delta);
+        }
 
         // Рисуем оверлей с сообщениями о загрузке/краше, если нужно
         if (currentState == State.LOADING || currentState == State.CRASHED) {
@@ -224,11 +227,6 @@ public class TabletScreen extends Screen {
     @Override
     public void tick() {
         if (runtime != null) {
-            // Важно: запрос ядра на обновление буфера происходит в тике
-            if (runtime instanceof JavaRuntime) {
-                runtime.render(0, 0, 0);
-            }
-
             runtime.tick();
             if (runtime.getCrashMessage() != null) {
                 this.currentState = State.CRASHED;
