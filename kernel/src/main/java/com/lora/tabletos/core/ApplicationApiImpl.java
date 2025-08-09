@@ -33,10 +33,10 @@ public class ApplicationApiImpl implements IApplicationApi {
         // Пока возвращаем заглушку
         return CompletableFuture.completedFuture("AI Assistant: " + prompt);
     }
-    
+
     @Override
     public int[] getScreenSize() {
-        return kernelApi.getTerminalSize();
+        return new int[]{480, 240};
     }
     
     @Override

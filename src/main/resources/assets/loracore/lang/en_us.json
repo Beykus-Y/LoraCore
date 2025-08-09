@@ -1,6 +1,13 @@
 {
   "mod.loracore.name": "LoraCore",
 
+  "item.loracore.tablet": "Tablet",
+  "item.loracore.cpu_t1": "CPU T1",
+  "item.loracore.ram_t1": "RAM T1 (512KB)",
+  "item.loracore.ram_t2": "RAM T2 (1024KB)", 
+  "item.loracore.ram_t3": "RAM T3 (2048KB)",
+  "item.loracore.hdd_t1": "HDD T1 (1MB)",
+  "item.loracore.firmware_rom": "Firmware ROM",
   "item.loracore.emerald_shard": "Emerald Shard",
 
   "category.loracore.main": "LoraCore",
@@ -55,6 +62,11 @@
 
   "gui.loracore.crash.close": "Close",
   "structure.loracore.unknown.name": "Unknown Structure",
-  "structure.loracore.unknown.description": "Description is being generated..."
+  "structure.loracore.unknown.description": "Description is being generated...",
+
+  "tooltip.loracore.capacity_kb": "Capacity: %d KB",
+  "tooltip.loracore.total_ram_kb": "Total RAM: %d KB",
+
+  "gui.loracore.tablet_config.title": "Tablet Configuration"
 
 }

@@ -63,7 +63,15 @@ local function main()
 
     -- Проверка RAM (с анимацией)
     print_line(current_line, "RAM Check       :", colors.white)
-    local total_ram_kb = 512 -- Предположим, мы знаем, что у нас 512 КБ ОЗУ
+    -- ИСПРАВЛЕНИЕ: Получаем размер RAM динамически из API планшета
+    local total_ram_kb = 512 -- Значение по умолчанию
+    if tablet and tablet.ram then
+        local success, ram_size = pcall(function() return tablet.ram.getTotalSize() end)
+        if success and ram_size and ram_size > 0 then
+            total_ram_kb = ram_size
+        end
+    end
+    
     for i = 0, total_ram_kb, 32 do
         local progress_text = string.format("%d KB OK", i)
         -- Очищаем область для текста и рисуем новый

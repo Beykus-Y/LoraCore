@@ -90,13 +90,21 @@ public class AiAssistantApp implements IApplication {
         g.fill(sendButtonX, sendButtonY, sendButtonX + 60, sendButtonY + 30, 0xFF4CAF50);
         g.drawString("Send", sendButtonX + 15, sendButtonY + 8, TEXT_COLOR);
     }
-    
+
     @Override
-    public void onEvent(KernelEvent event) {
+    public boolean onEvent(KernelEvent event) {
         switch (event) {
-            case KernelEvent.KeyPressed keyEvent -> handleKeyPress(keyEvent);
-            case KernelEvent.MouseClicked mouseEvent -> handleMouseClick((int)mouseEvent.mouseX, (int)mouseEvent.mouseY);
-            default -> {} // Игнорируем другие события
+            case KernelEvent.KeyPressed keyEvent -> {
+                handleKeyPress(keyEvent);
+                return true; // Считаем, что любое нажатие клавиши обработано
+            }
+            case KernelEvent.MouseClicked mouseEvent -> {
+                handleMouseClick((int)mouseEvent.mouseX, (int)mouseEvent.mouseY);
+                return true; // Считаем, что любой клик обработан
+            }
+            default -> {
+                return false; // Игнорируем другие события
+            }
         }
     }
     
@@ -181,5 +189,16 @@ public class AiAssistantApp implements IApplication {
             this.content = content;
             this.isAi = isAi;
         }
+    }
+    @Override
+    public void onResume() {
+        // Этот метод будет вызван, когда пользователь откроет приложение
+        LOGGER.info("AI Assistant app resumed");
+    }
+
+    @Override
+    public void onPause() {
+        // Этот метод будет вызван, когда пользователь свернет приложение
+        LOGGER.info("AI Assistant app paused");
     }
 }

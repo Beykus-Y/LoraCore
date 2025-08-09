@@ -2,6 +2,12 @@
   "mod.loracore.name": "LoraCore",
 
   "item.loracore.tablet": "Планшет",
+  "item.loracore.cpu_t1": "ЦПУ T1",
+  "item.loracore.ram_t1": "ОЗУ T1 (512KB)",
+  "item.loracore.ram_t2": "ОЗУ T2 (1024KB)",
+  "item.loracore.ram_t3": "ОЗУ T3 (2048KB)",
+  "item.loracore.hdd_t1": "ЖД T1 (1MB)",
+  "item.loracore.firmware_rom": "ПЗУ прошивки",
 
   "category.loracore.main": "LoraCore",
   "key.loracore.open_quest_log": "Открыть журнал заданий",
@@ -68,6 +74,11 @@
 
   "gui.loracore.crash.close": "Закрыть",
   "structure.loracore.unknown.name": "Неизвестная структура",
-  "structure.loracore.unknown.description": "Описание генерируется..."
+  "structure.loracore.unknown.description": "Описание генерируется...",
+
+  "tooltip.loracore.capacity_kb": "Емкость: %d KB",
+  "tooltip.loracore.total_ram_kb": "Общий объем ОЗУ: %d KB",
+
+  "gui.loracore.tablet_config.title": "Конфигурация планшета"
 
 }

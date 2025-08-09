@@ -1,6 +1,7 @@
 // Полный исправленный файл: src/client/java/com/loracore/computer/TerminalRenderer.java
 package com.loracore.computer;
 
+import com.loracore.LoraCoreClient;
 import com.loracore.gui.CrashScreen;
 import com.loracore.gui.TabletScreen;
 import net.minecraft.client.MinecraftClient;
@@ -194,14 +195,9 @@ public class TerminalRenderer implements Terminal {
     }
 
     public void showCrashScreen(String message) {
-        MinecraftClient.getInstance().execute(() -> {
-            // ИСПРАВЛЕНИЕ: Закрываем текущий TabletScreen перед открытием CrashScreen.
-            // Мы передаем null в качестве "родителя", так как старый экран больше не действителен.
-            if (this.parentScreen instanceof TabletScreen) {
-                this.parentScreen.close();
-            }
-            MinecraftClient.getInstance().setScreen(new CrashScreen(message, null));
-        });
+        // СТАРЫЙ КОД УДАЛЕН.
+        // Этот метод больше не должен использоваться для сбоев Lua VM.
+        LoraCoreClient.LOGGER.warn("TerminalRenderer.showCrashScreen() was called, but is deprecated for Lua crashes.");
     }
 
     public void setTextColor(int color) { this.currentTextColor = 0xFF000000 | color; }

@@ -56,8 +56,12 @@ public class LoraCoreClient implements ClientModInitializer {
         // Обработчик для загрузки планшета
         ClientPlayNetworking.registerGlobalReceiver(BootTabletS2CPacket.ID, (payload, context) -> {
             context.client().execute(() -> {
-                // Передаем оба UUID в конструктор TabletScreen
-                context.client().setScreen(new TabletScreen(payload.fileSystemUuid(), payload.tabletUuid()));
+                LOGGER.info("LoraCoreClient: Получен пакет BootTabletS2CPacket с RAM: {} KB", payload.totalRamKb());
+                
+                // Создаем TabletScreen с размером RAM из пакета
+                TabletScreen tabletScreen = new TabletScreen(payload.fileSystemUuid(), payload.tabletUuid());
+                tabletScreen.setTabletRamKb(payload.totalRamKb());
+                context.client().setScreen(tabletScreen);
             });
         });
 

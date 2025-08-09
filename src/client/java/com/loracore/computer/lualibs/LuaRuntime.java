@@ -12,14 +12,17 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Optional;
 import java.util.UUID;
+import com.loracore.LoraCoreClient;
 
 public class LuaRuntime implements IRuntimeEnvironment {
 
     private final VirtualMachine vm;
     private final TerminalRenderer terminalRenderer;
     private final ClientVFS vfs;
+    private final TabletScreen parentScreen;
 
     public LuaRuntime(TabletScreen parentScreen, ClientVFS vfs) {
+        this.parentScreen = parentScreen;
         this.vfs = vfs;
         // Lua в текстовом режиме все еще использует TerminalRenderer как реализацию интерфейса Terminal
         this.terminalRenderer = new TerminalRenderer(parentScreen);
@@ -41,9 +44,12 @@ public class LuaRuntime implements IRuntimeEnvironment {
         };
 
         // Создаем VM с правильными аргументами, включая новый обработчик перезагрузки
+        // ИСПРАВЛЕНИЕ: Получаем размер RAM динамически из компонентов планшета
+        int ramSizeKb = getTabletRamSize(parentScreen);
+        
         this.vm = new VirtualMachine(
                 "lora_v1_lua",
-                1024, // RAM
+                ramSizeKb, // RAM - теперь динамический размер
                 terminalRenderer, // TerminalRenderer реализует интерфейс Terminal
                 loader,
                 vfs, // Блокирующая обертка над асинхронным VFS
@@ -96,8 +102,13 @@ public class LuaRuntime implements IRuntimeEnvironment {
 
     @Override
     public void tick() {
-        if (vm.getCrashMessage() != null) {
-            terminalRenderer.showCrashScreen(vm.getCrashMessage());
+        if (vm.getCrashMessage() != null && parentScreen != null) {
+            // Передаем управление ошибкой напрямую в TabletScreen
+            if (parentScreen instanceof TabletScreen) {
+                ((TabletScreen) parentScreen).setLuaCrashState(vm.getCrashMessage());
+            }
+            // Важно! Выключаем VM, чтобы она не продолжала работать в фоне
+            vm.shutdown();
         }
     }
 
@@ -121,10 +132,16 @@ public class LuaRuntime implements IRuntimeEnvironment {
     // --- Обработка ввода для текстового режима ---
     @Override
     public boolean onKeyPressed(int keyCode, int scanCode, int modifiers) {
+        // ДИАГНОСТИКА: Логируем все нажатия клавиш
+        LoraCoreClient.LOGGER.info("LuaRuntime.onKeyPressed: keyCode={}, scanCode={}, modifiers={}", keyCode, scanCode, modifiers);
+        
         if (modifiers == GLFW.GLFW_MOD_CONTROL && keyCode == GLFW.GLFW_KEY_C) {
+            LoraCoreClient.LOGGER.info("LuaRuntime: Sending interrupt signal");
             vm.pushEvent("signal", "interrupt");
             return true;
         }
+        
+        LoraCoreClient.LOGGER.info("LuaRuntime: Pushing key event: key={}", keyCode);
         vm.pushEvent("key", keyCode);
         return true;
     }
@@ -155,5 +172,29 @@ public class LuaRuntime implements IRuntimeEnvironment {
      */
     public VirtualMachine getVm() {
         return this.vm;
+    }
+    
+    /**
+     * Получает размер RAM планшета из его компонентов
+     * По умолчанию возвращает 512 KB (RAM T1)
+     */
+    private int getTabletRamSize(TabletScreen tabletScreen) {
+        try {
+            // ИСПРАВЛЕНИЕ: Получаем размер RAM напрямую из TabletScreen
+            int ramSize = tabletScreen.getTabletRamKb();
+            LoraCoreClient.LOGGER.info("LuaRuntime: Получен размер RAM из TabletScreen: {} KB", ramSize);
+            
+            if (ramSize > 0) {
+                return ramSize;
+            }
+            
+            // Fallback: если размер не установлен, возвращаем стандартное значение
+            LoraCoreClient.LOGGER.warn("LuaRuntime: Размер RAM не установлен, используем значение по умолчанию: 512 KB");
+            return 512; // 512 KB - стандартный размер для RAM T1
+        } catch (Exception e) {
+            // В случае ошибки возвращаем безопасное значение по умолчанию
+            LoraCoreClient.LOGGER.error("LuaRuntime: Ошибка при получении размера RAM: {}", e.getMessage());
+            return 512;
+        }
     }
 }

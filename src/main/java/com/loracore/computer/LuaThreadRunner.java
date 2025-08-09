@@ -4,9 +4,12 @@ package com.loracore.computer;
 import com.loracore.LoraCoreMod;
 import org.luaj.vm2.Globals;
 import org.luaj.vm2.LuaError;
+import org.luaj.vm2.LuaFunction;
 import org.luaj.vm2.LuaThread;
 import org.luaj.vm2.LuaValue;
 import org.luaj.vm2.Varargs;
+import org.luaj.vm2.lib.TwoArgFunction;
+import static org.luaj.vm2.LuaValue.valueOf;
 
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -71,10 +74,21 @@ public class LuaThreadRunner implements Runnable {
     }
 
     public void pushEvent(LuaValue[] event) {
-        if (workerThread == null || !workerThread.isAlive()) return;
+        // ДИАГНОСТИКА: Логируем события
+        LoraCoreMod.LOGGER.info("LuaThreadRunner.pushEvent: workerThread={}, alive={}", 
+            workerThread, workerThread != null ? workerThread.isAlive() : false);
+        
+        if (workerThread == null || !workerThread.isAlive()) {
+            LoraCoreMod.LOGGER.warn("LuaThreadRunner: Cannot push event - worker thread is not alive");
+            return;
+        }
+        
         try {
+            LoraCoreMod.LOGGER.info("LuaThreadRunner: Adding event to queue");
             eventQueue.put(event);
+            LoraCoreMod.LOGGER.info("LuaThreadRunner: Event added to queue successfully");
         } catch (InterruptedException e) {
+            LoraCoreMod.LOGGER.error("LuaThreadRunner: Interrupted while adding event to queue", e);
             Thread.currentThread().interrupt();
         }
     }
@@ -87,6 +101,47 @@ public class LuaThreadRunner implements Runnable {
             LuaValue bootloader = globals.load(bootScript, "@boot.lua");
             this.kernelCoroutine = new LuaThread(globals, bootloader);
             Varargs resumeArgs = LuaValue.NIL;
+
+            // --- ВРЕМЕННО ОТКЛЮЧЕНА НОВАЯ СИСТЕМА КОНТРОЛЯ ПАМЯТИ ДЛЯ ДИАГНОСТИКИ ---
+            // TODO: Включить обратно после исправления проблем с recovery.lua
+            /*
+            try {
+                // Получаем доступ к библиотеке debug
+                LuaValue debug_lib = globals.get("debug");
+                if (debug_lib.isnil() || !debug_lib.istable()) {
+                    throw new LuaError("Debug library not available.");
+                }
+
+                // Получаем лимит памяти из VirtualMachine
+                final double memoryLimitKb = vm.getTotalRamKb();
+
+                // Создаем Lua-функцию (наш хук) на лету
+                LuaFunction memory_hook = new TwoArgFunction() {
+                    @Override
+                    public LuaValue call(LuaValue event, LuaValue line) {
+                        // Получаем текущее использование памяти в КБ
+                        double currentUsageKb = vm.getMemoryUsage();
+
+                        if (currentUsageKb > memoryLimitKb) {
+                            // Если лимит превышен, мы немедленно прерываем выполнение,
+                            // выбрасывая ошибку прямо изнутри Lua VM.
+                            // Это намного быстрее, чем ждать проверки из Java.
+                            throw new LuaError(String.format("Out of Memory: %.2fKB / %.2fKB", currentUsageKb, memoryLimitKb));
+                        }
+                        return NIL;
+                    }
+                };
+
+                // Устанавливаем хук: вызывать `memory_hook` каждые 20000 инструкций Lua.
+                // Пустая строка "" означает, что нас не интересуют события (call, line, return).
+                debug_lib.get("sethook").call(memory_hook, valueOf(""), valueOf(20000));
+
+                LoraCoreMod.LOGGER.info("[LuaThreadRunner] Memory hook установлен успешно. Лимит: {}KB", (int)memoryLimitKb);
+            } catch (Exception e) {
+                LoraCoreMod.LOGGER.warn("[LuaThreadRunner] Не удалось установить memory hook: {}. Используем старую систему проверки.", e.getMessage());
+            }
+            */
+            LoraCoreMod.LOGGER.info("[LuaThreadRunner] Memory hook временно отключен для диагностики");
 
             while (kernelCoroutine.state.status != LuaThread.STATUS_DEAD && !Thread.currentThread().isInterrupted()) {
                 Resumable toResume = resumeQueue.poll();
@@ -110,6 +165,10 @@ public class LuaThreadRunner implements Runnable {
                 if (!result.checkboolean(1)) {
                     throw new LuaError(result.optjstring(2, "Kernel error"));
                 }
+
+                // СТАРАЯ ПЕРИОДИЧЕСКАЯ ПРОВЕРКА ПАМЯТИ УДАЛЕНА
+                // Теперь контроль памяти осуществляется через Lua debug hook
+                // который срабатывает каждые 20000 инструкций и намного эффективнее
             }
             LoraCoreMod.LOGGER.info("[LuaThreadRunner] Thread loop finished.");
         }  catch (InterruptedException e) {

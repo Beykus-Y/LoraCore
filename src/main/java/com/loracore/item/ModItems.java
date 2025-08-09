@@ -30,6 +30,14 @@ public class ModItems {
             new RamItem(new Item.Settings().component(ModComponents.RAM_DATA, new RamData(512))), // 512 KB
             ItemGroups.INGREDIENTS);
 
+    public static final Item RAM_T2 = registerItem("ram_t2",
+            new RamItem(new Item.Settings().component(ModComponents.RAM_DATA, new RamData(1024))), // 1024 KB
+            ItemGroups.INGREDIENTS);
+
+    public static final Item RAM_T3 = registerItem("ram_t3",
+            new RamItem(new Item.Settings().component(ModComponents.RAM_DATA, new RamData(2048))), // 2048 KB
+            ItemGroups.INGREDIENTS);
+
     public static final Item HDD_T1 = registerItem("hdd_t1",
             new HardDriveItem(new Item.Settings().component(ModComponents.STORAGE_DATA, new StorageData(1024))), // 1 MB
             ItemGroups.INGREDIENTS);

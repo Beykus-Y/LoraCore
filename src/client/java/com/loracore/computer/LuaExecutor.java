@@ -28,6 +28,7 @@ public class LuaExecutor {
             MinecraftClient.getInstance().execute(() -> {
                 try {
                     // Создаем новый LuaRuntime для каждого выполнения
+                    // LuaRuntime автоматически получит правильный размер RAM из TabletScreen
                     LuaRuntime luaRuntime = new LuaRuntime(parentScreen, vfs);
                     
                     // Сохраняем в TabletScreen для управления жизненным циклом

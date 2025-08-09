@@ -144,36 +144,63 @@ public class LoraOSKernel implements IKernel {
             stateManager.setNextState(KernelState.KERNEL_PANIC);
         }
     }
-    
+
     @Override
     public void onRender(int mouseX, int mouseY, float delta) {
         if (graphics == null) return;
-        
+
         try {
             graphics.beginFrame();
-            
-            // Если система в рабочем состоянии, отрисовываем UI
+
+            // Если система находится в рабочем состоянии
             if (stateManager.getCurrentState() == KernelState.RUNNING) {
-                // Проверяем, есть ли активное приложение
+
+                // 1. Рисуем фон рабочего стола (обои). Это основа для всего.
+                desktop.render(graphics, mouseX, mouseY, delta);
+
+                // 2. Определяем область для контента приложения
+                final int contentAreaWidth = 480;
+                final int contentAreaHeight = 240; // 270 (экран) - 30 (панель)
+
+                // 3. Рендерим активное приложение или ничего, если его нет
                 if (windowManager.hasActiveApp()) {
-                    // Если есть активное приложение, рисуем только его
-                    windowManager.render(graphics, mouseX, mouseY, delta);
-                } else {
-                    // Если нет активного приложения, рисуем рабочий стол
-                    desktop.render(graphics, mouseX, mouseY, delta);
-                    windowManager.render(graphics, mouseX, mouseY, delta);
+                    graphics.pushMatrix();
+
+                    // 3.1. Ограничиваем область рисования зоной контента
+                    graphics.enableScissor(0, 0, contentAreaWidth, contentAreaHeight);
+
+                    // 3.2. Масштабируем координаты мыши для приложения
+                    // Приложениям не нужно знать о панели навигации.
+                    // Для них мир начинается в (0, 0) и заканчивается в (480, 240).
+                    // Мы передаем им уже скорректированные координаты.
+                    int appMouseX = mouseX;
+                    int appMouseY = mouseY;
+
+                    // 3.3. Вызываем рендер активного приложения
+                    windowManager.render(graphics, appMouseX, appMouseY, delta);
+
+                    // 3.4. Снимаем ограничение и восстанавливаем матрицу
+                    graphics.disableScissor();
+                    graphics.popMatrix();
                 }
-                // Навигационная панель всегда рисуется поверх
+                // ВАЖНО: ветки 'else' здесь нет. Рабочий стол (обои) уже нарисован.
+                // Если нет активного приложения, мы просто видим обои.
+
+                // 4. Рисуем панель навигации поверх всего остального.
+                // Она находится вне зоны отсечения (scissor) и всегда видна.
                 navigationBar.render(graphics, mouseX, mouseY, delta);
+
             } else {
-                // Во всех остальных случаях (загрузка, сбой) рисуем системный экран
+                // Во всех остальных состояниях (загрузка, сбой) рисуем системный экран
                 BootScreenRenderer.render(graphics, stateManager.getCurrentState(), statusMessage, panicMessage);
             }
+
         } catch (Exception e) {
-            // Ловим любой сбой в компонентах, логируем и переходим в состояние паники
+            // Логика обработки критических ошибок остается неизменной
             LOGGER.error("KERNEL PANIC! Unhandled exception in render loop.", e);
             stateManager.setNextState(KernelState.KERNEL_PANIC);
             this.panicMessage = e.getMessage();
+            // В случае паники мы тоже рисуем системный экран
             BootScreenRenderer.render(graphics, KernelState.KERNEL_PANIC, statusMessage, panicMessage);
         } finally {
             graphics.endFrame();

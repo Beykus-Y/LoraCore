@@ -1,8 +1,9 @@
+// Файл: kernel/src/main/java/com/lora/tabletos/ui/window/WindowManager.java
 package com.lora.tabletos.ui.window;
 
+import com.lora.tabletos.core.ApplicationApiImpl;
 import com.lora.tabletos.core.IApplication;
 import com.lora.tabletos.core.IApplicationApi;
-import com.lora.tabletos.core.ApplicationApiImpl;
 import com.lora.tabletos.core.JarClassLoader;
 import com.loracore.computer.kernel.IKernelApi;
 import com.loracore.computer.kernel.IKernelGraphics;
@@ -12,196 +13,252 @@ import org.slf4j.LoggerFactory;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
-import java.util.jar.Manifest;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.jar.Manifest;
 
 /**
- * Управляет окнами приложений и активными приложениями.
+ * Управляет жизненным циклом полноэкранных приложений и переключением между ними.
+ * Работает по принципу мобильной ОС, а не традиционного оконного менеджера.
  */
 public class WindowManager {
-    
+
     private static final Logger LOGGER = LoggerFactory.getLogger(WindowManager.class);
     private final IKernelApi api;
     private final JarClassLoader classLoader;
-    private IApplication currentApp;
-    private IApplicationApi appApi;
-    
+    private final IApplicationApi appApi;
+
+    // Внутренний record для хранения экземпляра приложения и его пути
+    private record AppInstance(IApplication app, String path) {}
+
+    // Публичный record для передачи информации о приложении наружу (например, в NavigationBar)
+    public record AppInfo(String path) {}
+
+    // Хранилище запущенных приложений: UUID экземпляра -> Экземпляр
+    private final Map<UUID, AppInstance> runningApps = new ConcurrentHashMap<>();
+    // Отслеживает порядок запуска/фокуса, последний элемент - самый активный
+    private final List<UUID> appFocusOrder = Collections.synchronizedList(new ArrayList<>());
+
+    // ID активного (видимого) приложения. null, если мы на рабочем столе.
+    private UUID activeAppId = null;
+
     public WindowManager(IKernelApi api) {
         this.api = api;
         this.classLoader = new JarClassLoader(getClass().getClassLoader());
         this.appApi = new ApplicationApiImpl(api);
     }
-    
+
     /**
-     * Рисуем активное приложение или ничего, если нет активного приложения.
+     * Отрисовывает только активное приложение.
      */
     public void render(IKernelGraphics g, int mouseX, int mouseY, float delta) {
-        if (currentApp != null) {
+        IApplication activeApp = getActiveApp();
+        if (activeApp != null) {
             try {
-                currentApp.onRender(g, mouseX, mouseY, delta);
+                activeApp.onRender(g, mouseX, mouseY, delta);
             } catch (Exception e) {
-                LOGGER.error("Error rendering application", e);
-                closeCurrentApp();
+                LOGGER.error("Ошибка при рендеринге приложения с ID: {}", activeAppId, e);
+                closeApp(activeAppId); // Закрываем аварийное приложение
             }
         }
     }
-    
+
     /**
-     * Передаем событие активному приложению.
+     * Передает событие только активному приложению.
      */
     public boolean handleEvent(KernelEvent event) {
-        if (currentApp != null) {
+        IApplication activeApp = getActiveApp();
+        if (activeApp != null) {
             try {
-                currentApp.onEvent(event);
-                return true; // Событие обработано приложением
+                return activeApp.onEvent(event); // Событие было передано активному приложению
             } catch (Exception e) {
-                LOGGER.error("Error handling event in application", e);
-                closeCurrentApp();
-                return false;
+                LOGGER.error("Ошибка при обработке события в приложении с ID: {}", activeAppId, e);
+                closeApp(activeAppId); // Закрываем аварийное приложение
+                return true; // Считаем событие обработанным, чтобы избежать дальнейших ошибок
             }
         }
-        return false;
+        return false; // Нет активного приложения для обработки события
     }
-    
+
     /**
-     * Закрываем все окна при выключении.
-     */
-    public void shutdown() {
-        if (currentApp != null) {
-            try {
-                currentApp.onClose();
-            } catch (Exception e) {
-                LOGGER.error("Error closing application", e);
-            }
-            currentApp = null;
-        }
-        LOGGER.info("WindowManager shutting down...");
-    }
-    
-    /**
-     * Запускает новое приложение.
-     * @param path Путь к приложению (.lua или .jar)
+     * Запускает приложение. Если оно уже запущено, просто переключается на него.
+     * @param path Путь к файлу приложения (.jar или .lua)
      */
     public void launchApp(String path) {
-        LOGGER.info("WindowManager: Attempting to launch {}", path);
-        
-        if (path.endsWith(".lua")) {
-            launchLuaApp(path);
-        } else if (path.endsWith(".jar")) {
+        LOGGER.info("WindowManager: Попытка запуска приложения {}", path);
+
+        Optional<UUID> existingInstanceId = findAppByPath(path);
+        if (existingInstanceId.isPresent()) {
+            LOGGER.info("Приложение {} уже запущено. Переключаемся на экземпляр {}.", path, existingInstanceId.get());
+            switchToApp(existingInstanceId.get());
+            return;
+        }
+
+        if (path.endsWith(".jar")) {
             launchJarApp(path);
+        } else if (path.endsWith(".lua")) {
+            launchLuaApp(path);
         } else {
-            LOGGER.error("Unsupported application type: {}", path);
+            LOGGER.error("Неподдерживаемый тип приложения: {}", path);
         }
     }
-    
+
     /**
-     * Запускает Lua-приложение.
+     * Переключает фокус на указанное приложение.
+     * @param appId UUID экземпляра приложения для активации. Если null, возвращает на рабочий стол.
      */
-    private void launchLuaApp(String path) {
-        // Закрываем текущее приложение, если есть
-        closeCurrentApp();
-        
-        // Запускаем Lua-скрипт
-        api.runLuaScript(path).whenComplete((success, throwable) -> {
-            if (throwable != null || !success) {
-                LOGGER.error("Failed to launch Lua app: {}", path, throwable);
-            } else {
-                LOGGER.info("Lua app launched successfully: {}", path);
+    public void switchToApp(UUID appId) {
+        if (Objects.equals(activeAppId, appId)) {
+            return; // Уже активно, ничего не делаем
+        }
+
+        // 1. Уведомляем старое приложение (если оно было), что оно уходит в фон
+        IApplication oldApp = getActiveApp();
+        if (oldApp != null) {
+            try {
+                oldApp.onPause();
+            } catch (Exception e) {
+                LOGGER.error("Ошибка при вызове onPause() для приложения {}: {}", activeAppId, e.getMessage());
             }
-        });
+        }
+
+        // 2. Меняем активное приложение
+        this.activeAppId = appId;
+
+        // 3. Уведомляем новое приложение (если оно есть), что оно стало активным
+        IApplication newApp = getActiveApp();
+        if (newApp != null) {
+            try {
+                newApp.onResume();
+            } catch (Exception e) {
+                LOGGER.error("Ошибка при вызове onResume() для приложения {}: {}", activeAppId, e.getMessage());
+                // Если при активации произошел сбой, закрываем это приложение
+                closeApp(activeAppId);
+                return; // Прерываем выполнение, так как приложение уже закрыто
+            }
+        }
+
+        // 4. Обновляем порядок фокуса для переключения "назад"
+        if (appId != null) {
+            appFocusOrder.remove(appId);
+            appFocusOrder.add(appId);
+        }
+        LOGGER.info("Активное приложение изменено на: {}", appId);
     }
-    
+
     /**
-     * Запускает JAR-приложение.
+     * Закрывает приложение по его ID.
+     * @param appId UUID экземпляра приложения для закрытия.
      */
+    public void closeApp(UUID appId) {
+        appFocusOrder.remove(appId);
+        AppInstance instance = runningApps.remove(appId);
+
+        if (instance != null) {
+            try {
+                instance.app().onClose();
+                LOGGER.info("Приложение '{}' ({}) было закрыто.", instance.path(), appId);
+            } catch (Exception e) {
+                LOGGER.error("Ошибка при закрытии приложения '{}' ({}).", instance.path(), appId, e);
+            }
+        }
+
+        if (Objects.equals(activeAppId, appId)) {
+            UUID previousAppId = appFocusOrder.isEmpty() ? null : appFocusOrder.get(appFocusOrder.size() - 1);
+            switchToApp(previousAppId);
+        }
+    }
+
+    /**
+     * Корректно завершает работу всех запущенных приложений.
+     */
+    public void shutdown() {
+        LOGGER.info("WindowManager завершает работу... Закрытие {} приложений.", runningApps.size());
+        new ArrayList<>(runningApps.keySet()).forEach(this::closeApp);
+    }
+
+    public boolean hasActiveApp() {
+        return activeAppId != null;
+    }
+
+    // --- ГЕТТЕРЫ ДЛЯ NAVIGATIONBAR ---
+
+    public IApplication getActiveApp() {
+        if (activeAppId == null) return null;
+        AppInstance instance = runningApps.get(activeAppId);
+        return instance != null ? instance.app() : null;
+    }
+
+    public Map<UUID, AppInfo> getRunningApps() {
+        Map<UUID, AppInfo> infoMap = new HashMap<>();
+        runningApps.forEach((uuid, appInstance) -> infoMap.put(uuid, new AppInfo(appInstance.path())));
+        return Collections.unmodifiableMap(infoMap);
+    }
+
+    public UUID getActiveAppId() {
+        return this.activeAppId;
+    }
+
+    // --- Приватные методы ---
+
+    private void launchLuaApp(String path) {
+        LOGGER.warn("Запуск Lua-приложений в графическом режиме пока не реализован.");
+        api.runLuaScript(path);
+    }
+
     private void launchJarApp(String path) {
-        // Закрываем текущее приложение, если есть
-        closeCurrentApp();
-        
         api.getVfs().readBytes(path).whenComplete((jarBytesOpt, error) -> {
-            if (error != null) {
-                LOGGER.error("Failed to read JAR file: {}", path, error);
+            if (error != null || jarBytesOpt.isEmpty()) {
+                LOGGER.error("Не удалось прочитать JAR-файл: {}", path, error);
                 return;
             }
-            if (jarBytesOpt.isEmpty()) {
-                LOGGER.error("JAR file not found: {}", path);
-                return;
-            }
-            
             try {
                 Map<String, byte[]> classData = unpackJar(jarBytesOpt.get());
-                byte[] manifestBytes = classData.get("META-INF/MANIFEST.MF");
-                if (manifestBytes == null) {
-                    LOGGER.error("JAR is missing META-INF/MANIFEST.MF");
-                    return;
-                }
-                
-                Manifest manifest = new Manifest(new ByteArrayInputStream(manifestBytes));
+                Manifest manifest = new Manifest(new ByteArrayInputStream(classData.get("META-INF/MANIFEST.MF")));
                 String mainClassName = manifest.getMainAttributes().getValue("App-Main-Class");
-                if (mainClassName == null || mainClassName.trim().isEmpty()) {
-                    LOGGER.error("Manifest is missing 'App-Main-Class' attribute");
-                    return;
-                }
-                
-                // Загружаем все классы из JAR
+
                 for (Map.Entry<String, byte[]> entry : classData.entrySet()) {
                     if (entry.getKey().endsWith(".class")) {
                         String className = entry.getKey().replace("/", ".").replace(".class", "");
                         classLoader.defineClassFromData(className, entry.getValue());
                     }
                 }
-                
-                // Загружаем главный класс приложения
+
                 Class<?> appClass = classLoader.loadClass(mainClassName);
                 if (!IApplication.class.isAssignableFrom(appClass)) {
-                    LOGGER.error("Main class {} does not implement IApplication", mainClassName);
+                    LOGGER.error("Главный класс {} не реализует IApplication", mainClassName);
                     return;
                 }
-                
-                // Создаем экземпляр приложения
-                currentApp = (IApplication) appClass.getConstructor().newInstance();
-                currentApp.onLoad(appApi);
-                LOGGER.info("JAR app launched successfully: {}", path);
-                
+
+                IApplication newApp = (IApplication) appClass.getDeclaredConstructor().newInstance();
+                UUID newAppId = UUID.randomUUID();
+
+                runningApps.put(newAppId, new AppInstance(newApp, path));
+                LOGGER.info("Приложение '{}' успешно загружено. ID экземпляра: {}", path, newAppId);
+
+                newApp.onLoad(appApi);
+                switchToApp(newAppId);
+
             } catch (Exception e) {
-                LOGGER.error("Failed to launch JAR app: {}", path, e);
+                LOGGER.error("Критическая ошибка при запуске JAR-приложения: {}", path, e);
             }
         });
     }
-    
-    /**
-     * Закрывает текущее приложение.
-     */
-    public void closeCurrentApp() {
-        if (currentApp != null) {
-            try {
-                currentApp.onClose();
-            } catch (Exception e) {
-                LOGGER.error("Error closing current application", e);
-            }
-            currentApp = null;
-        }
+
+    private Optional<UUID> findAppByPath(String path) {
+        return runningApps.entrySet().stream()
+                .filter(entry -> entry.getValue().path().equals(path))
+                .map(Map.Entry::getKey)
+                .findFirst();
     }
-    
-    /**
-     * Проверяет, есть ли активное приложение.
-     */
-    public boolean hasActiveApp() {
-        return currentApp != null;
-    }
-    
-    /**
-     * Распаковывает JAR-файл в Map.
-     */
+
     private Map<String, byte[]> unpackJar(byte[] jarData) throws IOException {
         Map<String, byte[]> classData = new ConcurrentHashMap<>();
-        try (java.util.zip.ZipInputStream zipStream = new java.util.zip.ZipInputStream(new ByteArrayInputStream(jarData))) {
+        try (var zipStream = new java.util.zip.ZipInputStream(new ByteArrayInputStream(jarData))) {
             java.util.zip.ZipEntry entry;
             while ((entry = zipStream.getNextEntry()) != null) {
                 if (!entry.isDirectory()) {
-                    byte[] data = zipStream.readAllBytes();
-                    classData.put(entry.getName(), data);
+                    classData.put(entry.getName(), zipStream.readAllBytes());
                 }
             }
         }

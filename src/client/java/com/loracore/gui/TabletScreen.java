@@ -15,7 +15,9 @@ import net.minecraft.client.render.GameRenderer;
 // ИСПРАВЛЕНИЕ 1: Используем NativeImageBackedTexture вместо DynamicTexture
 import net.minecraft.client.texture.NativeImageBackedTexture;
 import net.minecraft.client.texture.NativeImage;
+import net.minecraft.text.OrderedText;
 import net.minecraft.text.Text;
+import net.minecraft.util.Formatting;
 import net.minecraft.util.Identifier;
 import org.lwjgl.glfw.GLFW;
 
@@ -27,6 +29,7 @@ public class TabletScreen extends Screen {
     private final UUID tabletUuid;
     private final UUID fileSystemUuid;
     private ClientVFS vfs;
+    private int tabletRamKb = 512; // Размер RAM планшета в KB (по умолчанию 512 KB)
 
     private static final int BACKGROUND_OVERLAY_COLOR = 0xB0000000;
     private static final int TABLET_BORDER_COLOR = 0xFF0A0A0A;
@@ -38,7 +41,7 @@ public class TabletScreen extends Screen {
     private static final String LUA_BOOT_PATH = "os/recovery.lua";
     private static final String JAVA_BOOT_PATH = "/boot/kernel.jar";
 
-    private enum State { LOADING, RUNNING, CRASHED, HALTED }
+    private enum State { LOADING, RUNNING, CRASHED, LUA_CRASHED, HALTED }
     private State currentState = State.LOADING;
     private String statusMessage = "Initializing...";
 
@@ -70,6 +73,23 @@ public class TabletScreen extends Screen {
     public int getTabletPixelHeight() { return SCREEN_PIXEL_HEIGHT; }
     public ClientVFS getVfs() { return this.vfs; }
     public NativeImage getScreenImage() { return this.screenImage; }
+    public int getTabletRamKb() { return this.tabletRamKb; }
+
+    /**
+     * Устанавливает размер RAM планшета
+     */
+    public void setTabletRamKb(int ramKb) {
+        LoraCoreClient.LOGGER.info("TabletScreen: Устанавливаем размер RAM: {} KB", ramKb);
+        this.tabletRamKb = ramKb;
+        
+        // Если LuaRuntime уже создан, пересоздаем его с новым размером RAM
+        if (this.runtime instanceof LuaRuntime) {
+            LoraCoreClient.LOGGER.info("TabletScreen: Пересоздаем LuaRuntime с новым размером RAM");
+            this.runtime.shutdown();
+            this.runtime = new LuaRuntime(this, vfs);
+            this.runtime.boot("os/bios.lua");
+        }
+    }
 
     /**
      * Устанавливает активный шелл для управления жизненным циклом
@@ -97,6 +117,15 @@ public class TabletScreen extends Screen {
         this.currentState = State.CRASHED;
         this.statusMessage = message;
         LoraCoreClient.LOGGER.error("TabletScreen crash state: {}", message);
+    }
+
+    /**
+     * Устанавливает экран в состояние сбоя Lua VM и сохраняет сообщение об ошибке.
+     */
+    public void setLuaCrashState(String message) {
+        this.currentState = State.LUA_CRASHED;
+        this.statusMessage = message; // Используем существующее поле для сообщения
+        LoraCoreClient.LOGGER.error("TabletScreen entered LUA_CRASHED state: {}", message);
     }
 
     /**
@@ -139,14 +168,18 @@ public class TabletScreen extends Screen {
     }
 
     private void initializeRuntime() {
+        LoraCoreClient.LOGGER.info("TabletScreen.initializeRuntime: Starting initialization");
+        
         this.currentState = State.LOADING;
         this.statusMessage = "LoraBIOS initializing...";
 
         // Безусловно запускаем LuaRuntime с новым BIOS-скриптом
         this.runtime = new LuaRuntime(this, vfs);
+        LoraCoreClient.LOGGER.info("TabletScreen.initializeRuntime: LuaRuntime created, booting bios.lua");
         this.runtime.boot("os/bios.lua"); // <-- Новый путь к BIOS
 
         // Состояние изменится на RUNNING, когда Lua-код начнет выполняться
+        LoraCoreClient.LOGGER.info("TabletScreen.initializeRuntime: Initialization complete, currentState={}", currentState);
     }
 
     public void onScreenUpdate(byte[] pixelBuffer) {
@@ -186,8 +219,8 @@ public class TabletScreen extends Screen {
             this.screenTexture.upload();
         }
 
-        // Всегда: рисуем текстуру экрана планшета
-        if (screenTextureId != null) {
+        // Рисуем текстуру экрана планшета только если не в состоянии сбоя Lua
+        if (screenTextureId != null && currentState != State.LUA_CRASHED) {
             RenderSystem.setShader(GameRenderer::getPositionTexProgram);
             RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
             RenderSystem.enableBlend();
@@ -195,8 +228,8 @@ public class TabletScreen extends Screen {
             RenderSystem.disableBlend();
         }
 
-        // Проверяем, нужен ли клиентский рендеринг
-        if (runtime != null && runtime.needsClientSideRendering()) {
+        // Проверяем, нужен ли клиентский рендеринг (только если не в состоянии сбоя Lua)
+        if (runtime != null && runtime.needsClientSideRendering() && currentState != State.LUA_CRASHED) {
             runtime.render(mouseX, mouseY, delta);
         }
 
@@ -212,6 +245,26 @@ public class TabletScreen extends Screen {
             }
             context.getMatrices().pop();
         }
+
+        // Обработка состояния LUA_CRASHED - рисуем BSOD поверх экрана
+        if (currentState == State.LUA_CRASHED) {
+            // Рисуем темно-синий фон "BSOD" внутри рамки
+            context.fill(tabletX + 2, tabletY + 2, tabletX + tabletWidth - 2, tabletY + tabletHeight - 2, 0xFF00008B); // Dark Blue
+
+            // Рисуем заголовок ошибки
+            context.drawCenteredTextWithShadow(textRenderer, Text.literal("LoraCore OS Error").formatted(Formatting.WHITE), this.width / 2, tabletY + 20, 0xFFFFFFFF);
+
+            // Рисуем само сообщение об ошибке с переносом строк
+            int textY = tabletY + 40;
+            int wrapWidth = tabletWidth - 20;
+            for (OrderedText line : this.textRenderer.wrapLines(Text.literal(this.statusMessage), wrapWidth)) {
+                context.drawTextWithShadow(textRenderer, line, tabletX + 10, textY, 0xFFFFFFFF);
+                textY += 12;
+            }
+
+            // Добавляем подсказку о перезагрузке
+            context.drawCenteredTextWithShadow(textRenderer, Text.literal("Press any key to reboot..."), this.width / 2, tabletY + tabletHeight - 30, 0xFFAAAAAA);
+        }
     }
 
     // Перерисовываем текстуру планшета. Измененный метод.
@@ -226,9 +279,16 @@ public class TabletScreen extends Screen {
 
     @Override
     public void tick() {
+        // ДИАГНОСТИКА: Логируем состояние каждые несколько тиков
+        if (System.currentTimeMillis() % 5000 < 16) { // Логируем каждые ~5 секунд
+            LoraCoreClient.LOGGER.info("TabletScreen.tick: currentState={}, runtime={}, runtimeRunning={}", 
+                currentState, runtime != null, runtime != null ? runtime.isRunning() : false);
+        }
+        
         if (runtime != null) {
             runtime.tick();
             if (runtime.getCrashMessage() != null) {
+                LoraCoreClient.LOGGER.warn("TabletScreen: Runtime crashed: {}", runtime.getCrashMessage());
                 this.currentState = State.CRASHED;
                 this.statusMessage = runtime.getCrashMessage();
                 runtime.shutdown();
@@ -285,21 +345,37 @@ public class TabletScreen extends Screen {
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        // ДИАГНОСТИКА: Логируем все нажатия клавиш
+        LoraCoreClient.LOGGER.info("TabletScreen.keyPressed: keyCode={}, currentState={}, activeShell={}, runtime={}", 
+            keyCode, currentState, activeShell != null, runtime != null);
+        
         if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
             this.close();
             return true;
         }
 
+        // ПРИОРИТЕТ 0: Если экран в состоянии сбоя Lua, любая клавиша перезагружает планшет
+        if (this.currentState == State.LUA_CRASHED) {
+            if (keyCode != GLFW.GLFW_KEY_ESCAPE) { // Любая клавиша кроме Escape (он и так закрывает)
+                this.reboot();
+                return true;
+            }
+        }
+
         // ПРИОРИТЕТ 1: Если запущен Lua-шелл, весь ввод идет ему.
         if (activeShell != null && activeShell.isRunning()) {
+            LoraCoreClient.LOGGER.info("TabletScreen: Forwarding key to activeShell");
             return activeShell.onKeyPressed(keyCode, scanCode, modifiers);
         }
 
         // ПРИОРИТЕТ 2: Если шелла нет, но есть ядро (в процессе загрузки), ввод идет ему.
         if (runtime != null && currentState != State.HALTED) {
+            LoraCoreClient.LOGGER.info("TabletScreen: Forwarding key to runtime");
             return runtime.onKeyPressed(keyCode, scanCode, modifiers);
         }
 
+        LoraCoreClient.LOGGER.warn("TabletScreen: No handler for key event - currentState={}, runtime={}, activeShell={}", 
+            currentState, runtime != null, activeShell != null);
         return super.keyPressed(keyCode, scanCode, modifiers);
     }
 

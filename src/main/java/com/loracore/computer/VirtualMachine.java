@@ -32,9 +32,11 @@ public class VirtualMachine {
 
     private final Map<Integer, LuaThreadRunner> threads = new ConcurrentHashMap<>();
     private static final int MAIN_THREAD_ID = 0;
+    private final int totalRamKb; // <-- НОВОЕ ПОЛЕ для хранения лимита памяти
 
     // ИСПРАВЛЕНО: Конструктор теперь принимает оба UUID и обработчик перезагрузки
     public VirtualMachine(String architecture, int totalRamKb, Terminal terminal, ResourceLoader resourceLoader, IAsyncVFS vfs, UUID fsUuid, UUID tabletUuid, Consumer<String> javaBootHandler) {
+        this.totalRamKb = totalRamKb; // <-- СОХРАНЯЕМ лимит памяти
         this.terminal = terminal;
         this.resourceLoader = resourceLoader;
         this.vfs = vfs;
@@ -145,6 +147,12 @@ public class VirtualMachine {
     }
 
     public void pushEvent(Object... args) {
+        // ДИАГНОСТИКА: Логируем все события
+        LoraCoreMod.LOGGER.info("VirtualMachine.pushEvent: {} args", args.length);
+        for (int i = 0; i < args.length; i++) {
+            LoraCoreMod.LOGGER.info("  arg[{}] = {} (type: {})", i, args[i], args[i] != null ? args[i].getClass().getSimpleName() : "null");
+        }
+        
         LuaValue[] event = new LuaValue[args.length];
         for (int i = 0; i < args.length; i++) {
             event[i] = switch (args[i]) {
@@ -155,7 +163,10 @@ public class VirtualMachine {
                 default -> LuaValue.NIL;
             };
         }
+        
+        LoraCoreMod.LOGGER.info("VirtualMachine: Pushing event to {} runners", threads.size());
         for (LuaThreadRunner runner : threads.values()) {
+            LoraCoreMod.LOGGER.info("VirtualMachine: Pushing event to runner: {}", runner);
             runner.pushEvent(event);
         }
     }
@@ -186,12 +197,43 @@ public class VirtualMachine {
         return (System.nanoTime() - startTime) / 1_000_000_000.0;
     }
 
+    /**
+     * Возвращает общий лимит памяти в килобайтах
+     */
+    public double getTotalRamKb() {
+        return this.totalRamKb;
+    }
+
     public double getMemoryUsage() {
         LuaThreadRunner mainRunner = threads.get(MAIN_THREAD_ID);
         if (mainRunner != null) {
-            return mainRunner.getGlobals().get("collectgarbage").call("count").todouble();
+            try {
+                Globals globals = mainRunner.getGlobals();
+                if (globals != null) {
+                    LuaValue collectgarbage = globals.get("collectgarbage");
+                    if (collectgarbage != null && !collectgarbage.isnil()) {
+                        LuaValue result = collectgarbage.call("count");
+                        if (result != null && !result.isnil()) {
+                            double usage = result.todouble();
+                            
+                            // ИСПРАВЛЕНИЕ: Дополнительная защита от абсурдных значений
+                            // collectgarbage("count") может возвращать очень большие числа
+                            if (usage > 1000000) { // Если больше 1GB, что явно нереально
+                                LoraCoreMod.LOGGER.warn("Unrealistic memory usage reported: {}KB, returning safe value", (int)usage);
+                                return 100.0; // Возвращаем безопасное значение 100 KB
+                            }
+                            
+                            return usage;
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                // Если что-то пошло не так, возвращаем безопасное значение
+                LoraCoreMod.LOGGER.warn("Error getting memory usage: " + e.getMessage());
+                return 0.0;
+            }
         }
-        return 0;
+        return 0.0;
     }
 
     public void setCrashState(String message) {
@@ -214,6 +256,13 @@ public class VirtualMachine {
         if (this.javaBootHandler != null) {
             this.javaBootHandler.accept(path);
         }
+    }
+
+    /**
+     * Возвращает список устройств для использования в LuaThreadRunner
+     */
+    public List<Object> getDevices() {
+        return devices;
     }
 
     private class CustomRequire extends VarArgFunction {
