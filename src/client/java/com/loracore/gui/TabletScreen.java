@@ -208,6 +208,13 @@ public class TabletScreen extends Screen {
             ClientPlayNetworking.send(new RequestTabletDataC2SPacket());
         }
     }
+    public void onDeviceResult(int requestId, boolean success, Object[] result) {
+        if (clientRuntime instanceof JavaRuntime javaRuntime) {
+            // У JavaRuntime должен быть KernelManager, который обработает результат
+            // Нам нужно добавить геттер для KernelManager в JavaRuntime
+            javaRuntime.getKernelManager().onDeviceResult(requestId, success, result);
+        }
+    }
 
     @Override public boolean shouldPause() { return false; }
 }

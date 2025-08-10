@@ -51,4 +51,12 @@ public class ApplicationApiImpl implements IApplicationApi {
         // Мы используем существующий API-мост для выполнения задачи
         ClientApi.executeOnRenderThread(task);
     }
+    /**
+     * [НОВАЯ РЕАЛИЗАЦИЯ]
+     * Этот метод теперь просто делегирует вызов основному API ядра.
+     */
+    @Override
+    public CompletableFuture<Object[]> invokeDevice(String deviceType, String methodName, Object... args) {
+        return kernelApi.invokeDevice(deviceType, methodName, args);
+    }
 }

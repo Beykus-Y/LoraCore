@@ -8,6 +8,7 @@ import com.loracore.component.*;
 import com.loracore.component.data.*;
 // ИСПРАВЛЕНО: Полностью переработан обработчик VFS
 import com.loracore.computer.*;
+import com.loracore.computer.device.IDevice;
 import com.loracore.item.TabletItem;
 import com.loracore.network.graphics.GpuCommand;
 import com.loracore.network.graphics.GpuCommandC2SPacket;
@@ -37,6 +38,7 @@ import net.minecraft.util.Identifier;
 import net.minecraft.village.VillagerProfession;
 
 
+import java.lang.reflect.Method;
 import java.util.*;
 
 public class ModNetworking {
@@ -62,6 +64,9 @@ public class ModNetworking {
         PayloadTypeRegistry.playC2S().register(MouseClickedC2SPacket.ID, MouseClickedC2SPacket.CODEC);
         PayloadTypeRegistry.playS2C().register(SwitchToClientKernelS2CPacket.ID, SwitchToClientKernelS2CPacket.CODEC);
 
+        PayloadTypeRegistry.playC2S().register(InvokeDeviceMethodC2SPacket.ID, InvokeDeviceMethodC2SPacket.CODEC);
+        PayloadTypeRegistry.playS2C().register(DeviceMethodResultS2CPacket.ID, DeviceMethodResultS2CPacket.CODEC);
+
 
         // Регистрация обработчиков
         registerTabletHandlers();
@@ -70,6 +75,7 @@ public class ModNetworking {
         registerGpuHandlers();
         registerInputHandlers();
         registerLuaScriptHandlers();
+        registerDeviceHandlers();
     }
 
     /**
@@ -185,50 +191,48 @@ public class ModNetworking {
                 ItemStack stack = player.getMainHandStack();
                 if (!(stack.getItem() instanceof TabletItem)) return;
 
-                // ШАГ 1: Получаем или создаем ВМ на сервере.
+                // 1. Получаем или создаем ВМ
                 VirtualMachine vm = VirtualMachineManager.getInstance().getOrCreate(player, stack);
                 if (vm == null) {
-                    player.sendMessage(Text.literal("Ошибка инициализации ВМ на сервере.").formatted(Formatting.RED), true);
+                    player.sendMessage(Text.literal("Ошибка инициализации ВМ.").formatted(Formatting.RED), true);
                     return;
                 }
 
-                ResourceLoader loader = vm.getResourceLoader();
-                if (loader == null) {
-                    player.sendMessage(Text.literal("Критическая ошибка: Загрузчик ресурсов ВМ не найден.").formatted(Formatting.RED), true);
-                    return;
+                // 2. Если ВМ выключена (например, после краша или команды shutdown), запускаем ее с BIOS
+                if (!vm.isOn()) {
+                    String biosContent = vm.getResourceLoader().load("os/bios.lua");
+                    if (biosContent != null && !biosContent.isEmpty()) {
+                        vm.start(biosContent);
+                    } else {
+                        player.sendMessage(Text.literal("Критическая ошибка: BIOS не найден.").formatted(Formatting.RED), true);
+                        return;
+                    }
                 }
 
-                String biosContent = loader.load("os/bios.lua");
-                if (biosContent == null || biosContent.isEmpty()) {
-                    player.sendMessage(Text.literal("Критическая ошибка: Не удалось загрузить BIOS планшета.").formatted(Formatting.RED), true);
-                    // Также логируем, чтобы понять, почему не загрузилось
-                    LoraCoreMod.LOGGER.error("Не удалось загрузить /assets/loracore/os/bios.lua. Убедитесь, что файл существует.");
-                    return;
-                }
-
-                // ШАГ 2: Запускаем на серверной ВМ BIOS.
-                // ВМ сама загрузит bios.lua через свой ResourceLoader.
-                vm.start(biosContent);
-
-                // ШАГ 3: Отправляем клиенту команду просто открыть экран.
-                // Собираем необходимые UUID и RAM из компонентов, как мы делали раньше.
+                // 3. Собираем данные для клиента
                 UUID tabletUuid = stack.get(ModComponents.TABLET_UUID);
                 MotherboardData mobo = stack.get(ModComponents.MOTHERBOARD_DATA);
                 FileSystemsData fsData = stack.get(ModComponents.FILE_SYSTEMS_DATA);
-
-                if (mobo == null || fsData == null || tabletUuid == null) {
-                    player.sendMessage(Text.literal("КриCriticalтическая ошибка компонентов планшета.").formatted(Formatting.RED), true);
-                    return;
-                }
+                if (mobo == null || fsData == null || tabletUuid == null) return;
 
                 UUID fsUuid = fsData.uuids().get("0");
                 int totalRamKb = mobo.ram().stream()
-                        .mapToInt(ramStack -> Optional.ofNullable(ramStack.get(ModComponents.RAM_DATA))
-                                .map(RamData::sizeKb).orElse(0))
+                        .mapToInt(ramStack -> Optional.ofNullable(ramStack.get(ModComponents.RAM_DATA)).map(RamData::sizeKb).orElse(0))
                         .sum();
 
-                // Отправляем упрощенный пакет.
+                // 4. ВСЕГДА отправляем пакет на открытие экрана
                 ServerPlayNetworking.send(player, new BootTabletS2CPacket(fsUuid, tabletUuid, totalRamKb));
+
+                // 5. ПРОВЕРЯЕМ СОСТОЯНИЕ ВМ:
+                // Если ВМ уже приняла решение перейти в режим ядра, сообщаем об этом клиенту
+                if (vm.getCurrentState() == VirtualMachine.State.JAVA_KERNEL) {
+                    // Путь к ядру нам не важен, клиент сам его знает. Главное - команда.
+                    ServerPlayNetworking.send(player, new SwitchToClientKernelS2CPacket("/boot/kernel.jar"));
+                }
+
+                // Если состояние LUA, то ничего дополнительно не отправляем. Клиент
+                // по умолчанию будет ждать пакетов ScreenUpdateS2CPacket, которые будет слать
+                // серверная ВМ, исполняющая Lua-код.
             });
         });
     }
@@ -536,6 +540,67 @@ public class ModNetworking {
                     vm.startNewLuaThread(99, scriptContent, null); // Используем временный ID потока
                 } else {
                     LoraCoreMod.LOGGER.error("Java-ядро запросило запуск несуществующего Lua-скрипта: {}", payload.scriptPath());
+                }
+            });
+        });
+    }
+    private static void registerDeviceHandlers() {
+        ServerPlayNetworking.registerGlobalReceiver(InvokeDeviceMethodC2SPacket.ID, (payload, context) -> {
+            ServerPlayerEntity player = context.player();
+            MinecraftServer server = player.getServer();
+            server.execute(() -> {
+                VirtualMachine vm = VirtualMachineManager.getInstance().get(payload.tabletUuid());
+                if (vm == null) return;
+
+                Object deviceObj = vm.getDevices().stream()
+                        .filter(d -> d.getClass().getSimpleName().equalsIgnoreCase(payload.deviceType() + "Device"))
+                        .findFirst()
+                        .orElse(null);
+
+                if (deviceObj == null) {
+                    String errorMsg = "Device '" + payload.deviceType() + "' not found in VM.";
+                    ServerPlayNetworking.send(player, new DeviceMethodResultS2CPacket(payload.requestId(), false, DeviceMethodResultS2CPacket.resultToJson(errorMsg)));
+                    return;
+                }
+
+                // =======================================================
+                //          НАЧАЛО НОВОГО КОДА
+                // =======================================================
+
+                // Проверяем, реализует ли устройство наш интерфейс IDevice
+                if (deviceObj instanceof IDevice device) {
+                    // Получаем актуальный мир и позицию, на которую смотрит игрок
+                    ServerWorld world = player.getServerWorld();
+                    net.minecraft.util.hit.HitResult hit = player.raycast(5.0, 0.0f, false);
+                    net.minecraft.util.math.BlockPos targetPos = null;
+                    if (hit.getType() == net.minecraft.util.hit.HitResult.Type.BLOCK) {
+                        targetPos = ((net.minecraft.util.hit.BlockHitResult) hit).getBlockPos();
+                    }
+
+                    // ВЫПОЛНЯЕМ ПРИВЯЗКУ!
+                    device.rebind(player, world, targetPos);
+                }
+
+                // =======================================================
+                //          КОНЕЦ НОВОГО КОДА
+                // =======================================================
+
+                try {
+                    Object[] args = payload.getArgs();
+                    Method methodToCall = Arrays.stream(deviceObj.getClass().getMethods())
+                            .filter(m -> m.isAnnotationPresent(com.loracore.computer.api.Callback.class))
+                            .filter(m -> m.getName().equals(payload.methodName()))
+                            .findFirst()
+                            .orElseThrow(() -> new NoSuchMethodException("Method '" + payload.methodName() + "' not found or not a @Callback."));
+
+                    Object result = methodToCall.invoke(deviceObj, args);
+
+                    String resultJson = DeviceMethodResultS2CPacket.resultToJson(result);
+                    ServerPlayNetworking.send(player, new DeviceMethodResultS2CPacket(payload.requestId(), true, resultJson));
+
+                } catch (Exception e) {
+                    String errorMsg = e.getCause() != null ? e.getCause().getMessage() : e.getMessage();
+                    ServerPlayNetworking.send(player, new DeviceMethodResultS2CPacket(payload.requestId(), false, DeviceMethodResultS2CPacket.resultToJson(errorMsg)));
                 }
             });
         });

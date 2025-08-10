@@ -37,7 +37,7 @@ public class OsAPI extends LibFunction {
         osTable.set("shutdown", new shutdown(vm));
         osTable.set("sleep", new sleep(vm, coroutine_yield));
         osTable.set("pullEvent", new pullEvent(coroutine_yield));
-        osTable.set("boot_java", new boot_java(vm, player)); // Передаем и vm, и player
+        osTable.set("boot_java", new boot_java(vm)); // Передаем и vm, и player
 
         env.get("package").get("loaded").set("loracore_os", osTable);
         return osTable;
@@ -100,25 +100,13 @@ public class OsAPI extends LibFunction {
     // ИСПРАВЛЕННЫЙ КЛАСС
     private static class boot_java extends OneArgFunction {
         private final VirtualMachine vm;
-        private final ServerPlayerEntity player;
 
-        // Конструктор теперь принимает оба объекта
-        public boot_java(VirtualMachine vm, ServerPlayerEntity player) {
-            this.vm = vm;
-            this.player = player;
-        }
+        public boot_java(VirtualMachine vm) { this.vm = vm; }
 
         @Override
         public LuaValue call(LuaValue arg) {
             String path = arg.checkjstring();
-
-            // Отправляем пакет клиенту с командой на переключение
-            ServerPlayNetworking.send(player, new SwitchToClientKernelS2CPacket(path));
-
-            // Удаляем серверную ВМ, так как она больше не нужна
-            VirtualMachineManager.getInstance().remove(vm.getTabletUuid());
-
-            // Выбрасываем сигнал, чтобы чисто остановить Lua-поток
+            vm.bootJava(path); // <-- Просто вызываем метод ВМ
             throw new RebootSignalException();
         }
     }

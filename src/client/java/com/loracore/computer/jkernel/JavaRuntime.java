@@ -55,6 +55,9 @@ public class JavaRuntime implements IRuntimeEnvironment {
         // Возвращаем true только если это владелец планшета
         return isOwner;
     }
+    public KernelManager getKernelManager() {
+        return this.kernelManager;
+    }
 
     // --- Остальные методы остаются без изменений ---
 

@@ -8,6 +8,7 @@ import com.loracore.gui.AskChatScreen;
 import com.loracore.gui.TabletScreen;
 import com.loracore.keybinding.ModKeyBindings;
 import com.loracore.network.BootTabletS2CPacket;
+import com.loracore.network.DeviceMethodResultS2CPacket;
 import com.loracore.network.SwitchToClientKernelS2CPacket;
 import com.loracore.network.graphics.GpuCommandC2SPacket;
 import com.loracore.network.graphics.ScreenUpdateS2CPacket;
@@ -62,6 +63,15 @@ public class LoraCoreClient implements ClientModInitializer {
                 TabletScreen tabletScreen = new TabletScreen(payload.fileSystemUuid(), payload.tabletUuid());
                 // Строка tabletScreen.setTabletRamKb(...) была удалена
                 context.client().setScreen(tabletScreen);
+            });
+        });
+        ClientPlayNetworking.registerGlobalReceiver(DeviceMethodResultS2CPacket.ID, (payload, context) -> {
+            context.client().execute(() -> {
+                Screen currentScreen = MinecraftClient.getInstance().currentScreen;
+                if (currentScreen instanceof TabletScreen tabletScreen) {
+                    // TabletScreen должен иметь метод для обработки этого
+                    tabletScreen.onDeviceResult(payload.requestId(), payload.success(), payload.getResult());
+                }
             });
         });
 

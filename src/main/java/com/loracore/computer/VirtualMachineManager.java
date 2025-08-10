@@ -7,6 +7,8 @@ import com.loracore.component.data.CpuData;
 import com.loracore.component.data.FileSystemsData;
 import com.loracore.component.data.MotherboardData;
 import com.loracore.component.data.RamData;
+import com.loracore.network.SwitchToClientKernelS2CPacket;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.server.network.ServerPlayerEntity;
@@ -19,6 +21,7 @@ import java.util.Map;
 import java.util.Optional; // <-- ИСПРАВЛЕНИЕ: Добавлен импорт
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
 /**
@@ -135,8 +138,9 @@ public class VirtualMachineManager {
         };
 
         // Обработчик для Java-ядра пока пустой, так как оно все еще клиентское
-        Consumer<String> javaBootHandler = (path) -> {
-            LoraCoreMod.LOGGER.warn("Попытка загрузить Java-ядро ({}) на серверной ВМ. Эта функция еще не реализована.", path);
+        BiConsumer<ServerPlayerEntity, String> javaBootHandler = (p, path) -> {
+            LoraCoreMod.LOGGER.info("Запрос на переключение в Java-ядро ({}) для игрока {}", path, p.getName().getString());
+            ServerPlayNetworking.send(p, new SwitchToClientKernelS2CPacket(path));
         };
 
         return new VirtualMachine(player, architecture, totalRamKb, serverTerminal,

@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
 public class VirtualMachine {
@@ -27,19 +28,21 @@ public class VirtualMachine {
     private final IAsyncVFS vfs;
     private final UUID fsUuid;
     private final UUID tabletUuid; // <-- НОВОЕ ПОЛЕ
-    private final Consumer<String> javaBootHandler; // <-- Новое поле
+    private final BiConsumer<ServerPlayerEntity, String> javaBootHandler; // <-- Новое поле
     private final List<Object> devices = new ArrayList<>();
     private final long startTime;
     private String crashMessage = null;
     private volatile boolean isOn = false;
     private final ServerPlayerEntity player;
+    public enum State { LUA, JAVA_KERNEL }
+    private State currentState = State.LUA;
 
     private final Map<Integer, LuaThreadRunner> threads = new ConcurrentHashMap<>();
     private static final int MAIN_THREAD_ID = 0;
     private final int totalRamKb; // <-- НОВОЕ ПОЛЕ для хранения лимита памяти
 
     // ИСПРАВЛЕНО: Конструктор теперь принимает оба UUID и обработчик перезагрузки
-    public VirtualMachine(ServerPlayerEntity player, String architecture, int totalRamKb, Terminal terminal, ResourceLoader resourceLoader, IAsyncVFS vfs, UUID fsUuid, UUID tabletUuid, Consumer<String> javaBootHandler) {
+    public VirtualMachine(ServerPlayerEntity player, String architecture, int totalRamKb, Terminal terminal, ResourceLoader resourceLoader, IAsyncVFS vfs, UUID fsUuid, UUID tabletUuid, BiConsumer<ServerPlayerEntity, String> javaBootHandler) {
         this.player = player;
         this.totalRamKb = totalRamKb; // <-- СОХРАНЯЕМ лимит памяти
         this.terminal = terminal;
@@ -47,14 +50,16 @@ public class VirtualMachine {
         this.vfs = vfs;
         this.fsUuid = fsUuid;
         this.tabletUuid = tabletUuid; // <-- СОХРАНЯЕМ
-        this.javaBootHandler = javaBootHandler; // <-- Сохраняем обработчик
+        this.javaBootHandler = javaBootHandler;// <-- Сохраняем обработчик
         this.startTime = System.nanoTime();
+
 
         this.devices.add(new ThreadDevice(this));
         this.devices.add(new CpuDevice(this, architecture));
         this.devices.add(new RamDevice(this, totalRamKb));
         this.devices.add(new TerminalDevice(terminal));
-        this.devices.add(new GpuDevice(this.tabletUuid)); // <-- ИСПРАВЛЕНО: Передаем UUID
+        this.devices.add(new GpuDevice(this.tabletUuid));
+        this.devices.add(new RedstoneDevice());
     }
     public boolean isOn() {
         return this.isOn;
@@ -222,6 +227,10 @@ public class VirtualMachine {
         return this.totalRamKb;
     }
 
+    public State getCurrentState() {
+        return this.currentState;
+    }
+
     public double getMemoryUsage() {
         LuaThreadRunner mainRunner = threads.get(MAIN_THREAD_ID);
         if (mainRunner != null) {
@@ -272,7 +281,9 @@ public class VirtualMachine {
      */
     public void bootJava(String path) {
         if (this.javaBootHandler != null) {
-            this.javaBootHandler.accept(path);
+            this.currentState = State.JAVA_KERNEL; // Меняем состояние!
+            LoraCoreMod.LOGGER.info("VM {} переходит в состояние JAVA_KERNEL.", this.tabletUuid);
+            this.javaBootHandler.accept(this.player, path);
         }
     }
 

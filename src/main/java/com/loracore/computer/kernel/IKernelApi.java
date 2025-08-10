@@ -52,5 +52,13 @@ public interface IKernelApi {
      */
     IKernelGraphics getGraphics();
 
-
+    /**
+     * [НОВЫЙ МЕТОД]
+     * Асинхронно вызывает метод на серверном устройстве.
+     * @param deviceType Тип устройства (например, "redstone").
+     * @param methodName Имя метода для вызова (например, "getPower").
+     * @param args Аргументы для метода.
+     * @return Future, который завершится с результатом от устройства.
+     */
+    CompletableFuture<Object[]> invokeDevice(String deviceType, String methodName, Object... args);
 }

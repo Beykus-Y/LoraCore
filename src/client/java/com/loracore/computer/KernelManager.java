@@ -5,6 +5,7 @@ import com.loracore.LoraCoreMod;
 import com.loracore.api.ClientApi;
 import com.loracore.computer.kernel.*;
 import com.loracore.gui.TabletScreen;
+import com.loracore.network.InvokeDeviceMethodC2SPacket;
 import com.loracore.network.RunLuaScriptC2SPacket;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 
@@ -13,11 +14,10 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.net.URL;
-import java.util.Base64;
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.jar.JarInputStream;
 import java.util.jar.Manifest;
@@ -176,6 +176,17 @@ public class KernelManager {
         this.isRunning = false;
         LoraCoreMod.LOGGER.error("Kernel crashed: {}", message);
     }
+    /**
+     * НОВЫЙ МЕТОД, который нужно добавить.
+     * Он будет принимать вызов от TabletScreen и передавать его дальше
+     * внутреннему обработчику API.
+     */
+    public void onDeviceResult(int requestId, boolean success, Object[] result) {
+        // Проверяем, что наш api является экземпляром KernelApiImpl
+        if (this.api instanceof KernelApiImpl apiImpl) {
+            apiImpl.onDeviceResult(requestId, success, result);
+        }
+    }
 
     // Метод unpackJar больше не нужен и был удален.
 
@@ -184,6 +195,8 @@ public class KernelManager {
         private final IKernelVfs kernelVfs;
         private IKernelGraphics graphics;
         private final UUID tabletUuid;
+        private final Map<Integer, CompletableFuture<Object[]>> pendingDeviceRequests = new ConcurrentHashMap<>();
+        private final AtomicInteger nextRequestId = new AtomicInteger(0);
 
         public KernelApiImpl(ClientVFS vfs, UUID tabletUuid, TabletScreen parentScreen, net.minecraft.client.texture.NativeImage screenImage, boolean isOwner) {
             this.parentScreen = parentScreen;
@@ -245,6 +258,27 @@ public class KernelManager {
         public void sendToLua(int threadId, Object... message) {
             // Реализация может быть добавлена позже
         }
+        @Override
+        public CompletableFuture<Object[]> invokeDevice(String deviceType, String methodName, Object... args) {
+            int requestId = nextRequestId.getAndIncrement();
+            CompletableFuture<Object[]> future = new CompletableFuture<>();
+            pendingDeviceRequests.put(requestId, future);
+
+            String argsJson = InvokeDeviceMethodC2SPacket.argsToJson(args);
+            ClientPlayNetworking.send(new InvokeDeviceMethodC2SPacket(this.tabletUuid, requestId, deviceType, methodName, argsJson));
+
+            return future;
+        }
+        public void onDeviceResult(int requestId, boolean success, Object[] result) {
+            CompletableFuture<Object[]> future = pendingDeviceRequests.remove(requestId);
+            if (future != null) {
+                if (success) {
+                    future.complete(result);
+                } else {
+                    future.completeExceptionally(new RuntimeException((String) result[0]));
+                }
+            }
+        }
     }
 
     private static class KernelVfsImpl implements IKernelVfs {
@@ -269,6 +303,7 @@ public class KernelManager {
                 }
             });
         }
+
 
         @Override public CompletableFuture<Boolean> writeBytes(String path, byte[] data) { return vfs.writeAsync(path, Base64.getEncoder().encodeToString(data)).thenApply(luaValue -> !luaValue.isnil() && luaValue.toboolean()); }
         @Override public CompletableFuture<Boolean> makeDir(String path) { return vfs.makeDirAsync(path).thenApply(luaValue -> !luaValue.isnil() && luaValue.toboolean()); }
