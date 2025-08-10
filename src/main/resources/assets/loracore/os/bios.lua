@@ -1,9 +1,10 @@
 -- =======================================================
--- LoraBIOS v2.0 - Advanced POST Bootloader
+-- LoraBIOS v2.1 - Corrected Bootloader
 -- =======================================================
 -- Описание: Улучшенный BIOS с имитацией Power-On Self-Test,
 -- отображением статусов проверки оборудования и более
 -- реалистичной задержкой загрузки.
+-- Исправлена обработка сигнала перезагрузки из recovery.
 -- =======================================================
 
 -- Локальные переменные для производительности и удобства
@@ -44,7 +45,7 @@ end
 local function main()
     -- 1. Начальная очистка и заголовок
     gpu.fill(0, 0, W, H, colors.black)
-    gpu.drawText(PADDING, PADDING, "LoraBIOS v2.0", colors.gray)
+    gpu.drawText(PADDING, PADDING, "LoraBIOS v2.1", colors.gray)
     gpu.fill(PADDING, PADDING + LINE_HEIGHT, W - (PADDING * 2), 1, colors.gray)
     os.sleep(0.5)
 
@@ -63,7 +64,6 @@ local function main()
 
     -- Проверка RAM (с анимацией)
     print_line(current_line, "RAM Check       :", colors.white)
-    -- ИСПРАВЛЕНИЕ: Получаем размер RAM динамически из API планшета
     local total_ram_kb = 512 -- Значение по умолчанию
     if tablet and tablet.ram then
         local success, ram_size = pcall(function() return tablet.ram.getTotalSize() end)
@@ -71,7 +71,7 @@ local function main()
             total_ram_kb = ram_size
         end
     end
-    
+
     for i = 0, total_ram_kb, 32 do
         local progress_text = string.format("%d KB OK", i)
         -- Очищаем область для текста и рисуем новый
@@ -108,25 +108,19 @@ local function main()
         print_line(current_line, "Starting LoraCore Recovery Environment...", colors.white)
         os.sleep(1)
 
-        -- Загружаем скрипт восстановления
-        -- Используем pcall для безопасного вызова, чтобы избежать краша BIOS
-        local ok, recovery_func_or_err = pcall(loadfile, "/os/recovery.lua", "t", _G)
+        -- ИСПРАВЛЕННЫЙ БЛОК ЗАГРУЗКИ RECOVERY
+        -- Загружаем скрипт восстановления напрямую.
+        local recovery_func, err_msg = loadfile("/os/recovery.lua", "t", _G)
 
-        if ok and type(recovery_func_or_err) == "function" then
-            local success, err = pcall(recovery_func_or_err)
-            if not success then
-                -- Если сам скрипт recovery.lua вызвал ошибку
-                gpu.fill(0,0, W, H, colors.red)
-                gpu.drawText(10, 10, "CRITICAL: Recovery script crashed!", colors.white)
-                gpu.drawText(10, 25, tostring(err), colors.white)
-                os.sleep(5)
-                os.reboot()
-            end
+        if recovery_func then
+            -- Если функция загружена, просто вызываем ее.
+            -- Больше нет pcall, который ловил бы RebootSignal.
+            recovery_func()
         else
-            -- Если файл recovery.lua не найден или не может быть скомпилирован
+            -- Если файл recovery.lua не найден или содержит синтаксическую ошибку
             gpu.fill(0,0, W, H, colors.red)
             gpu.drawText(10, 10, "CRITICAL: Recovery script is missing or corrupted!", colors.white)
-            gpu.drawText(10, 25, tostring(recovery_func_or_err), colors.white)
+            gpu.drawText(10, 25, tostring(err_msg), colors.white)
             os.sleep(5)
             os.reboot()
         end

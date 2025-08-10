@@ -9,11 +9,12 @@ pluginManagement {
 		gradlePluginPortal()
 	}
 }
-include("kernel", "ai-assistant", "terminal-app")
+include("kernel", "ai-assistant", "terminal-app", "file-explorer-app")
 
 // Устанавливаем правильные имена проектов
 rootProject.name = 'loracore'
 project(':kernel').name = 'kernel'
 project(':ai-assistant').name = 'ai-assistant'
 project(':terminal-app').name = 'terminal-app'
+project(':file-explorer-app').name = 'file-explorer-app'
 

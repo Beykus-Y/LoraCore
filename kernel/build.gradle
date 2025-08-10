@@ -21,7 +21,7 @@ loom {
 // Шаг 4: Указываем зависимости. Теперь Loom поймет эти строки.
 dependencies {
     // Зависимость от основного мода, чтобы видеть IKernel, IKernelApi и т.д.
-    compileOnly(rootProject.sourceSets.client.output)
+    compileOnly(rootProject.sourceSets.main.output)
     modCompileOnly "net.fabricmc.fabric-api:fabric-api:${project.rootProject.fabric_version}"
     // Теперь, когда Loom активен, он правильно найдет и обработает эти зависимости
     minecraft "com.mojang:minecraft:${project.rootProject.minecraft_version}"

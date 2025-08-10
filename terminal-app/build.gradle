@@ -9,10 +9,19 @@ archivesBaseName = 'terminal'
 
 loom {}
 
+configurations {
+    embed
+}
 dependencies {
-    api project(':kernel')
-    compileOnly rootProject.sourceSets.client.output
+    // 1. Помещаем зависимость :kernel в нашу новую конфигурацию 'embed'
+    // Зависимость от проекта "kernel" для доступа к IApplication, IApplicationApi и т.д.
+    compileOnly project(':kernel')
 
+    // Зависимость от основного мода для доступа к IKernelGraphics, KernelEvent
+    compileOnly(rootProject.sourceSets.main.output)
+
+    // Теперь, когда Loom активен, он правильно найдет и обработает эти зависимости,
+    // включая SLF4J, который является частью Minecraft/Fabric.
     implementation 'org.luaj:luaj-jse:3.0'
     minecraft "com.mojang:minecraft:${project.rootProject.minecraft_version}"
     mappings "net.fabricmc:yarn:${project.rootProject.yarn_mappings}:v2"
@@ -26,6 +35,14 @@ java {
 
 jar {
     manifest {
-        attributes('App-Main-Class': 'com.lora.tabletos.apps.TerminalApp')
+        attributes(
+                'App-Main-Class': 'com.lora.tabletos.apps.TerminalApp'
+        )
     }
+    // 3. Изменяем задачу jar, чтобы она упаковывала зависимости ТОЛЬКО из нашей конфигурации 'embed'
+    from {
+        // Вместо runtimeClasspath используем embed
+        configurations.embed.collect { it.isDirectory() ? it : zipTree(it) }
+    }
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }

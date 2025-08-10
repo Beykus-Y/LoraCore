@@ -1,4 +1,4 @@
-// [ИЗМЕНЕНО]
+// Расположение: src/main/java/com/loracore/network/BootTabletS2CPacket.java
 package com.loracore.network;
 
 import com.loracore.LoraCoreMod;
@@ -11,19 +11,16 @@ import net.minecraft.util.Uuids;
 
 import java.util.UUID;
 
+// Пакет был значительно упрощен. Убраны bootScriptPath и architecture.
 public record BootTabletS2CPacket(
         UUID fileSystemUuid,
-        String bootScriptPath,
-        String architecture,
         UUID tabletUuid,
-        int totalRamKb // [НОВОЕ ПОЛЕ]
+        int totalRamKb
 ) implements CustomPayload {
     public static final CustomPayload.Id<BootTabletS2CPacket> ID = new CustomPayload.Id<>(new Identifier(LoraCoreMod.MOD_ID, "boot_tablet"));
 
     public static final PacketCodec<RegistryByteBuf, BootTabletS2CPacket> CODEC = PacketCodec.tuple(
             Uuids.PACKET_CODEC, BootTabletS2CPacket::fileSystemUuid,
-            PacketCodecs.STRING, BootTabletS2CPacket::bootScriptPath,
-            PacketCodecs.STRING, BootTabletS2CPacket::architecture,
             Uuids.PACKET_CODEC, BootTabletS2CPacket::tabletUuid,
             PacketCodecs.VAR_INT, BootTabletS2CPacket::totalRamKb,
             BootTabletS2CPacket::new

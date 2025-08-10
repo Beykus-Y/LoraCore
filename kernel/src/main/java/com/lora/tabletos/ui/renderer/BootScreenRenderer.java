@@ -2,7 +2,6 @@ package com.lora.tabletos.ui.renderer;
 
 import com.loracore.computer.kernel.IKernelGraphics;
 import com.lora.tabletos.state.KernelState;
-import com.lora.tabletos.util.ColorUtils;
 import com.lora.tabletos.util.GraphicsUtils;
 
 /**

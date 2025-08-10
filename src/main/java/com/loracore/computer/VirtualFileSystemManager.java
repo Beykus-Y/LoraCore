@@ -56,6 +56,9 @@ public class VirtualFileSystemManager {
             }
         });
     }
+    public Path getWorldSavePath() {
+        return this.worldSavePath;
+    }
 
     public VFSResponse performOperation(UUID fsUuid, VfsRequestC2SPacket.Operation op, String path, String content) {
         // ИСПРАВЛЕНИЕ: Добавляем проверку на null для fsUuid

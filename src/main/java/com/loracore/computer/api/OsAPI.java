@@ -1,8 +1,11 @@
-// Полный исправленный файл: src/main/java/com/loracore/computer/api/OsAPI.java
 package com.loracore.computer.api;
 
 import com.loracore.computer.RebootSignalException;
 import com.loracore.computer.VirtualMachine;
+import com.loracore.computer.VirtualMachineManager;
+import com.loracore.network.SwitchToClientKernelS2CPacket;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
+import net.minecraft.server.network.ServerPlayerEntity;
 import org.luaj.vm2.LuaTable;
 import org.luaj.vm2.LuaValue;
 import org.luaj.vm2.Varargs;
@@ -16,25 +19,25 @@ import java.util.TimerTask;
 
 public class OsAPI extends LibFunction {
     private final VirtualMachine vm;
+    private final ServerPlayerEntity player;
     private static final Timer LUA_TIMER = new Timer("LoraCore-LuaTimers", true);
-    // ИСПРАВЛЕНИЕ 1: Переменная для хранения ссылки на библиотеку 'coroutine'
     private LuaValue coroutine_yield;
 
-    public OsAPI(VirtualMachine vm) {
+    public OsAPI(VirtualMachine vm, ServerPlayerEntity player) {
         this.vm = vm;
+        this.player = player;
     }
 
     @Override
     public LuaValue call(LuaValue modname, LuaValue env) {
-        // ИСПРАВЛЕНИЕ 2: Получаем и сохраняем функцию 'yield' из библиотеки 'coroutine'
-        // Это нужно сделать один раз при инициализации.
         this.coroutine_yield = env.get("coroutine").get("yield");
 
         LuaTable osTable = (LuaTable) env.get("os");
         osTable.set("reboot", new reboot(vm));
-        osTable.set("sleep", new sleep(vm, coroutine_yield)); // Передаем 'yield' в конструктор
-        osTable.set("pullEvent", new pullEvent(coroutine_yield)); // Передаем 'yield' в конструктор
-        osTable.set("boot_java", new boot_java(vm)); // <-- Добавь эту строку
+        osTable.set("shutdown", new shutdown(vm));
+        osTable.set("sleep", new sleep(vm, coroutine_yield));
+        osTable.set("pullEvent", new pullEvent(coroutine_yield));
+        osTable.set("boot_java", new boot_java(vm, player)); // Передаем и vm, и player
 
         env.get("package").get("loaded").set("loracore_os", osTable);
         return osTable;
@@ -45,16 +48,26 @@ public class OsAPI extends LibFunction {
         public reboot(VirtualMachine vm) { this.vm = vm; }
         @Override
         public LuaValue call() {
+            VirtualMachineManager.getInstance().remove(vm.getTabletUuid());
             vm.reboot();
+            throw new RebootSignalException();
+        }
+    }
+
+    private static class shutdown extends ZeroArgFunction {
+        private final VirtualMachine vm;
+        public shutdown(VirtualMachine vm) { this.vm = vm; }
+        @Override
+        public LuaValue call() {
+            vm.shutdown(); // Этот метод установит флаг isOn=false для сохранения
             throw new RebootSignalException();
         }
     }
 
     private static class sleep extends OneArgFunction {
         private final VirtualMachine vm;
-        private final LuaValue yield; // Храним ссылку на функцию yield
+        private final LuaValue yield;
 
-        // Конструктор теперь принимает LuaValue
         public sleep(VirtualMachine vm, LuaValue yield) {
             this.vm = vm;
             this.yield = yield;
@@ -67,37 +80,45 @@ public class OsAPI extends LibFunction {
                 @Override public void run() { vm.pushEvent("timer"); }
             }, (long)(seconds * 1000));
 
-            // ИСПРАВЛЕНИЕ 3: Вызываем сохраненную функцию yield
-            return yield.call(valueOf("timer"));
+            // Используем `invoke()` для Varargs, а не `call()`
+            return yield.invoke(valueOf("timer")).arg1();
         }
     }
 
     private static class pullEvent extends VarArgFunction {
-        private final LuaValue yield; // Храним ссылку на функцию yield
-
-        // Конструктор теперь не нуждается в 'vm' и убирает предупреждения
+        private final LuaValue yield;
         public pullEvent(LuaValue yield) {
             this.yield = yield;
         }
 
         @Override
         public Varargs invoke(Varargs args) {
-            // ИСПРАВЛЕНИЕ 3: Вызываем сохраненную функцию yield
             return yield.invoke(args);
         }
     }
 
-    // Добавь новый внутренний класс для команды
+    // ИСПРАВЛЕННЫЙ КЛАСС
     private static class boot_java extends OneArgFunction {
         private final VirtualMachine vm;
-        public boot_java(VirtualMachine vm) { this.vm = vm; }
-        
+        private final ServerPlayerEntity player;
+
+        // Конструктор теперь принимает оба объекта
+        public boot_java(VirtualMachine vm, ServerPlayerEntity player) {
+            this.vm = vm;
+            this.player = player;
+        }
+
         @Override
         public LuaValue call(LuaValue arg) {
             String path = arg.checkjstring();
-            vm.bootJava(path);
-            // Эта функция не должна возвращать управление, так как VM перезагружается.
-            // Но на всякий случай вернем nil.
+
+            // Отправляем пакет клиенту с командой на переключение
+            ServerPlayNetworking.send(player, new SwitchToClientKernelS2CPacket(path));
+
+            // Удаляем серверную ВМ, так как она больше не нужна
+            VirtualMachineManager.getInstance().remove(vm.getTabletUuid());
+
+            // Выбрасываем сигнал, чтобы чисто остановить Lua-поток
             throw new RebootSignalException();
         }
     }

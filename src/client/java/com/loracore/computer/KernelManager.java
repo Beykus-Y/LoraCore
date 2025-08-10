@@ -2,40 +2,37 @@
 package com.loracore.computer;
 
 import com.loracore.LoraCoreMod;
-// ИСПРАВЛЕНИЕ 1: Добавляем импорт для ClientApi
 import com.loracore.api.ClientApi;
-import com.loracore.api.GpuApi;
 import com.loracore.computer.kernel.*;
 import com.loracore.gui.TabletScreen;
-import net.minecraft.client.MinecraftClient;
-import org.apache.commons.compress.archivers.jar.JarArchiveEntry;
-import org.apache.commons.compress.archivers.jar.JarArchiveInputStream;
+import com.loracore.network.RunLuaScriptC2SPacket;
+import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 
 import java.io.ByteArrayInputStream;
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.net.URL;
 import java.util.Base64;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.jar.Manifest;
 import java.util.function.Consumer;
-import java.lang.reflect.Method;
+import java.util.jar.JarInputStream;
+import java.util.jar.Manifest;
 
 public class KernelManager {
 
     private final IKernelApi api;
-    private final JarClassLoader classLoader;
     private final TabletScreen parentScreen;
     private IKernel kernelInstance;
     private boolean isRunning = false;
     private String crashError = null;
 
+    // Конструктор теперь не создает ненужный ClassLoader
     public KernelManager(ClientVFS vfs, UUID tabletUuid, TabletScreen parentScreen, net.minecraft.client.texture.NativeImage screenImage, boolean isOwner) {
         this.parentScreen = parentScreen;
-        this.classLoader = new JarClassLoader(getClass().getClassLoader());
         this.api = new KernelApiImpl(vfs, tabletUuid, parentScreen, screenImage, isOwner);
     }
 
@@ -46,50 +43,71 @@ public class KernelManager {
     public String getCrashMessage() {
         return this.crashError;
     }
+    public void updateGraphics(net.minecraft.client.texture.NativeImage newScreenImage) {
+        if (api instanceof KernelApiImpl apiImpl) {
+            // 1. Пересоздаем графику внутри старого API
+            apiImpl.recreateGraphics(newScreenImage);
 
+            // ✅ ИСПРАВЛЕНИЕ: 2. Уведомляем ядро о том, что API обновился,
+            // и передаем ему этот обновленный экземпляр.
+            if (this.kernelInstance != null) {
+                this.kernelInstance.onApiUpdate(this.api);
+            }
+        }
+    }
+
+    /**
+     * Полностью переписанный метод загрузки.
+     * Он сохраняет полученный JAR во временный файл и загружает его целиком через URLClassLoader.
+     */
     public void boot(String jarPath) {
         api.getVfs().readBytes(jarPath).whenComplete((jarBytesOpt, error) -> {
-            // ИСПРАВЛЕНИЕ 2: Используем ClientApi для выполнения кода в основном потоке клиента
             ClientApi.executeOnRenderThread(() -> {
-                if (error != null) {
-                    setCrashState("VFS Error: Failed to read " + jarPath + ": " + error.getMessage());
+                if (error != null || jarBytesOpt.isEmpty()) {
+                    setCrashState("VFS Error: Failed to read kernel at " + jarPath);
                     return;
                 }
-                if (jarBytesOpt.isEmpty()) {
-                    setCrashState("Boot Error: Kernel file not found at " + jarPath);
-                    return;
-                }
-                try {
-                    Map<String, byte[]> classData = unpackJar(jarBytesOpt.get());
-                    byte[] manifestBytes = classData.get("META-INF/MANIFEST.MF");
-                    if (manifestBytes == null) throw new IOException("JAR is missing META-INF/MANIFEST.MF");
 
-                    Manifest manifest = new Manifest(new ByteArrayInputStream(manifestBytes));
+                File tempJarFile = null;
+                try {
+                    // 1. Создаем временный файл для нашего JAR-а.
+                    tempJarFile = File.createTempFile("loracore_kernel_", ".jar");
+
+                    // 2. Записываем полученные из VFS байты во временный файл.
+                    try (FileOutputStream fos = new FileOutputStream(tempJarFile)) {
+                        fos.write(jarBytesOpt.get());
+                    }
+
+                    // 3. Получаем URL этого временного файла.
+                    URL[] urls = { tempJarFile.toURI().toURL() };
+
+                    // 4. Создаем НОВЫЙ экземпляр JarClassLoader, который теперь ЗНАЕТ о нашем JAR-файле.
+                    // Теперь он сможет сам находить все классы внутри, включая их зависимости (IWidget).
+                    JarClassLoader kernelClassLoader = new JarClassLoader(urls, getClass().getClassLoader());
+
+                    // 5. Читаем манифест, чтобы узнать главный класс.
+                    Manifest manifest;
+                    try (JarInputStream jis = new JarInputStream(new ByteArrayInputStream(jarBytesOpt.get()))) {
+                        manifest = jis.getManifest();
+                    }
+
+                    if (manifest == null) {
+                        throw new IOException("JAR file does not contain a valid MANIFEST.MF");
+                    }
                     String mainClassName = manifest.getMainAttributes().getValue("Kernel-Main-Class");
+
                     if (mainClassName == null || mainClassName.trim().isEmpty()) {
                         throw new IOException("Manifest is missing 'Kernel-Main-Class' attribute.");
                     }
 
-                    for (Map.Entry<String, byte[]> entry : classData.entrySet()) {
-                        if (entry.getKey().endsWith(".class")) {
-                            String className = entry.getKey().replace("/", ".").replace(".class", "");
-                            classLoader.defineClassFromData(className, entry.getValue());
-                        }
-                    }
+                    // 6. Загружаем главный класс ядра, используя уже "умный" загрузчик.
+                    Class<?> kernelClass = kernelClassLoader.loadClass(mainClassName);
 
-                    Class<?> kernelClass = classLoader.loadClass(mainClassName);
-                    LoraCoreMod.LOGGER.info("========== KERNEL CLASS DIAGNOSTICS START ==========");
-                    LoraCoreMod.LOGGER.info("Loaded Class Name: {}", kernelClass.getName());
-                    LoraCoreMod.LOGGER.info("Is assignable from IKernel? {}", IKernel.class.isAssignableFrom(kernelClass));
-                    LoraCoreMod.LOGGER.info("Methods found in loaded class:");
-                    for (Method method : kernelClass.getDeclaredMethods()) {
-                        LoraCoreMod.LOGGER.info(" - {}", method.toString());
-                    }
-                    LoraCoreMod.LOGGER.info("========== KERNEL CLASS DIAGNOSTICS END ==========");
                     if (!IKernel.class.isAssignableFrom(kernelClass)) {
                         throw new ClassCastException("Main class " + mainClassName + " does not implement IKernel.");
                     }
 
+                    // 7. Создаем экземпляр и запускаем.
                     this.kernelInstance = (IKernel) kernelClass.getConstructor().newInstance();
                     this.kernelInstance.onBoot(this.api);
                     this.isRunning = true;
@@ -97,15 +115,18 @@ public class KernelManager {
                 } catch (Exception e) {
                     LoraCoreMod.LOGGER.error("Kernel Panic on boot", e);
                     setCrashState("Kernel Panic: " + e.getClass().getSimpleName() + " - " + e.getMessage());
+                } finally {
+                    // 8. Обязательно удаляем временный файл после использования, чтобы не засорять систему.
+                    if (tempJarFile != null) {
+                        tempJarFile.delete();
+                    }
                 }
             });
         });
     }
 
-    // === ГЛАВНЫЙ МЕТОД РЕНДЕРИНГА ===
     public void render(int mouseX, int mouseY, float delta) {
         if (!isRunning || kernelInstance == null) return;
-        // Ядро само рисует в буфер через IKernelGraphics
         kernelInstance.onRender(mouseX, mouseY, delta);
     }
 
@@ -156,100 +177,74 @@ public class KernelManager {
         LoraCoreMod.LOGGER.error("Kernel crashed: {}", message);
     }
 
-    private Map<String, byte[]> unpackJar(byte[] jarData) throws IOException {
-        Map<String, byte[]> classData = new ConcurrentHashMap<>();
-        try (JarArchiveInputStream jarStream = new JarArchiveInputStream(new ByteArrayInputStream(jarData))) {
-            JarArchiveEntry entry;
-            while ((entry = jarStream.getNextJarEntry()) != null) {
-                if (!entry.isDirectory()) {
-                    byte[] data = jarStream.readAllBytes();
-                    classData.put(entry.getName(), data);
-                }
-            }
-        }
-        return classData;
-    }
+    // Метод unpackJar больше не нужен и был удален.
 
     private static class KernelApiImpl implements IKernelApi {
         private final TabletScreen parentScreen;
         private final IKernelVfs kernelVfs;
-        private final IKernelGraphics graphics;
-        private Consumer<String> luaExecutor;
+        private IKernelGraphics graphics;
+        private final UUID tabletUuid;
 
         public KernelApiImpl(ClientVFS vfs, UUID tabletUuid, TabletScreen parentScreen, net.minecraft.client.texture.NativeImage screenImage, boolean isOwner) {
             this.parentScreen = parentScreen;
             this.kernelVfs = new KernelVfsImpl(vfs);
-            
-            // Логика выбора драйвера
+            this.tabletUuid = tabletUuid;
+
             if (isOwner) {
-                // Для владельца планшета используем клиентский рендеринг
                 this.graphics = new com.loracore.computer.jkernel.ClientSideGraphics(screenImage, net.minecraft.client.MinecraftClient.getInstance().getResourceManager());
             } else {
-                // Для других игроков используем серверный рендеринг
                 this.graphics = new com.loracore.computer.jkernel.ServerSideGraphics(tabletUuid);
             }
         }
 
-        @Override 
-        public IKernelGraphics getGraphics() { 
-            return this.graphics; 
+        public void recreateGraphics(net.minecraft.client.texture.NativeImage newScreenImage) {
+            // Пересоздаем объект ClientSideGraphics с новой, "живой" ссылкой на NativeImage
+            this.graphics = new com.loracore.computer.jkernel.ClientSideGraphics(
+                    newScreenImage,
+                    net.minecraft.client.MinecraftClient.getInstance().getResourceManager()
+            );
         }
 
-        @Override 
-        public IKernelVfs getVfs() { 
-            return this.kernelVfs; 
+        @Override
+        public IKernelGraphics getGraphics() {
+            return this.graphics;
         }
 
-        @Override 
-        public int[] getTerminalSize() { 
-            return new int[]{480, 270}; 
+        @Override
+        public IKernelVfs getVfs() {
+            return this.kernelVfs;
         }
 
-        @Override 
-        public void reboot() { 
-            parentScreen.reboot(); 
+        @Override
+        public int[] getTerminalSize() {
+            return new int[]{480, 270};
         }
 
-        @Override 
-        public void shutdown() { 
-            parentScreen.close(); 
+        @Override
+        public void reboot() {
+            parentScreen.reboot();
+        }
+
+        @Override
+        public void shutdown() {
+            parentScreen.close();
         }
 
         @Override
         public CompletableFuture<Boolean> runLuaScript(String path) {
-            if (luaExecutor == null) {
-                LoraCoreMod.LOGGER.error("Lua executor not set in KernelApiImpl.");
-                return CompletableFuture.completedFuture(false);
-            }
-
-            return kernelVfs.readBytes(path).thenApply(bytesOptional -> {
-                if (bytesOptional.isEmpty()) {
-                    LoraCoreMod.LOGGER.error("Failed to read Lua script from VFS path: {}", path);
-                    return false;
-                }
-                try {
-                    String scriptContent = new String(bytesOptional.get(), java.nio.charset.StandardCharsets.UTF_8);
-                    // Просто вызываем центральный executor, который сам создаст и установит activeShell
-                    luaExecutor.accept(scriptContent);
-                    return true;
-                } catch (Exception e) {
-                     LoraCoreMod.LOGGER.error("Failed to decode Lua script from path {}: {}", path, e.getMessage());
-                    return false;
-                }
-            });
+            ClientPlayNetworking.send(new RunLuaScriptC2SPacket(this.tabletUuid, path));
+            return CompletableFuture.completedFuture(true);
         }
 
         @Override
         public void setLuaExecutor(Consumer<String> executor) {
-            this.luaExecutor = executor;
+            // Реализация может быть добавлена позже, если потребуется
         }
 
-        @Override 
+        @Override
         public void sendToLua(int threadId, Object... message) {
-            // Пока не реализовано
+            // Реализация может быть добавлена позже
         }
-
-
     }
 
     private static class KernelVfsImpl implements IKernelVfs {
@@ -294,8 +289,4 @@ public class KernelManager {
             });
         }
     }
-
-
-
-
 }

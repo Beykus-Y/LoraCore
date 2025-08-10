@@ -5,6 +5,8 @@ import com.loracore.LoraCoreMod;
 import com.loracore.api.ClientApi;
 import com.loracore.computer.api.*;
 import com.loracore.computer.device.*;
+import net.minecraft.nbt.NbtCompound;
+import net.minecraft.server.network.ServerPlayerEntity;
 import org.luaj.vm2.*;
 import org.luaj.vm2.lib.OneArgFunction;
 import org.luaj.vm2.lib.VarArgFunction;
@@ -29,13 +31,16 @@ public class VirtualMachine {
     private final List<Object> devices = new ArrayList<>();
     private final long startTime;
     private String crashMessage = null;
+    private volatile boolean isOn = false;
+    private final ServerPlayerEntity player;
 
     private final Map<Integer, LuaThreadRunner> threads = new ConcurrentHashMap<>();
     private static final int MAIN_THREAD_ID = 0;
     private final int totalRamKb; // <-- НОВОЕ ПОЛЕ для хранения лимита памяти
 
     // ИСПРАВЛЕНО: Конструктор теперь принимает оба UUID и обработчик перезагрузки
-    public VirtualMachine(String architecture, int totalRamKb, Terminal terminal, ResourceLoader resourceLoader, IAsyncVFS vfs, UUID fsUuid, UUID tabletUuid, Consumer<String> javaBootHandler) {
+    public VirtualMachine(ServerPlayerEntity player, String architecture, int totalRamKb, Terminal terminal, ResourceLoader resourceLoader, IAsyncVFS vfs, UUID fsUuid, UUID tabletUuid, Consumer<String> javaBootHandler) {
+        this.player = player;
         this.totalRamKb = totalRamKb; // <-- СОХРАНЯЕМ лимит памяти
         this.terminal = terminal;
         this.resourceLoader = resourceLoader;
@@ -51,6 +56,9 @@ public class VirtualMachine {
         this.devices.add(new TerminalDevice(terminal));
         this.devices.add(new GpuDevice(this.tabletUuid)); // <-- ИСПРАВЛЕНО: Передаем UUID
     }
+    public boolean isOn() {
+        return this.isOn;
+    }
 
     private static class CustomPrint extends OneArgFunction {
         private final Terminal term;
@@ -65,7 +73,7 @@ public class VirtualMachine {
     private Globals createLuaGlobals(LuaThreadRunner runner) {
         Globals g = JsePlatform.standardGlobals();
         g.set("print", new CustomPrint(this.terminal));
-        g.load(new OsAPI(this));
+        g.load(new OsAPI(this, this.player));
         g.set("bios", new BiosAPI(this));
         g.set("colors", new ColorsAPI());
         g.set("require", new CustomRequire(g));
@@ -112,15 +120,21 @@ public class VirtualMachine {
     }
 
     public void start(String bootScriptContent) {
-        if (bootScriptContent == null || bootScriptContent.isEmpty() || "nil".equals(bootScriptContent)) {
-            final String error = "FATAL: Boot script is empty or could not be loaded.";
-            LoraCoreMod.LOGGER.error(error);
-            this.setCrashState(error);
+        // --- ИЗМЕНЕНИЕ: Устанавливаем флаг и запускаем поток ---
+        if (isOn) {
+            LoraCoreMod.LOGGER.warn("Попытка запустить уже работающую ВМ для планшета {}", this.tabletUuid);
             return;
         }
-        // ИСПРАВЛЕНИЕ 2: Мы передаем null для Globals при создании раннера,
-        // так как Globals теперь зависят от самого раннера.
+        if (bootScriptContent == null || bootScriptContent.isEmpty() || "nil".equals(bootScriptContent)) {
+            // ...
+            return;
+        }
+        this.isOn = true; // <--- Устанавливаем флаг
+        this.crashMessage = null; // Сбрасываем старые ошибки
         startNewLuaThread(MAIN_THREAD_ID, bootScriptContent, null);
+    }
+    public UUID getTabletUuid() {
+        return this.tabletUuid;
     }
 
     // ... (остальные методы без изменений: startNewLuaThread, pushEvent, shutdown, etc.)
@@ -147,12 +161,14 @@ public class VirtualMachine {
     }
 
     public void pushEvent(Object... args) {
-        // ДИАГНОСТИКА: Логируем все события
-        LoraCoreMod.LOGGER.info("VirtualMachine.pushEvent: {} args", args.length);
-        for (int i = 0; i < args.length; i++) {
-            LoraCoreMod.LOGGER.info("  arg[{}] = {} (type: {})", i, args[i], args[i] != null ? args[i].getClass().getSimpleName() : "null");
+        // Логирование изменено на DEBUG уровень
+        if (LoraCoreMod.LOGGER.isDebugEnabled()) {
+            LoraCoreMod.LOGGER.debug("VirtualMachine.pushEvent: {} args", args.length);
+            for (int i = 0; i < args.length; i++) {
+                LoraCoreMod.LOGGER.debug("  arg[{}] = {} (type: {})", i, args[i], args[i] != null ? args[i].getClass().getSimpleName() : "null");
+            }
         }
-        
+
         LuaValue[] event = new LuaValue[args.length];
         for (int i = 0; i < args.length; i++) {
             event[i] = switch (args[i]) {
@@ -163,10 +179,10 @@ public class VirtualMachine {
                 default -> LuaValue.NIL;
             };
         }
-        
-        LoraCoreMod.LOGGER.info("VirtualMachine: Pushing event to {} runners", threads.size());
+
+        LoraCoreMod.LOGGER.debug("VirtualMachine: Pushing event to {} runners", threads.size());
         for (LuaThreadRunner runner : threads.values()) {
-            LoraCoreMod.LOGGER.info("VirtualMachine: Pushing event to runner: {}", runner);
+            LoraCoreMod.LOGGER.debug("VirtualMachine: Pushing event to runner: {}", runner);
             runner.pushEvent(event);
         }
     }
@@ -179,6 +195,8 @@ public class VirtualMachine {
     }
 
     public void shutdown() {
+        // --- ИЗМЕНЕНИЕ: Останавливаем потоки и сбрасываем флаг ---
+        this.isOn = false; // <--- Сбрасываем флаг
         for (LuaThreadRunner runner : threads.values()) {
             runner.stop();
         }
@@ -302,5 +320,22 @@ public class VirtualMachine {
                 return NIL; // loadfile возвращает nil при ошибке
             }
         }
+    }
+    /**
+     * Сериализует базовое состояние ВМ (включена/выключена).
+     */
+    public NbtCompound writeToNbt() {
+        NbtCompound nbt = new NbtCompound();
+        nbt.putBoolean("isOn", this.isOn);
+        // В будущем здесь можно сохранять и другие простые данные, например, ник игрока
+        return nbt;
+    }
+
+    /**
+     * Загружает базовое состояние ВМ.
+     * @param nbt Данные для загрузки.
+     */
+    public void readFromNbt(NbtCompound nbt) {
+        this.isOn = nbt.getBoolean("isOn");
     }
 }

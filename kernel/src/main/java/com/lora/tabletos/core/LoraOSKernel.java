@@ -206,6 +206,20 @@ public class LoraOSKernel implements IKernel {
             graphics.endFrame();
         }
     }
+    /**
+     * [НОВАЯ РЕАЛИЗАЦИЯ]
+     * Обновляет внутренние ссылки на API и его компоненты.
+     */
+    @Override
+    public void onApiUpdate(IKernelApi newApi) {
+        LOGGER.info("LoraOS Kernel received API update.");
+        this.api = newApi;
+        this.graphics = newApi.getGraphics(); // <-- Самое важное: получаем новый графический контекст
+        this.vfs = newApi.getVfs();
+
+        // TODO: В будущем нужно будет также обновить API для всех дочерних компонентов,
+        // если они хранят свои собственные копии. Но сейчас это должно решить главную проблему.
+    }
     
     @Override
     public void onEvent(KernelEvent event) {

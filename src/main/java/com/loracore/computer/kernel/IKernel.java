@@ -50,4 +50,12 @@ public interface IKernel {
      * @return Map<String, Boolean> - результаты проверок
      */
     java.util.Map<String, Boolean> getCheckResults();
+
+    /**
+     * [НОВЫЙ МЕТОД]
+     * Вызывается, когда необходимо обновить внутренние ссылки на API,
+     * в основном для обновления графического контекста после ресайза.
+     * @param newApi Новый экземпляр API с актуальными ссылками.
+     */
+    void onApiUpdate(IKernelApi newApi);
 }

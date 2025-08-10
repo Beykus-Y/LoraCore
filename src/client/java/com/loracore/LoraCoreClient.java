@@ -8,6 +8,7 @@ import com.loracore.gui.AskChatScreen;
 import com.loracore.gui.TabletScreen;
 import com.loracore.keybinding.ModKeyBindings;
 import com.loracore.network.BootTabletS2CPacket;
+import com.loracore.network.SwitchToClientKernelS2CPacket;
 import com.loracore.network.graphics.GpuCommandC2SPacket;
 import com.loracore.network.graphics.ScreenUpdateS2CPacket;
 import com.loracore.network.vfs.VfsResponseS2CPacket;
@@ -56,11 +57,10 @@ public class LoraCoreClient implements ClientModInitializer {
         // Обработчик для загрузки планшета
         ClientPlayNetworking.registerGlobalReceiver(BootTabletS2CPacket.ID, (payload, context) -> {
             context.client().execute(() -> {
-                LOGGER.info("LoraCoreClient: Получен пакет BootTabletS2CPacket с RAM: {} KB", payload.totalRamKb());
-                
-                // Создаем TabletScreen с размером RAM из пакета
+                LOGGER.info("LoraCoreClient: Получен пакет BootTabletS2CPacket"); // Сообщение тоже можно упростить
+
                 TabletScreen tabletScreen = new TabletScreen(payload.fileSystemUuid(), payload.tabletUuid());
-                tabletScreen.setTabletRamKb(payload.totalRamKb());
+                // Строка tabletScreen.setTabletRamKb(...) была удалена
                 context.client().setScreen(tabletScreen);
             });
         });
@@ -78,6 +78,15 @@ public class LoraCoreClient implements ClientModInitializer {
                     }
                 } catch (Exception e) {
                     LOGGER.error("Error processing screen update packet: {}", e.getMessage(), e);
+                }
+            });
+        });
+        ClientPlayNetworking.registerGlobalReceiver(SwitchToClientKernelS2CPacket.ID, (payload, context) -> {
+            context.client().execute(() -> {
+                Screen currentScreen = MinecraftClient.getInstance().currentScreen;
+                if (currentScreen instanceof TabletScreen tabletScreen) {
+                    // Вызываем новый метод в TabletScreen для переключения
+                    tabletScreen.switchToClientKernel(payload.kernelPath());
                 }
             });
         });

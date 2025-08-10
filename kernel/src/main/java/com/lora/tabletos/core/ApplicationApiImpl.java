@@ -1,5 +1,6 @@
 package com.lora.tabletos.core;
 
+import com.loracore.api.ClientApi;
 import com.loracore.computer.kernel.IKernelApi;
 import com.loracore.computer.kernel.IKernelGraphics;
 import com.loracore.computer.kernel.IKernelVfs;
@@ -42,5 +43,12 @@ public class ApplicationApiImpl implements IApplicationApi {
     @Override
     public CompletableFuture<Boolean> runLuaScript(String path) {
         return kernelApi.runLuaScript(path);
+    }
+
+    // [НОВЫЙ МЕТОД]
+    @Override
+    public void runOnRenderThread(Runnable task) {
+        // Мы используем существующий API-мост для выполнения задачи
+        ClientApi.executeOnRenderThread(task);
     }
 }

@@ -6,6 +6,9 @@ import com.loracore.computer.IRuntimeEnvironment;
 import com.loracore.computer.KernelManager;
 import com.loracore.computer.kernel.KernelEvent;
 import com.loracore.gui.TabletScreen;
+import net.minecraft.client.texture.NativeImage;
+
+import java.util.UUID;
 
 public class JavaRuntime implements IRuntimeEnvironment {
 
@@ -14,13 +17,15 @@ public class JavaRuntime implements IRuntimeEnvironment {
     // Поле parentScreen больше не нужно, удаляем его
     // private final TabletScreen parentScreen;
 
-    public JavaRuntime(TabletScreen parentScreen, ClientVFS vfs, boolean isOwner) {
-        // this.parentScreen = parentScreen; // Удаляем присваивание
+    public JavaRuntime(ClientVFS vfs, UUID tabletUuid, NativeImage screenImage, boolean isOwner, TabletScreen parentScreen) {
         this.isOwner = isOwner;
-        this.kernelManager = new KernelManager(vfs, parentScreen.getTabletUuid(), parentScreen, parentScreen.getScreenImage(), isOwner);
 
-        // Эта строка остается, она важна для моста Java -> Lua
-        this.kernelManager.setLuaExecutor(parentScreen.getLuaExecutor()::execute);
+        // KernelManager все еще клиентский, поэтому создаем его здесь
+        this.kernelManager = new KernelManager(vfs, tabletUuid, parentScreen, screenImage, isOwner);
+
+        // TODO: Обработка вызова Lua из Java-ядра. Пока что это заглушка,
+        // так как LuaExecutor был удален из TabletScreen.
+        // this.kernelManager.setLuaExecutor(someExecutor::execute);
     }
 
     @Override
@@ -33,6 +38,15 @@ public class JavaRuntime implements IRuntimeEnvironment {
         // Вся логика рендеринга инкапсулирована в KernelManager.
         // Он сам решает, что рисовать (экран загрузки, BSOD или ничего).
         kernelManager.render(mouseX, mouseY, delta);
+    }
+    /**
+     * Вызывается из TabletScreen, когда его ресурсы (включая NativeImage) были пересозданы.
+     * Этот метод обновляет графический контекст внутри ядра.
+     * @param newScreenImage Новый, только что созданный NativeImage.
+     */
+    public void reinitializeGraphics(NativeImage newScreenImage) {
+        // Условие 'kernelManager != null' всегда будет true, IDE права. Убираем его для чистоты.
+        kernelManager.updateGraphics(newScreenImage);
     }
 
     // --- Новый, исправленный метод ---

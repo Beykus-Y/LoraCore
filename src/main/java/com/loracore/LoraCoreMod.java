@@ -1,9 +1,12 @@
+// Полный исправленный файл: src/main/java/com/loracore/LoraCoreMod.java
 package com.loracore;
 
 import com.loracore.component.ModComponents;
 import com.loracore.computer.ServerScreenState;
 import com.loracore.computer.TabletScreenManager;
 import com.loracore.computer.VirtualFileSystemManager;
+import com.loracore.computer.VirtualMachineManager;
+import com.loracore.computer.VirtualMachineState;
 import com.loracore.item.ModItems;
 import com.loracore.item.TabletItem;
 import com.loracore.network.ModNetworking;
@@ -15,6 +18,7 @@ import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerWorldEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.minecraft.item.ItemStack;
+import net.minecraft.nbt.NbtCompound;
 import net.minecraft.network.packet.s2c.play.SubtitleS2CPacket;
 import net.minecraft.network.packet.s2c.play.TitleFadeS2CPacket;
 import net.minecraft.network.packet.s2c.play.TitleS2CPacket;
@@ -36,12 +40,12 @@ public class LoraCoreMod implements ModInitializer {
 
 	private static final Map<UUID, String> lastKnownStructurePosKeyForPlayer = new HashMap<>();
 	private static final Map<UUID, Long> lastStructureCheckTickForPlayer = new HashMap<>();
-	private static final int STRUCTURE_CHECK_INTERVAL_TICKS = 60; // Проверка раз в 3 секунды
+	private static final int STRUCTURE_CHECK_INTERVAL_TICKS = 60;
 	private static StructureNameManager structureNameManager;
 
 	@Override
 	public void onInitialize() {
-		LOGGER.info("Загрузка мода AI Mod...");
+		LOGGER.info("Загрузка мода LoraCore...");
 		ConfigManager.loadConfig();
 		PromptManager.register();
 		VirtualFileSystemManager.registerResourceManagerListener();
@@ -52,20 +56,12 @@ public class LoraCoreMod implements ModInitializer {
 		});
 
 		ServerTickEvents.END_SERVER_TICK.register(server -> {
-			// Обновляем экраны каждый тик для плавности
-			// if (server.getTicks() % 5 != 0) {
-			//     return;
-			// }
-
-			// ИСПРАВЛЕНИЕ 2: Полностью переработана логика обновления экранов
 			for (ServerPlayerEntity player : server.getPlayerManager().getPlayerList()) {
-				// ИСПРАВЛЕНИЕ: Оптимизируем проверку - проверяем только активные планшеты
 				ItemStack mainHandStack = player.getMainHandStack();
 				if (mainHandStack.getItem() instanceof TabletItem) {
 					updateTabletScreen(player, mainHandStack);
 				}
-				
-				// Проверяем остальные предметы в инвентаре только если есть активные процессы
+
 				for (ItemStack stack : player.getInventory().main) {
 					if (stack.getItem() instanceof TabletItem && stack != mainHandStack) {
 						ServerScreenState screen = TabletScreenManager.getInstance().getOrCreateScreen(stack);
@@ -76,10 +72,12 @@ public class LoraCoreMod implements ModInitializer {
 				}
 			}
 		});
+
 		ServerWorldEvents.LOAD.register((server, world) -> {
 			if (world.getRegistryKey() == World.OVERWORLD) {
 				structureNameManager = StructureNameManager.get(world);
-				LOGGER.info("StructureNameManager загружен для основного мира.");
+				// ИЗМЕНЕНИЕ: Убираем лишний лог
+				LOGGER.debug("StructureNameManager загружен для основного мира.");
 			}
 		});
 
@@ -94,38 +92,26 @@ public class LoraCoreMod implements ModInitializer {
 				if (currentTick - lastCheck >= STRUCTURE_CHECK_INTERVAL_TICKS) {
 					lastStructureCheckTickForPlayer.put(uuid, currentTick);
 					ServerWorld world = player.getServerWorld();
-
 					if (world.getRegistryKey() == World.OVERWORLD) {
 						StructureNameManager.StructureCheckResult result = structureNameManager.getOrCreateStructureDataAt(world, player);
-
 						String newStructurePosKey = result.getPosKey().orElse(null);
 						String oldStructurePosKey = lastKnownStructurePosKeyForPlayer.get(uuid);
 
 						if (!Objects.equals(oldStructurePosKey, newStructurePosKey)) {
 							lastKnownStructurePosKeyForPlayer.put(uuid, newStructurePosKey);
-
-							// Сначала очищаем старый заголовок
 							player.networkHandler.sendPacket(new TitleFadeS2CPacket(5, 10, 5));
 							player.networkHandler.sendPacket(new SubtitleS2CPacket(Text.empty()));
 							player.networkHandler.sendPacket(new TitleS2CPacket(Text.empty()));
 
 							if (newStructurePosKey != null) {
 								result.getData().ifPresent(data -> {
-									// ИЗМЕНЕННАЯ ЛОГИКА:
-									// Четко разделяем, когда показывать сообщение о генерации, а когда - результат.
 									if (data.isGenerating.get()) {
-										// Показываем сообщение о новой структуре ТОЛЬКО один раз, когда начинается генерация.
-										// Название "Неизвестная структура..." берется из StructureNameManager
 										player.sendMessage(Text.translatable("structure.loracore.discover.generating", data.name).formatted(Formatting.YELLOW), false);
 									} else {
-										// Когда генерация завершена (isGenerating == false), показываем полный результат.
 										Text structureName = Text.literal(data.name);
 										Text structureDescription = Text.literal(data.description);
-
-										// Используем ключи для локализации обертки
 										player.sendMessage(Text.translatable("structure.loracore.enter.title", structureName.copy().formatted(Formatting.BOLD)).formatted(Formatting.GREEN), false);
 										player.sendMessage(Text.translatable("structure.loracore.enter.description", structureDescription).formatted(Formatting.GREEN), false);
-
 										player.networkHandler.sendPacket(new TitleFadeS2CPacket(10, 70, 20));
 										player.networkHandler.sendPacket(new TitleS2CPacket(structureName));
 										player.networkHandler.sendPacket(new SubtitleS2CPacket(structureDescription));
@@ -152,9 +138,22 @@ public class LoraCoreMod implements ModInitializer {
 			lastKnownStructurePosKeyForPlayer.remove(handler.player.getUuid());
 			lastStructureCheckTickForPlayer.remove(handler.player.getUuid());
 		});
+
+		// --- ДОБАВЛЕНО: Сохранение состояния всех ВМ при остановке сервера ---
+		ServerLifecycleEvents.SERVER_STOPPING.register(server -> {
+			LOGGER.info("Сервер останавливается. Сохранение состояний всех виртуальных машин...");
+			VirtualMachineState stateManager = VirtualMachineState.get(server.getOverworld());
+			VirtualMachineManager vmManager = VirtualMachineManager.getInstance();
+
+			vmManager.getRunningMachines().forEach((uuid, vm) -> {
+				NbtCompound vmNbt = vm.writeToNbt();
+				stateManager.saveMachineState(uuid, vmNbt);
+				vm.shutdown(); // Корректно выключаем ВМ
+			});
+			LOGGER.info("Состояния всех ВМ сохранены.");
+		});
 	}
 
-	// ИСПРАВЛЕНИЕ: Вспомогательный метод для обновления экрана планшета
 	private static void updateTabletScreen(ServerPlayerEntity player, ItemStack stack) {
 		try {
 			ServerScreenState screen = TabletScreenManager.getInstance().getOrCreateScreen(stack);
@@ -162,8 +161,8 @@ public class LoraCoreMod implements ModInitializer {
 				UUID tabletUuid = stack.get(ModComponents.TABLET_UUID);
 				if (tabletUuid != null) {
 					ServerPlayNetworking.send(player, new ScreenUpdateS2CPacket(
-						tabletUuid,
-						screen.getPixelBuffer()
+							tabletUuid,
+							screen.getPixelBuffer()
 					));
 					screen.clearDirtyFlag();
 				}

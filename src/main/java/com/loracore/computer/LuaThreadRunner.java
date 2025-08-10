@@ -74,19 +74,19 @@ public class LuaThreadRunner implements Runnable {
     }
 
     public void pushEvent(LuaValue[] event) {
-        // ДИАГНОСТИКА: Логируем события
-        LoraCoreMod.LOGGER.info("LuaThreadRunner.pushEvent: workerThread={}, alive={}", 
-            workerThread, workerThread != null ? workerThread.isAlive() : false);
-        
+        // Логирование изменено на DEBUG уровень
+        LoraCoreMod.LOGGER.debug("LuaThreadRunner.pushEvent: workerThread={}, alive={}",
+                workerThread, workerThread != null ? workerThread.isAlive() : false);
+
         if (workerThread == null || !workerThread.isAlive()) {
             LoraCoreMod.LOGGER.warn("LuaThreadRunner: Cannot push event - worker thread is not alive");
             return;
         }
-        
+
         try {
-            LoraCoreMod.LOGGER.info("LuaThreadRunner: Adding event to queue");
+            LoraCoreMod.LOGGER.debug("LuaThreadRunner: Adding event to queue");
             eventQueue.put(event);
-            LoraCoreMod.LOGGER.info("LuaThreadRunner: Event added to queue successfully");
+            LoraCoreMod.LOGGER.debug("LuaThreadRunner: Event added to queue successfully");
         } catch (InterruptedException e) {
             LoraCoreMod.LOGGER.error("LuaThreadRunner: Interrupted while adding event to queue", e);
             Thread.currentThread().interrupt();

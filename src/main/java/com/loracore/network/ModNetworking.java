@@ -7,19 +7,19 @@ import com.loracore.api.dto.OpenAiApiDto.Message;
 import com.loracore.component.*;
 import com.loracore.component.data.*;
 // ИСПРАВЛЕНО: Полностью переработан обработчик VFS
-import com.loracore.computer.ServerScreenState;
-import com.loracore.computer.TabletScreenManager;
-import com.loracore.computer.VirtualFileSystemManager;
+import com.loracore.computer.*;
 import com.loracore.item.TabletItem;
 import com.loracore.network.graphics.GpuCommand;
 import com.loracore.network.graphics.GpuCommandC2SPacket;
 import com.loracore.network.graphics.ScreenUpdateS2CPacket;
+import com.loracore.network.input.CharTypedC2SPacket;
+import com.loracore.network.input.KeyPressedC2SPacket;
+import com.loracore.network.input.MouseClickedC2SPacket;
 import com.loracore.network.vfs.VfsRequestC2SPacket;
 import com.loracore.network.vfs.VfsResponseS2CPacket;
 import com.loracore.quest.Quest;
 import com.loracore.service.AiService;
 import com.loracore.service.GiftService;
-import com.loracore.service.ServerFont;
 import com.loracore.service.TabletRenderService;
 import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
@@ -56,6 +56,11 @@ public class ModNetworking {
         PayloadTypeRegistry.playS2C().register(VfsResponseS2CPacket.ID, VfsResponseS2CPacket.CODEC);
         PayloadTypeRegistry.playC2S().register(GpuCommandC2SPacket.ID, GpuCommandC2SPacket.CODEC);
         PayloadTypeRegistry.playS2C().register(ScreenUpdateS2CPacket.ID, ScreenUpdateS2CPacket.CODEC);
+        PayloadTypeRegistry.playC2S().register(RunLuaScriptC2SPacket.ID, RunLuaScriptC2SPacket.CODEC);
+        PayloadTypeRegistry.playC2S().register(KeyPressedC2SPacket.ID, KeyPressedC2SPacket.CODEC);
+        PayloadTypeRegistry.playC2S().register(CharTypedC2SPacket.ID, CharTypedC2SPacket.CODEC);
+        PayloadTypeRegistry.playC2S().register(MouseClickedC2SPacket.ID, MouseClickedC2SPacket.CODEC);
+        PayloadTypeRegistry.playS2C().register(SwitchToClientKernelS2CPacket.ID, SwitchToClientKernelS2CPacket.CODEC);
 
 
         // Регистрация обработчиков
@@ -63,6 +68,8 @@ public class ModNetworking {
         registerDialogueAndQuestHandlers();
         registerVfsHandlers(); // ИСПРАВЛЕНО: Этот метод теперь содержит правильную логику
         registerGpuHandlers();
+        registerInputHandlers();
+        registerLuaScriptHandlers();
     }
 
     /**
@@ -165,8 +172,6 @@ public class ModNetworking {
         });
     }
 
-    // Остальные методы (registerTabletHandlers, registerDialogueAndQuestHandlers) остаются без изменений
-    // ... (скопируйте их из вашего текущего файла, они были корректны)
     /**
      * [НОВЫЙ МЕТОД] Обработчики, связанные с планшетом.
      */
@@ -180,47 +185,50 @@ public class ModNetworking {
                 ItemStack stack = player.getMainHandStack();
                 if (!(stack.getItem() instanceof TabletItem)) return;
 
-                // ИСПРАВЛЕНИЕ 4: Логика получения/создания UUID теперь в TabletScreenManager
-                TabletScreenManager.getInstance().getOrCreateScreen(stack);
-
-                MotherboardData mobo = stack.get(ModComponents.MOTHERBOARD_DATA);
-                if (mobo == null || mobo.storage().isEmpty()) {
-                    player.sendMessage(Text.literal("Device error: No motherboard or storage found.").formatted(Formatting.RED), true);
+                // ШАГ 1: Получаем или создаем ВМ на сервере.
+                VirtualMachine vm = VirtualMachineManager.getInstance().getOrCreate(player, stack);
+                if (vm == null) {
+                    player.sendMessage(Text.literal("Ошибка инициализации ВМ на сервере.").formatted(Formatting.RED), true);
                     return;
                 }
 
-                String bootScriptPath = mobo.firmware().get().get(ModComponents.FIRMWARE_DATA).recoveryScript().toString();
-                String architecture = mobo.cpu().get().get(ModComponents.CPU_DATA).architecture();
+                ResourceLoader loader = vm.getResourceLoader();
+                if (loader == null) {
+                    player.sendMessage(Text.literal("Критическая ошибка: Загрузчик ресурсов ВМ не найден.").formatted(Formatting.RED), true);
+                    return;
+                }
+
+                String biosContent = loader.load("os/bios.lua");
+                if (biosContent == null || biosContent.isEmpty()) {
+                    player.sendMessage(Text.literal("Критическая ошибка: Не удалось загрузить BIOS планшета.").formatted(Formatting.RED), true);
+                    // Также логируем, чтобы понять, почему не загрузилось
+                    LoraCoreMod.LOGGER.error("Не удалось загрузить /assets/loracore/os/bios.lua. Убедитесь, что файл существует.");
+                    return;
+                }
+
+                // ШАГ 2: Запускаем на серверной ВМ BIOS.
+                // ВМ сама загрузит bios.lua через свой ResourceLoader.
+                vm.start(biosContent);
+
+                // ШАГ 3: Отправляем клиенту команду просто открыть экран.
+                // Собираем необходимые UUID и RAM из компонентов, как мы делали раньше.
+                UUID tabletUuid = stack.get(ModComponents.TABLET_UUID);
+                MotherboardData mobo = stack.get(ModComponents.MOTHERBOARD_DATA);
+                FileSystemsData fsData = stack.get(ModComponents.FILE_SYSTEMS_DATA);
+
+                if (mobo == null || fsData == null || tabletUuid == null) {
+                    player.sendMessage(Text.literal("КриCriticalтическая ошибка компонентов планшета.").formatted(Formatting.RED), true);
+                    return;
+                }
+
+                UUID fsUuid = fsData.uuids().get("0");
                 int totalRamKb = mobo.ram().stream()
-                        .mapToInt(ramStack -> ramStack.get(ModComponents.RAM_DATA).sizeKb())
+                        .mapToInt(ramStack -> Optional.ofNullable(ramStack.get(ModComponents.RAM_DATA))
+                                .map(RamData::sizeKb).orElse(0))
                         .sum();
 
-                FileSystemsData fsData = stack.get(ModComponents.FILE_SYSTEMS_DATA);
-                if (fsData == null) {
-                    fsData = new FileSystemsData(new HashMap<>());
-                }
-
-                String primaryStorageSlot = "0";
-                UUID fsUuid = fsData.uuids().get(primaryStorageSlot);
-
-                if (fsUuid == null) {
-                    fsUuid = UUID.randomUUID();
-                    LoraCoreMod.LOGGER.info("[VFS] Tablet requires formatting. Assigning new FileSystem UUID: {}", fsUuid);
-                    Map<String, UUID> newUuids = new HashMap<>(fsData.uuids());
-                    newUuids.put(primaryStorageSlot, fsUuid);
-                    stack.set(ModComponents.FILE_SYSTEMS_DATA, new FileSystemsData(newUuids));
-                }
-
-                // Получаем UUID самого планшета, который теперь гарантированно существует
-                UUID tabletUuid = stack.get(ModComponents.TABLET_UUID);
-
-                // Очищаем буфер перед новой загрузкой
-                ServerScreenState screen = TabletScreenManager.getInstance().getOrCreateScreen(stack);
-                screen.clearBuffer();
-
-                LoraCoreMod.LOGGER.info("Booting tablet. FS_UUID: {}, TABLET_UUID: {}", fsUuid, tabletUuid);
-
-                ServerPlayNetworking.send(player, new BootTabletS2CPacket(fsUuid, bootScriptPath, architecture, tabletUuid, totalRamKb));
+                // Отправляем упрощенный пакет.
+                ServerPlayNetworking.send(player, new BootTabletS2CPacket(fsUuid, tabletUuid, totalRamKb));
             });
         });
     }
@@ -470,6 +478,65 @@ public class ModNetworking {
 
                 ModComponents.VILLAGER_DATA.sync(villager);
                 ModComponents.PLAYER_DIALOGUE.sync(player);
+            });
+        });
+    }
+    private static void registerInputHandlers() {
+        // Обработчик для KeyPressed
+        ServerPlayNetworking.registerGlobalReceiver(KeyPressedC2SPacket.ID, (payload, context) -> {
+            ServerPlayerEntity player = context.player();
+            // ИСПРАВЛЕНИЕ: Получаем сервер через игрока
+            player.getServer().execute(() -> {
+                VirtualMachine vm = VirtualMachineManager.getInstance().get(payload.tabletUuid());
+                if (vm != null && vm.isRunning()) {
+                    vm.pushEvent("key", payload.keyCode());
+                }
+            });
+        });
+
+        // Обработчик для CharTyped
+        ServerPlayNetworking.registerGlobalReceiver(CharTypedC2SPacket.ID, (payload, context) -> {
+            ServerPlayerEntity player = context.player();
+            // ИСПРАВЛЕНИЕ: Получаем сервер через игрока
+            player.getServer().execute(() -> {
+                VirtualMachine vm = VirtualMachineManager.getInstance().get(payload.tabletUuid());
+                if (vm != null && vm.isRunning()) {
+                    vm.pushEvent("char", String.valueOf(payload.chr()));
+                }
+            });
+        });
+
+        // Обработчик для MouseClicked
+        ServerPlayNetworking.registerGlobalReceiver(MouseClickedC2SPacket.ID, (payload, context) -> {
+            ServerPlayerEntity player = context.player();
+            // ИСПРАВЛЕНИЕ: Получаем сервер через игрока
+            player.getServer().execute(() -> {
+                VirtualMachine vm = VirtualMachineManager.getInstance().get(payload.tabletUuid());
+                if (vm != null && vm.isRunning()) {
+                    vm.pushEvent("mouse_click", payload.x(), payload.y(), payload.button());
+                }
+            });
+        });
+    }
+    private static void registerLuaScriptHandlers() {
+        ServerPlayNetworking.registerGlobalReceiver(RunLuaScriptC2SPacket.ID, (payload, context) -> {
+            ServerPlayerEntity player = context.player();
+            MinecraftServer server = player.getServer();
+            if (server == null) return;
+
+            server.execute(() -> {
+                VirtualMachine vm = VirtualMachineManager.getInstance().get(payload.tabletUuid());
+                if (vm == null || !vm.isRunning()) return;
+
+                // Загружаем скрипт из VFS и запускаем его в серверной ВМ
+                vm.getResourceLoader().load(payload.scriptPath());
+
+                String scriptContent = vm.getResourceLoader().load(payload.scriptPath());
+                if (scriptContent != null) {
+                    vm.startNewLuaThread(99, scriptContent, null); // Используем временный ID потока
+                } else {
+                    LoraCoreMod.LOGGER.error("Java-ядро запросило запуск несуществующего Lua-скрипта: {}", payload.scriptPath());
+                }
             });
         });
     }

@@ -42,4 +42,11 @@ public interface IApplicationApi {
      * @return CompletableFuture с результатом выполнения
      */
     CompletableFuture<Boolean> runLuaScript(String path);
+
+    /**
+     * [НОВЫЙ МЕТОД]
+     * Безопасно выполняет задачу в главном потоке отрисовки клиента.
+     * @param task Задача для выполнения.
+     */
+    void runOnRenderThread(Runnable task);
 }
