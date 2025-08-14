@@ -6,14 +6,17 @@
 
 1. [Процесс загрузки (BIOS)](#процесс-загрузки-bios)
 2. [Создание Java-ядра: Интерфейс IKernel](#создание-java-ядра-интерфейс-ikernel)
-3. [API, доступное Java-ядру](#api-доступное-java-ядру)
+3. [API, доступное Java-ядру (IKernelApi)](#api-доступное-java-ядру-ikernelapi)
 4. [Сборка и использование вашего Java-ядра](#сборка-и-использование-вашего-java-ядра)
-5. [Создание Lua-приложений: Глобальные API](#создание-lua-приложений-глобальные-api)
-6. [Архитектура виртуальной машины](#архитектура-виртуальной-машины)
-7. [Система событий](#система-событий)
-8. [Виртуальные устройства](#виртуальные-устройства)
-9. [Отладка и диагностика](#отладка-и-диагностика)
-10. [Примеры](#примеры)
+5. [Создание Java-приложений: Интерфейс IApplication](#создание-java-приложений-интерфейс-iapplication)
+6. [Lua API: Обзор](#lua-api-обзор)
+7. [Lua API: Глобальные объекты (`os`, `term`, `fs` и др.)](#lua-api-глобальные-объекты-os-term-fs-и-др)
+8. [Lua API: API Устройств (`tablet`)](#lua-api-api-устройств-tablet)
+9. [Архитектура виртуальной машины](#архитектура-виртуальной-машины)
+10. [Система событий](#система-событий)
+11. [Виртуальные устройства](#виртуальные-устройства)
+12. [Отладка и диагностика](#отладка-и-диагностика)
+13. [Примеры](#примеры)
 
 ## Процесс загрузки (BIOS)
 
@@ -91,6 +94,11 @@ Java-ядро - это основная компонента операцион�
 - **Вызывается**: Перед выключением виртуальной машины
 - **Назначение**: Сохранение состояния, освобождение ресурсов
 
+#### `onApiUpdate(IKernelApi newApi)`
+- **Вызывается**: Когда ядру необходимо обновить внутренние ссылки на API.
+- **Назначение**: В основном используется для обновления графического контекста (`IKernelGraphics`) после изменения размера окна или других событий, которые могут сделать старый контекст недействительным. Ядро должно обновить свои внутренние ссылки на `IKernelApi` и его дочерние API (например, `graphics = newApi.getGraphics()`).
+- **Параметры**: `newApi` - новый экземпляр API с актуальными ссылками.
+
 #### `getState()`
 - **Возвращает**: Текущее состояние ядра (enum)
 - **Назначение**: Информация для рендерера о состоянии ядра
@@ -125,6 +133,26 @@ Java-ядро получает доступ к трем основным API ч�
 
 #### Графика
 - **`getGraphics()`**: Возвращает `IKernelGraphics` для рисования
+
+#### Взаимодействие с устройствами
+- **`invokeDevice(String deviceType, String methodName, Object... args)`**: Асинхронно вызывает метод на серверном устройстве.
+  - **Назначение**: Позволяет ядру взаимодействовать с оборудованием, которое существует на стороне сервера, например, с редстоун-интерфейсом. Это открывает возможности для управления механизмами и получения данных из мира Minecraft.
+  - **Параметры**:
+    - `deviceType` (String): Тип устройства (например, `"redstone"`).
+    - `methodName` (String): Имя метода для вызова (например, `"getPower"`).
+    - `args` (Object...): Аргументы для метода.
+  - **Возвращает**: `CompletableFuture<Object[]>` - Future, который завершится с массивом результатов от устройства.
+  - **Пример**:
+    ```java
+    // Асинхронно получаем уровень редстоун-сигнала с северной стороны
+    CompletableFuture<Object[]> future = api.invokeDevice("redstone", "getPower", "north");
+    future.thenAccept(result -> {
+        if (result != null && result.length > 0 && result[0] instanceof Integer) {
+            int power = (Integer) result[0];
+            System.out.println("Redstone power from north: " + power);
+        }
+    });
+    ```
 
 ### IKernelGraphics - Графический API
 
@@ -207,20 +235,31 @@ plugins {
 
 version = project.rootProject.mod_version
 group = project.rootProject.maven_group
-archivesBaseName = 'your-kernel-name'
+archivesBaseName = 'your-kernel-name' // Имя вашего JAR-файла
 
+// Loom необходим для доступа к зависимостям Minecraft
 loom {
-    // Пустая секция для подготовки зависимостей
+    // Эта пустая секция говорит Loom "просто подготовь зависимости, но не делай из этого мод"
 }
 
 dependencies {
-    // Зависимость от основного мода для доступа к интерфейсам
-    compileOnly(rootProject.sourceSets.client.output)
+    // ВАЖНО: Зависимость от основного мода для доступа к IKernel, IKernelApi и т.д.
+    // Используйте `main` вместо `client`, так как интерфейсы теперь в общем коде.
+    compileOnly(rootProject.sourceSets.main.output)
+
+    // Стандартные зависимости для работы с Minecraft
     modCompileOnly "net.fabricmc.fabric-api:fabric-api:${project.rootProject.fabric_version}"
     minecraft "com.mojang:minecraft:${project.rootProject.minecraft_version}"
     mappings "net.fabricmc:yarn:${project.rootProject.yarn_mappings}:v2"
 }
 
+// Указываем версию Java
+java {
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
+}
+
+// В манифесте JAR-файла необходимо указать главный класс вашего ядра
 jar {
     manifest {
         attributes(
@@ -232,9 +271,9 @@ jar {
 
 ### Важные моменты
 
-1. **Главный класс**: Должен быть указан в манифесте как `Kernel-Main-Class`
-2. **Зависимости**: Используйте `compileOnly(rootProject.sourceSets.client.output)` для доступа к интерфейсам мода
-3. **Имя JAR**: Укажите уникальное `archivesBaseName` для вашего ядра
+1. **Главный класс**: Должен быть указан в манифесте как `Kernel-Main-Class`.
+2. **Зависимости**: Используйте `compileOnly(rootProject.sourceSets.main.output)` для доступа к интерфейсам мода, как показано в примере выше.
+3. **Имя JAR**: Укажите уникальное `archivesBaseName` для вашего ядра.
 
 ### Сборка ядра
 
@@ -318,9 +357,18 @@ App-Main-Class: com.example.MyApp
 
 2. Упакуйте в JAR-файл и поместите в `/home/user/apps/`
 
-## Создание Lua-приложений: Глобальные API
+## Lua API: Обзор
 
-Lua-приложения в LoraCore имеют доступ к богатому набору API через глобальные переменные. Все API автоматически доступны в любом Lua-скрипте.
+LoraCore предоставляет две основные модели доступа к функциям планшета из Lua:
+
+1.  **Глобальные объекты**: Простые в использовании объекты, такие как `os`, `term`, `fs`, которые доступны в глобальной области видимости. Они предназначены для базовых операций и совместимости со старыми скриптами.
+2.  **API Устройств (`tablet`)**: Более современный, объектно-ориентированный подход. Все аппаратные компоненты представлены как устройства в глобальной таблице `tablet` (например, `tablet.gpu`, `tablet.terminal`). Этот подход является более гибким и расширяемым.
+
+Для новых приложений рекомендуется использовать API Устройств (`tablet.*`), так как он предоставляет наиболее полный и актуальный функционал.
+
+## Lua API: Глобальные объекты (`os`, `term`, `fs` и др.)
+
+Эти API доступны как глобальные переменные в любом Lua-скрипте, что делает их удобными для быстрых и простых программ.
 
 ### Глобальные переменные
 
@@ -335,6 +383,7 @@ Lua-приложения в LoraCore имеют доступ к богатому
   - **Пример**: `local event, param1, param2 = os.pullEvent("key")`
 
 - **`os.reboot()`**: Перезагружает виртуальную машину
+- **`os.shutdown()`**: Выключает виртуальную машину
 - **`os.boot_java(path)`**: Загружает Java-ядро из указанного пути
   - **Параметры**: `path` (string) - путь к JAR-файлу ядра
 
@@ -374,6 +423,8 @@ end
 
 #### `term` - Терминал
 
+**Примечание:** Помимо глобального объекта `term`, все те же функции доступны через `tablet.terminal`. Использование `tablet.terminal` является предпочтительным в новых приложениях, так как это соответствует современной архитектуре устройств.
+
 - **`term.write(text)`**: Записывает текст в текущей позиции курсора
 - **`term.print(text)`**: Записывает текст и переводит строку
 - **`term.clear()`**: Очищает весь экран терминала
@@ -388,22 +439,18 @@ end
 
 #### `gpu` - Графический процессор
 
-- **`gpu.fill(x, y, width, height, color)`**: Заливает прямоугольную область цветом
-  - **Параметры**: 
-    - `x, y` (number) - координаты левого верхнего угла
-    - `width, height` (number) - размеры области
-    - `color` (number) - цвет в формате RGB
+**Важно:** Начиная с новой версии, глобальный объект `gpu` был удален в пользу `tablet.gpu`. Все функции остались прежними, но теперь их нужно вызывать через API устройств.
 
-- **`gpu.drawText(x, y, text, color)`**: Рисует текст в указанной позиции
-  - **Параметры**:
-    - `x, y` (number) - координаты текста
-    - `text` (string) - текст для отрисовки
-    - `color` (number) - цвет текста
+**Пример:**
+```lua
+-- Старый код:
+-- gpu.fill(0, 0, 10, 10, colors.red)
 
-- **`gpu.copy(x, y, width, height, toX, toY)`**: Копирует область экрана
-  - **Параметры**:
-    - `x, y, width, height` (number) - исходная область
-    - `toX, toY` (number) - целевая позиция
+-- Новый код:
+tablet.gpu.fill(0, 0, 10, 10, colors.red)
+```
+
+Функции, доступные в `tablet.gpu`, будут подробно описаны в разделе [API Устройств (`tablet`)](#lua-api-api-устройств-tablet).
 
 #### `colors` - Цветовая палитра
 
@@ -439,6 +486,43 @@ end
 - **`loadfile(path)`**: Загружает и компилирует Lua-файл
   - **Параметры**: `path` (string) - путь к файлу
   - **Возвращает**: Функция или `nil` и сообщение об ошибке
+
+## Lua API: API Устройств (`tablet`)
+
+Это основной и рекомендуемый способ взаимодействия с оборудованием планшета. Каждое "железное" или виртуальное устройство представлено как таблица внутри глобального объекта `tablet`.
+
+### `tablet.cpu` - Центральный процессор
+- **`getTime()`**: Возвращает время работы виртуальной машины в секундах.
+- **`getArchitecture()`**: Возвращает архитектуру процессора (например, "Lua 5.4").
+
+### `tablet.ram` - Оперативная память
+- **`getTotalSize()`**: Возвращает общий объем доступной памяти в КБ.
+- **`getUsedSize()`**: Возвращает текущий объем используемой памяти в КБ.
+
+### `tablet.gpu` - Графический процессор
+- **`fill(x, y, width, height, color)`**: Заливает прямоугольную область цветом.
+- **`drawText(x, y, text, color)`**: Рисует текст в указанной позиции.
+- **`copy(x, y, width, height, toX, toY)`**: Копирует область экрана.
+
+### `tablet.terminal` - Терминал
+Предоставляет тот же набор функций, что и глобальный объект `term`.
+- **`write(text)`**, **`print(text)`**, **`clear()`**, **`clearLine()`**, **`setCursorPos(x, y)`**, **`getCursorPos()`**, **`getSize()`**, **`setTextColor(color)`**, **`setBackgroundColor(color)`**, **`setCursorBlink(enabled)`**, **`read()`**.
+
+### `tablet.thread` - Управление потоками
+- **`create(code, globals)`**: Создает и запускает новый Lua-поток.
+- **`send(threadId, ...)`**: Отправляет сообщение в указанный поток.
+
+### `tablet.redstone` - Редстоун-интерфейс (НОВОЕ)
+Позволяет взаимодействовать с редстоун-сигналами блока, к которому подключен планшет. Это API работает на стороне сервера.
+- **`getPower(side)`**: Возвращает уровень редстоун-сигнала (0-15), который блок **получает** с указанной стороны.
+  - **Параметры**: `side` (string) - сторона, одна из: `"north"`, `"south"`, `"east"`, `"west"`, `"up"`, `"down"`.
+  - **Пример**:
+    ```lua
+    local power = tablet.redstone.getPower("north")
+    if power > 0 then
+        print("Сигнал с севера: " .. power)
+    end
+    ```
 
 ## Архитектура виртуальной машины
 
@@ -555,38 +639,30 @@ end
 
 ## Виртуальные устройства
 
-### Система устройств
+### Архитектура устройств
 
-LoraCore предоставляет набор виртуальных устройств, доступных через API `tablet.*`:
+Система устройств LoraCore построена на Java-классах, методы которых "пробрасываются" в Lua с помощью аннотации `@Callback`. Это позволяет легко расширять функционал, добавляя новые виртуальные устройства.
 
-#### CPU (tablet.cpu)
-- **`getTime()`**: Возвращает время работы VM в секундах
-- **`getArchitecture()`**: Возвращает архитектуру процессора
+- **`IDevice`**: (Серверная сторона) Интерфейс для устройств, которые должны взаимодействовать с миром Minecraft, как например `RedstoneDevice`.
+- **`@Callback`**: Аннотация для Java-методов, которые должны быть доступны из Lua. Позволяет указать имя функции в Lua и ее документацию.
 
-#### RAM (tablet.ram)
-- **`getTotalSize()`**: Общий объем памяти в КБ
-- **`getUsedSize()`**: Используемый объем памяти в КБ
+### Список стандартных устройств
 
-#### GPU (tablet.gpu)
-- **`fill(x, y, width, height, color)`**: Заливка области
-- **`drawText(x, y, text, color)`**: Рисование текста
-- **`copy(x, y, width, height, toX, toY)`**: Копирование области
+Ниже представлен список устройств, доступных в стандартной сборке LoraCore.
 
-#### Terminal (tablet.terminal)
-- **`write(text)`**: Запись текста
-- **`print(text)`**: Запись текста с переводом строки
-- **`clear()`**: Очистка экрана
-- **`read()`**: Чтение строки ввода
-- **`setCursorPos(x, y)`**: Установка позиции курсора
-- **`getCursorPos()`**: Получение позиции курсора
-- **`getSize()`**: Размер терминала
-- **`setTextColor(color)`**: Цвет текста
-- **`setBackgroundColor(color)`**: Цвет фона
-- **`setCursorBlink(enabled)`**: Мигание курсора
+#### Клиентские устройства
+Эти устройства работают на стороне клиента и в основном отвечают за интерфейс и управление потоками.
 
-#### Thread (tablet.thread)
-- **`create(code, globals)`**: Создание нового потока
-- **`send(threadId, ...)`**: Отправка сообщения в поток
+- **`CpuDevice` (`tablet.cpu`)**: Информация о процессоре.
+- **`RamDevice` (`tablet.ram`)**: Информация о памяти.
+- **`GpuDevice` (`tablet.gpu`)**: Управление графикой.
+- **`TerminalDevice` (`tablet.terminal`)**: Управление терминалом.
+- **`ThreadDevice` (`tablet.thread`)**: Управление потоками.
+
+#### Серверные устройства
+Эти устройства работают на стороне сервера и требуют асинхронного вызова через `IKernelApi.invokeDevice()` из Java-ядра.
+
+- **`RedstoneDevice` (`tablet.redstone`)**: Взаимодействие с редстоун-сигналами. Позволяет Java-ядрам и Lua-скриптам читать состояние редстоун-цепей, к которым подключен планшет.
 
 ### Создание собственных устройств
 
@@ -871,29 +947,29 @@ print("Main thread: all workers should be done")
 -- graphics_demo.lua
 local function drawButton(x, y, width, height, text, color)
     -- Фон кнопки
-    gpu.fill(x, y, width, height, colors.gray)
+    tablet.gpu.fill(x, y, width, height, colors.gray)
     -- Рамка
-    gpu.fill(x, y, width, 2, colors.white)
-    gpu.fill(x, y, 2, height, colors.white)
-    gpu.fill(x + width - 2, y, 2, height, colors.white)
-    gpu.fill(x, y + height - 2, width, 2, colors.white)
+    tablet.gpu.fill(x, y, width, 2, colors.white)
+    tablet.gpu.fill(x, y, 2, height, colors.white)
+    tablet.gpu.fill(x + width - 2, y, 2, height, colors.white)
+    tablet.gpu.fill(x, y + height - 2, width, 2, colors.white)
     -- Текст
-    gpu.drawText(x + 5, y + height/2 - 5, text, color)
+    tablet.gpu.drawText(x + 5, y + height/2 - 5, text, color)
 end
 
 local function drawWindow(x, y, width, height, title)
     -- Фон окна
-    gpu.fill(x, y, width, height, colors.lightGray)
+    tablet.gpu.fill(x, y, width, height, colors.lightGray)
     -- Заголовок
-    gpu.fill(x, y, width, 20, colors.blue)
-    gpu.drawText(x + 5, y + 5, title, colors.white)
+    tablet.gpu.fill(x, y, width, 20, colors.blue)
+    tablet.gpu.drawText(x + 5, y + 5, title, colors.white)
     -- Кнопка закрытия
-    gpu.fill(x + width - 25, y + 2, 20, 16, colors.red)
-    gpu.drawText(x + width - 18, y + 5, "X", colors.white)
+    tablet.gpu.fill(x + width - 25, y + 2, 20, 16, colors.red)
+    tablet.gpu.drawText(x + width - 18, y + 5, "X", colors.white)
 end
 
 -- Очищаем экран
-gpu.fill(0, 0, 480, 270, colors.black)
+tablet.gpu.fill(0, 0, 480, 270, colors.black)
 
 -- Рисуем окно
 drawWindow(50, 50, 200, 150, "My Application")
@@ -1104,11 +1180,13 @@ print("All requests completed!")
 
 ### Совместимость
 
-1. **Используйте стандартные API**:
+1. **Используйте правильные API для вашей задачи**:
    ```lua
-   -- Предпочтительно использовать стандартные функции
-   term.write("Hello")  -- Вместо tablet.terminal.write("Hello")
-   os.sleep(1)          -- Вместо tablet.cpu.sleep(1)
+   -- Для новых приложений рекомендуется использовать API устройств
+   tablet.terminal.write("Hello")
+   os.sleep(1) -- os.sleep является стандартной функцией, у tablet.cpu нет метода sleep
+
+   -- Глобальные API (term, fs) полезны для простых скриптов или обратной совместимости.
    ```
 
 2. **Проверяйте доступность функций**:
