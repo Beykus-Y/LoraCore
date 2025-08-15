@@ -85,27 +85,84 @@ public class ModNetworking {
         ServerPlayNetworking.registerGlobalReceiver(VfsRequestC2SPacket.ID, (payload, context) -> {
             ServerPlayerEntity player = context.player();
             MinecraftServer server = player.getServer();
-            if (server == null) return;
+            if (server == null || payload.fsUuid() == null) return;
 
-            // Вся работа выполняется в основном потоке сервера
             server.execute(() -> {
-                LoraCoreMod.LOGGER.info("[VFS] Processing VFS request on server thread: Operation={}, Path={}", payload.operation(), payload.path());
+                try {
+                    // Ключевое исправление: Получаем экземпляр ImageVfs, который работает с .img файлом,
+                    // а не WorldStorageVFS, который работает с папками.
+                    // Емкость здесь не так важна, так как к моменту запроса файлов
+                    // ВМ уже должна была быть создана и инициализировала VFS с правильной емкостью.
+                    IFileSystem vfs = ImageVfsManager.getInstance().getFor(payload.fsUuid(), 1024);
 
-                // ИСПРАВЛЕНО: Единственное правильное действие - вызвать синглтон-менеджер
-                VirtualFileSystemManager.VFSResponse response = VirtualFileSystemManager.getInstance().performOperation(
-                        payload.fsUuid(),
-                        payload.operation(),
-                        payload.path(),
-                        payload.content()
-                );
-                LoraCoreMod.LOGGER.info("[VFS] Operation result: [{}]. Sending response to client for callbackId: {}", response.type(), payload.callbackId());
-                
-                // ИСПРАВЛЕНО: Обработка больших файлов
-                if (response.type() == VfsResponseS2CPacket.ResponseType.LARGE_DATA) {
-                    sendLargeFileInChunks(player, payload.fsUuid(), payload.callbackId(), response.data());
-                } else {
-                    // Отправляем результат обратно клиенту
-                    ServerPlayNetworking.send(player, new VfsResponseS2CPacket(payload.fsUuid(), payload.callbackId(), response.type(), response.data()));
+                    VfsResponseS2CPacket.ResponseType responseType;
+                    String responseData;
+
+                    switch (payload.operation()) {
+                        case READ_BYTES:
+                            // Этот кейс используется для загрузки .jar файлов ядра и приложений
+                            byte[] bytes = vfs.readBytes(payload.path());
+                            responseData = Base64.getEncoder().encodeToString(bytes);
+                            responseType = VfsResponseS2CPacket.ResponseType.STRING;
+                            break;
+
+                        case READ:
+                            // Для обычных текстовых файлов
+                            responseData = vfs.read(payload.path()).tojstring();
+                            responseType = responseData != null ? VfsResponseS2CPacket.ResponseType.STRING : VfsResponseS2CPacket.ResponseType.NIL;
+                            break;
+
+                        case EXISTS:
+                            responseData = "";
+                            responseType = vfs.exists(payload.path()) ? VfsResponseS2CPacket.ResponseType.TRUE : VfsResponseS2CPacket.ResponseType.FALSE;
+                            break;
+
+                        case ISDIR:
+                            responseData = "";
+                            responseType = vfs.isDirectory(payload.path()) ? VfsResponseS2CPacket.ResponseType.TRUE : VfsResponseS2CPacket.ResponseType.FALSE;
+                            break;
+
+                        case WRITE:
+                            boolean wrote = vfs.write(payload.path(), payload.content());
+                            responseData = "";
+                            responseType = wrote ? VfsResponseS2CPacket.ResponseType.TRUE : VfsResponseS2CPacket.ResponseType.FALSE;
+                            break;
+
+                        case MAKEDIR:
+                            boolean madeDir = vfs.makeDir(payload.path());
+                            responseData = "";
+                            responseType = madeDir ? VfsResponseS2CPacket.ResponseType.TRUE : VfsResponseS2CPacket.ResponseType.FALSE;
+                            break;
+
+                        case DELETE:
+                            boolean deleted = vfs.delete(payload.path());
+                            responseData = "";
+                            responseType = deleted ? VfsResponseS2CPacket.ResponseType.TRUE : VfsResponseS2CPacket.ResponseType.FALSE;
+                            break;
+
+                        case LIST:
+                            responseData = vfs.list(payload.path());
+                            responseType = responseData != null ? VfsResponseS2CPacket.ResponseType.TABLE_JSON : VfsResponseS2CPacket.ResponseType.NIL;
+                            break;
+
+                        default:
+                            responseData = "";
+                            responseType = VfsResponseS2CPacket.ResponseType.NIL;
+                            break;
+                    }
+
+                    // Ваша логика по отправке больших файлов остается актуальной.
+                    // Теперь она будет работать, так как vfs.readBytes сможет найти kernel.jar.
+                    if (responseData.length() > 25000) { // Безопасный лимит для одного пакета
+                        sendLargeFileInChunks(player, payload.fsUuid(), payload.callbackId(), responseData);
+                    } else {
+                        ServerPlayNetworking.send(player, new VfsResponseS2CPacket(payload.fsUuid(), payload.callbackId(), responseType, responseData));
+                    }
+
+                } catch (Exception e) {
+                    LoraCoreMod.LOGGER.error("VFS Operation failed for fsUUID {} path '{}': {}", payload.fsUuid(), payload.path(), e.getMessage());
+                    // Отправляем клиенту ответ о неудаче
+                    ServerPlayNetworking.send(player, new VfsResponseS2CPacket(payload.fsUuid(), payload.callbackId(), VfsResponseS2CPacket.ResponseType.NIL, ""));
                 }
             });
         });
@@ -193,13 +250,16 @@ public class ModNetworking {
 
                 // 1. Получаем или создаем ВМ
                 VirtualMachine vm = VirtualMachineManager.getInstance().getOrCreate(player, stack);
+
+                // ИСПРАВЛЕНИЕ: Даем игроку понятную обратную связь
                 if (vm == null) {
-                    player.sendMessage(Text.literal("Ошибка инициализации ВМ.").formatted(Formatting.RED), true);
+                    player.sendMessage(Text.literal("Планшет неисправен: отсутствует накопитель! Попробуйте переложить его в инвентаре.").formatted(Formatting.RED), true);
                     return;
                 }
 
-                // 2. Если ВМ выключена (например, после краша или команды shutdown), запускаем ее с BIOS
+                // 2. Если ВМ выключена, запускаем ее с BIOS
                 if (!vm.isOn()) {
+                    LoraCoreMod.LOGGER.info("Запуск выключенной ВМ {} по запросу игрока.", vm.getTabletUuid());
                     String biosContent = vm.getResourceLoader().load("os/bios.lua");
                     if (biosContent != null && !biosContent.isEmpty()) {
                         vm.start(biosContent);
@@ -212,10 +272,19 @@ public class ModNetworking {
                 // 3. Собираем данные для клиента
                 UUID tabletUuid = stack.get(ModComponents.TABLET_UUID);
                 MotherboardData mobo = stack.get(ModComponents.MOTHERBOARD_DATA);
-                FileSystemsData fsData = stack.get(ModComponents.FILE_SYSTEMS_DATA);
-                if (mobo == null || fsData == null || tabletUuid == null) return;
 
-                UUID fsUuid = fsData.uuids().get("0");
+                // Получаем UUID диска из слота
+                UUID fsUuid = mobo.storage().stream()
+                        .findFirst()
+                        .map(hdd -> hdd.get(ModComponents.FILE_SYSTEMS_DATA))
+                        .map(FileSystemsData::fsUuid)
+                        .orElse(null); // Будет null, если диска нет
+
+                if (mobo == null || fsUuid == null || tabletUuid == null) {
+                    player.sendMessage(Text.literal("Критическая ошибка: компоненты планшета повреждены.").formatted(Formatting.RED), true);
+                    return;
+                }
+
                 int totalRamKb = mobo.ram().stream()
                         .mapToInt(ramStack -> Optional.ofNullable(ramStack.get(ModComponents.RAM_DATA)).map(RamData::sizeKb).orElse(0))
                         .sum();
@@ -223,16 +292,10 @@ public class ModNetworking {
                 // 4. ВСЕГДА отправляем пакет на открытие экрана
                 ServerPlayNetworking.send(player, new BootTabletS2CPacket(fsUuid, tabletUuid, totalRamKb));
 
-                // 5. ПРОВЕРЯЕМ СОСТОЯНИЕ ВМ:
-                // Если ВМ уже приняла решение перейти в режим ядра, сообщаем об этом клиенту
+                // 5. Проверяем, не нужно ли сразу переключиться на Java-ядро
                 if (vm.getCurrentState() == VirtualMachine.State.JAVA_KERNEL) {
-                    // Путь к ядру нам не важен, клиент сам его знает. Главное - команда.
                     ServerPlayNetworking.send(player, new SwitchToClientKernelS2CPacket("/boot/kernel.jar"));
                 }
-
-                // Если состояние LUA, то ничего дополнительно не отправляем. Клиент
-                // по умолчанию будет ждать пакетов ScreenUpdateS2CPacket, которые будет слать
-                // серверная ВМ, исполняющая Lua-код.
             });
         });
     }

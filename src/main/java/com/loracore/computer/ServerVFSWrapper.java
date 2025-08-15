@@ -12,54 +12,40 @@ import java.util.concurrent.CompletableFuture;
  */
 public class ServerVFSWrapper implements IAsyncVFS {
 
-    private final WorldStorageVFS blockingVfs;
+    private final IFileSystem syncVfs;
 
-    public ServerVFSWrapper(UUID fsUuid) {
-        // Мы не можем получить worldSavePath напрямую здесь.
-        // Эту логику нужно будет централизовать в VirtualFileSystemManager.
-        // Пока что передаем null и исправим это при рефакторинге VFSManager.
-        this.blockingVfs = new WorldStorageVFS(VirtualFileSystemManager.getInstance().getWorldSavePath(), fsUuid);
+    public ServerVFSWrapper(IFileSystem syncVfs) {
+        this.syncVfs = syncVfs;
     }
 
     @Override
     public CompletableFuture<LuaValue> existsAsync(String path) {
-        return CompletableFuture.completedFuture(
-                blockingVfs.exists(path) ? LuaValue.TRUE : LuaValue.FALSE
-        );
+        return CompletableFuture.completedFuture(syncVfs.exists(path) ? LuaValue.TRUE : LuaValue.FALSE);
     }
 
     @Override
     public CompletableFuture<LuaValue> readAsync(String path) {
-        return CompletableFuture.completedFuture(blockingVfs.read(path));
+        return CompletableFuture.completedFuture(syncVfs.read(path));
     }
 
     @Override
     public CompletableFuture<LuaValue> isDirectoryAsync(String path) {
-        return CompletableFuture.completedFuture(
-                blockingVfs.isDirectory(path) ? LuaValue.TRUE : LuaValue.FALSE
-        );
+        return CompletableFuture.completedFuture(syncVfs.isDirectory(path) ? LuaValue.TRUE : LuaValue.FALSE);
     }
 
     @Override
     public CompletableFuture<LuaValue> listAsync(String path) {
-        String jsonList = blockingVfs.list(path);
-        return CompletableFuture.completedFuture(
-                jsonList != null ? LuaValue.valueOf(jsonList) : LuaValue.NIL
-        );
+        String jsonList = syncVfs.list(path);
+        return CompletableFuture.completedFuture(jsonList != null ? LuaValue.valueOf(jsonList) : LuaValue.NIL);
     }
 
-    // Операции записи пока не нужны для асинхронного интерфейса, но добавим их для полноты
     @Override
     public CompletableFuture<LuaValue> makeDirAsync(String path) {
-        return CompletableFuture.completedFuture(
-                blockingVfs.makeDir(path) ? LuaValue.TRUE : LuaValue.FALSE
-        );
+        return CompletableFuture.completedFuture(syncVfs.makeDir(path) ? LuaValue.TRUE : LuaValue.FALSE);
     }
 
     @Override
     public CompletableFuture<LuaValue> writeAsync(String path, String content) {
-        return CompletableFuture.completedFuture(
-                blockingVfs.write(path, content) ? LuaValue.TRUE : LuaValue.FALSE
-        );
+        return CompletableFuture.completedFuture(syncVfs.write(path, content) ? LuaValue.TRUE : LuaValue.FALSE);
     }
 }

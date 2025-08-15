@@ -2,11 +2,7 @@
 package com.loracore;
 
 import com.loracore.component.ModComponents;
-import com.loracore.computer.ServerScreenState;
-import com.loracore.computer.TabletScreenManager;
-import com.loracore.computer.VirtualFileSystemManager;
-import com.loracore.computer.VirtualMachineManager;
-import com.loracore.computer.VirtualMachineState;
+import com.loracore.computer.*;
 import com.loracore.item.ModItems;
 import com.loracore.item.TabletItem;
 import com.loracore.network.ModNetworking;
@@ -53,6 +49,7 @@ public class LoraCoreMod implements ModInitializer {
 		ModItems.registerModItems();
 		ServerLifecycleEvents.SERVER_STARTING.register(server -> {
 			VirtualFileSystemManager.getInstance().initialize(server);
+			ImageVfsManager.getInstance().initialize(server);
 		});
 
 		ServerTickEvents.END_SERVER_TICK.register(server -> {

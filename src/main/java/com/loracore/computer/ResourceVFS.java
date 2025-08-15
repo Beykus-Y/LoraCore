@@ -1,12 +1,13 @@
+// Файл: src/main/java/com/loracore/computer/ResourceVFS.java
 package com.loracore.computer;
 
 import com.google.gson.Gson;
 import com.loracore.LoraCoreMod;
-import net.minecraft.resource.Resource;
 import net.minecraft.resource.ResourceManager;
 import net.minecraft.util.Identifier;
 import org.luaj.vm2.LuaValue;
 
+import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.stream.Collectors;
@@ -16,7 +17,6 @@ public class ResourceVFS implements IFileSystem {
     private final ResourceManager resourceManager;
     private final String resourceRoot; // e.g., "os"
     private static final Gson GSON = new Gson();
-
 
     public ResourceVFS(ResourceManager resourceManager, String root) {
         this.resourceManager = resourceManager;
@@ -35,20 +35,20 @@ public class ResourceVFS implements IFileSystem {
 
     @Override
     public boolean isDirectory(String path) {
-        // В ресурсах "папка" существует, если есть хоть один файл внутри нее.
         return !resourceManager.findResources(resourceRoot + path, p -> true).isEmpty();
     }
 
     @Override
     public LuaValue read(String path) {
-        return resourceManager.getResource(toIdentifier(path)).map(resource -> {
-            try (InputStream stream = resource.getInputStream()) {
-                String content = new String(stream.readAllBytes(), StandardCharsets.UTF_8);
-                return LuaValue.valueOf(content);
-            } catch (Exception e) {
-                return LuaValue.NIL;
+        try {
+            byte[] bytes = readBytes(path);
+            if (bytes != null) {
+                return LuaValue.valueOf(new String(bytes, StandardCharsets.UTF_8));
             }
-        }).orElse(LuaValue.NIL);
+        } catch (IOException e) {
+            // Ошибка уже залогирована в readBytes
+        }
+        return LuaValue.NIL;
     }
 
     @Override
@@ -64,10 +64,39 @@ public class ResourceVFS implements IFileSystem {
         }
     }
 
-    // Эти методы не поддерживаются для read-only системы
-    @Override
-    public boolean write(String path, String content) { return false; }
+    // --- НОВЫЕ МЕТОДЫ-ЗАГЛУШКИ ДЛЯ READ-ONLY СИСТЕМЫ ---
 
     @Override
-    public boolean makeDir(String path) { return false; }
+    public boolean write(String path, String content) {
+        // Нельзя записывать в ресурсы мода
+        return false;
+    }
+
+    @Override
+    public boolean makeDir(String path) {
+        // Нельзя создавать папки в ресурсах мода
+        return false;
+    }
+
+    @Override
+    public boolean delete(String path) {
+        // Нельзя удалять из ресурсов мода
+        return false;
+    }
+
+    @Override
+    public boolean writeBytes(String path, byte[] data) {
+        // Нельзя записывать в ресурсы мода
+        return false;
+    }
+
+    // --- НОВЫЙ РЕАЛИЗОВАННЫЙ МЕТОД ---
+
+    @Override
+    public byte[] readBytes(String path) throws IOException {
+        return resourceManager.getResource(toIdentifier(path))
+                .orElseThrow(() -> new IOException("Resource not found: " + path))
+                .getInputStream()
+                .readAllBytes();
+    }
 }

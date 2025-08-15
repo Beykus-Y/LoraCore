@@ -1,6 +1,7 @@
 // Полный исправленный файл: src/main/java/com/loracore/computer/VirtualMachine.java
 package com.loracore.computer;
 
+import com.google.common.reflect.TypeToken;
 import com.loracore.LoraCoreMod;
 import com.loracore.api.ClientApi;
 import com.loracore.computer.api.*;
@@ -13,13 +14,17 @@ import org.luaj.vm2.lib.VarArgFunction;
 import org.luaj.vm2.lib.ZeroArgFunction;
 import org.luaj.vm2.lib.jse.JsePlatform;
 
+import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
+
+import static com.terraformersmc.modmenu.ModMenu.GSON;
 
 public class VirtualMachine {
 
@@ -39,20 +44,20 @@ public class VirtualMachine {
 
     private final Map<Integer, LuaThreadRunner> threads = new ConcurrentHashMap<>();
     private static final int MAIN_THREAD_ID = 0;
+
     private final int totalRamKb; // <-- НОВОЕ ПОЛЕ для хранения лимита памяти
 
     // ИСПРАВЛЕНО: Конструктор теперь принимает оба UUID и обработчик перезагрузки
     public VirtualMachine(ServerPlayerEntity player, String architecture, int totalRamKb, Terminal terminal, ResourceLoader resourceLoader, IAsyncVFS vfs, UUID fsUuid, UUID tabletUuid, BiConsumer<ServerPlayerEntity, String> javaBootHandler) {
         this.player = player;
-        this.totalRamKb = totalRamKb; // <-- СОХРАНЯЕМ лимит памяти
+        this.totalRamKb = totalRamKb;
         this.terminal = terminal;
         this.resourceLoader = resourceLoader;
-        this.vfs = vfs;
+        this.vfs = vfs; // Теперь типы совпадают
         this.fsUuid = fsUuid;
-        this.tabletUuid = tabletUuid; // <-- СОХРАНЯЕМ
-        this.javaBootHandler = javaBootHandler;// <-- Сохраняем обработчик
+        this.tabletUuid = tabletUuid;
+        this.javaBootHandler = javaBootHandler;
         this.startTime = System.nanoTime();
-
 
         this.devices.add(new ThreadDevice(this));
         this.devices.add(new CpuDevice(this, architecture));
@@ -60,6 +65,8 @@ public class VirtualMachine {
         this.devices.add(new TerminalDevice(terminal));
         this.devices.add(new GpuDevice(this.tabletUuid));
         this.devices.add(new RedstoneDevice());
+        this.devices.add(new DiskManagerDevice());
+        this.devices.add(new MotherboardDevice());
     }
     public boolean isOn() {
         return this.isOn;
@@ -85,7 +92,7 @@ public class VirtualMachine {
         g.set("loadfile", new CustomLoadFile(g));
 
         if (this.vfs != null) {
-            // Теперь мы передаем runner, который гарантированно не null
+            // Теперь эта строка корректна, так как FsAPI ожидает IAsyncVFS
             g.set("fs", new FsAPI(runner, this.vfs));
         }
 
@@ -123,19 +130,28 @@ public class VirtualMachine {
 
         return g;
     }
+    public boolean isMainThreadAlive() {
+        LuaThreadRunner mainRunner = threads.get(MAIN_THREAD_ID);
+        return mainRunner != null && mainRunner.isAlive();
+    }
 
     public void start(String bootScriptContent) {
-        // --- ИЗМЕНЕНИЕ: Устанавливаем флаг и запускаем поток ---
-        if (isOn) {
+        // ✅ ИСПРАВЛЕНИЕ: Проверяем, жив ли ГЛАВНЫЙ ПОТОК, а не просто флаг.
+        // Это позволяет перезапустить машину после загрузки мира из сохранения.
+        if (isMainThreadAlive()) {
             LoraCoreMod.LOGGER.warn("Попытка запустить уже работающую ВМ для планшета {}", this.tabletUuid);
             return;
         }
+
         if (bootScriptContent == null || bootScriptContent.isEmpty() || "nil".equals(bootScriptContent)) {
-            // ...
+            LoraCoreMod.LOGGER.error("Невозможно запустить ВМ {}: пустой или некорректный загрузочный скрипт.", this.tabletUuid);
+            setCrashState("BIOS content is nil or empty.");
             return;
         }
-        this.isOn = true; // <--- Устанавливаем флаг
-        this.crashMessage = null; // Сбрасываем старые ошибки
+
+        // Теперь, когда мы точно знаем, что поток не запущен, можно смело устанавливать состояние
+        this.isOn = true;
+        this.crashMessage = null;
         startNewLuaThread(MAIN_THREAD_ID, bootScriptContent, null);
     }
     public UUID getTabletUuid() {

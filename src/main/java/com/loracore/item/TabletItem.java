@@ -1,6 +1,7 @@
 // Полный исправленный файл: src/main/java/com/loracore/item/TabletItem.java
 package com.loracore.item;
 
+import com.loracore.LoraCoreMod;
 import com.loracore.component.ModComponents;
 import com.loracore.component.data.MotherboardData;
 import com.loracore.component.data.RamData;
@@ -59,9 +60,26 @@ public class TabletItem extends Item {
     public void inventoryTick(ItemStack stack, World world, Entity entity, int slot, boolean selected) {
         // Выполняем логику только на сервере
         if (!world.isClient()) {
-            // Проверяем, есть ли у предмета наш Data Component. Если нет - присваиваем.
+            boolean changed = false;
+
+            // 1. Гарантируем, что у предмета есть UUID
             if (!stack.contains(ModComponents.TABLET_UUID)) {
                 stack.set(ModComponents.TABLET_UUID, UUID.randomUUID());
+                changed = true;
+            }
+
+            // 2. Гарантируем, что у планшета есть материнская плата
+            MotherboardData mobo = stack.get(ModComponents.MOTHERBOARD_DATA);
+            // 3. ПРОВЕРЯЕМ НЕ ТОЛЬКО НА NULL, НО И НА ПУСТОЙ НАКОПИТЕЛЬ!
+            if (mobo == null || mobo.storage().isEmpty()) {
+                // Если материнки нет ИЛИ на ней нет дисков - это сломанный предмет. Чиним.
+                stack.set(ModComponents.MOTHERBOARD_DATA, ModItems.createDefaultMotherboard());
+                changed = true;
+            }
+
+            if (changed) {
+                // Если мы что-то изменили, можно вывести лог для отладки
+                LoraCoreMod.LOGGER.info("Repaired tablet item stack in inventory.");
             }
         }
     }

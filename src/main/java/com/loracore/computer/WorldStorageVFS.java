@@ -117,4 +117,37 @@ public class WorldStorageVFS implements IFileSystem {
             return null;
         }
     }
+
+    @Override
+    public boolean delete(String path) {
+        try {
+            return Files.deleteIfExists(getValidatedPath(path));
+        } catch (IOException e) {
+            LoraCoreMod.LOGGER.error("[VFS] Failed to delete {}: {}", path, e.getMessage());
+            return false;
+        }
+    }
+
+    @Override
+    public byte[] readBytes(String path) throws IOException {
+        Path target = getValidatedPath(path);
+        if (!Files.exists(target) || Files.isDirectory(target)) {
+            throw new IOException("File not found or is a directory: " + path);
+        }
+        return Files.readAllBytes(target);
+    }
+
+    @Override
+    public boolean writeBytes(String path, byte[] data) {
+        try {
+            Path target = getValidatedPath(path);
+            // Гарантируем, что родительская папка существует
+            Files.createDirectories(target.getParent());
+            Files.write(target, data);
+            return true;
+        } catch (IOException e) {
+            LoraCoreMod.LOGGER.error("[VFS] Failed to write bytes to {}: {}", path, e.getMessage());
+            return false;
+        }
+    }
 }

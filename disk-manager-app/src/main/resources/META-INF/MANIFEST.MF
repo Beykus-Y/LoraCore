@@ -1,0 +1,2 @@
+Manifest-Version: 1.0
+App-Main-Class: com.lora.tabletos.apps.DiskManagerApp

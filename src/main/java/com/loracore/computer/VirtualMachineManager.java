@@ -3,10 +3,8 @@ package com.loracore.computer;
 
 import com.loracore.LoraCoreMod;
 import com.loracore.component.ModComponents;
-import com.loracore.component.data.CpuData;
-import com.loracore.component.data.FileSystemsData;
-import com.loracore.component.data.MotherboardData;
-import com.loracore.component.data.RamData;
+import com.loracore.component.data.*;
+import com.loracore.item.ModItems;
 import com.loracore.network.SwitchToClientKernelS2CPacket;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.item.ItemStack;
@@ -62,8 +60,20 @@ public class VirtualMachineManager {
             if (savedNbt != null) {
                 LoraCoreMod.LOGGER.info("Найдено сохраненное состояние для ВМ {}", key);
                 newVM.readFromNbt(savedNbt);
-            }
 
+                // ✅ ВОТ ОНО, КЛЮЧЕВОЕ ИЗМЕНЕНИЕ
+                // Если по сохраненным данным ВМ должна быть включена, запускаем ее СРАЗУ ЗДЕСЬ.
+                if (newVM.isOn() && !newVM.isMainThreadAlive()) {
+                    LoraCoreMod.LOGGER.info("Восстановление рабочего состояния для ВМ {}", key);
+                    String biosContent = newVM.getResourceLoader().load("os/bios.lua");
+                    if (biosContent != null) {
+                        newVM.start(biosContent);
+                    } else {
+                        LoraCoreMod.LOGGER.error("Критическая ошибка: BIOS не найден при восстановлении ВМ!");
+                        newVM.setCrashState("BIOS not found during restore.");
+                    }
+                }
+            }
             return newVM;
         });
     }
@@ -81,7 +91,12 @@ public class VirtualMachineManager {
 
     private VirtualMachine createNewVM(ServerPlayerEntity player, ItemStack stack, UUID tabletUuid) {
         MotherboardData mobo = stack.get(ModComponents.MOTHERBOARD_DATA);
-        if (mobo == null) return null;
+        if (mobo == null) {
+            LoraCoreMod.LOGGER.warn("Tablet {} is missing MotherboardData! Applying default components.", tabletUuid);
+            mobo = ModItems.createDefaultMotherboard();
+            stack.set(ModComponents.MOTHERBOARD_DATA, mobo);
+        }
+
 
         String architecture = mobo.cpu().flatMap(s -> Optional.ofNullable(s.get(ModComponents.CPU_DATA)))
                 .map(CpuData::architecture).orElse("unknown");
@@ -91,39 +106,41 @@ public class VirtualMachineManager {
                         .map(RamData::sizeKb).orElse(0))
                 .sum();
 
-        FileSystemsData oldFsData = stack.get(ModComponents.FILE_SYSTEMS_DATA);
-
-        // Создаем новую, ГАРАНТИРОВАННО изменяемую карту.
-        // Если старые данные есть, копируем их.
-        Map<String, UUID> mutableUuids = new HashMap<>();
-        if (oldFsData != null) {
-            mutableUuids.putAll(oldFsData.uuids());
+        // 1. Находим первый установленный жесткий диск
+        Optional<ItemStack> hddStackOpt = mobo.storage().stream().findFirst();
+        if (hddStackOpt.isEmpty()) {
+            LoraCoreMod.LOGGER.error("Tablet {} has no storage device installed!", tabletUuid);
+            return null;
         }
+        ItemStack hddStack = hddStackOpt.get();
 
-        // Теперь безопасно используем computeIfAbsent на нашей новой карте.
-        UUID fsUuid = mutableUuids.computeIfAbsent("0", k -> UUID.randomUUID());
+        // 2. Получаем данные с этого диска
+        FileSystemsData fsData = hddStack.get(ModComponents.FILE_SYSTEMS_DATA);
+        StorageData storageData = hddStack.get(ModComponents.STORAGE_DATA);
 
-        // Создаем новый объект данных с обновленной картой и записываем его обратно в ItemStack.
-        FileSystemsData newFsData = new FileSystemsData(mutableUuids);
-        stack.set(ModComponents.FILE_SYSTEMS_DATA, newFsData);
+        if (fsData == null || storageData == null) {
+            LoraCoreMod.LOGGER.error("Storage device in tablet {} is missing required data components!", tabletUuid);
+            return null;
+        }
+        UUID fsUuid = fsData.fsUuid();
+        int capacityKb = storageData.capacityKb();
 
         LoraCoreMod.LOGGER.info("Параметры для новой ВМ: arch={}, ram={}KB, fsUUID={}, tabletUUID={}",
                 architecture, totalRamKb, fsUuid, tabletUuid);
 
-        // --- ИЗМЕНЕНИЕ: Создаем ВМ с серверными компонентами ---
-        LoraCoreMod.LOGGER.info("Параметры для новой ВМ: arch={}, ram={}KB, fsUUID={}, tabletUUID={}",
-                architecture, totalRamKb, fsUuid, tabletUuid);
-
-        // --- ИЗМЕНЕНИЕ: Создаем ВМ с РЕАЛЬНЫМИ серверными компонентами ---
         ServerTerminal serverTerminal = new ServerTerminal(tabletUuid);
-        IAsyncVFS serverVfs = new ServerVFSWrapper(fsUuid);
 
-        // Создаем ResourceLoader на лету, используя серверный ResourceManager
+        // 3. Создаем СИНХРОННУЮ ImageVfs
+        IFileSystem imageVfs = new ImageVfs(
+                player.getServer().getSavePath(net.minecraft.util.WorldSavePath.ROOT),
+                fsUuid,
+                capacityKb
+        );
+        // 4. "Оборачиваем" ее в АСИНХРОННЫЙ ServerVFSWrapper
+        IAsyncVFS serverVfs = new ServerVFSWrapper(imageVfs);
+
         MinecraftServer server = player.getServer();
-        ResourceManager resourceManager = server.getResourceManager();
         ResourceLoader serverResourceLoader = (path) -> {
-            // Этот путь формируется от корня JAR-файла.
-            // Наши ресурсы лежат в /assets/loracore/
             String fullPathInJar = "/assets/" + LoraCoreMod.MOD_ID + "/" + path;
             try (var stream = LoraCoreMod.class.getResourceAsStream(fullPathInJar)) {
                 if (stream == null) {
