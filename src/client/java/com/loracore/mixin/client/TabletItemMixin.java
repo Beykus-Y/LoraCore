@@ -1,9 +1,11 @@
 // Файл: src/client/java/com/loracore/mixin/client/TabletItemMixin.java
 package com.loracore.mixin.client;
 
+import com.loracore.gui.TabletConfigScreen;
 import com.loracore.item.TabletItem;
 import com.loracore.network.RequestTabletDataC2SPacket;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
+import net.minecraft.client.MinecraftClient;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
@@ -32,7 +34,15 @@ public abstract class TabletItemMixin extends Item {
     private void onUseClient(World world, PlayerEntity player, Hand hand, CallbackInfoReturnable<TypedActionResult<ItemStack>> cir) {
         // Мы находимся на клиенте, поэтому эта проверка всегда будет true, но она полезна для ясности
         if (world.isClient) {
-            // Отправляем наш пакет. Здесь это абсолютно безопасно.
+            // Проверяем, зажат ли Shift
+            if (player.isSneaking()) {
+                // Shift + ПКМ: открываем экран настроек
+                MinecraftClient.getInstance().setScreen(new TabletConfigScreen(null, player.getStackInHand(hand)));
+                cir.setReturnValue(TypedActionResult.success(player.getStackInHand(hand), true));
+                return;
+            }
+            
+            // Обычный ПКМ: отправляем пакет на сервер для открытия планшета
             ClientPlayNetworking.send(new RequestTabletDataC2SPacket());
 
             // Мы "отменяем" оригинальный метод use(), чтобы избежать двойных действий,

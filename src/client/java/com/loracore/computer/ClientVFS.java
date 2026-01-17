@@ -23,8 +23,9 @@ public class ClientVFS implements IVfsRequester, IBlockingVFS, IAsyncVFS {
     private final ConcurrentHashMap<Integer, CompletableFuture<LuaValue>> asyncResponseFutures = new ConcurrentHashMap<>();
     private final AtomicInteger nextCallbackId = new AtomicInteger(0);
     
-    // ИСПРАВЛЕНО: Добавляем поддержку больших файлов
-    private final ConcurrentHashMap<Integer, StringBuilder> largeFileBuffers = new ConcurrentHashMap<>();
+    // ИСПРАВЛЕНО: Добавляем поддержку больших файлов с упорядоченной сборкой чанков
+    // Используем TreeMap для гарантии правильного порядка сборки, даже если пакеты приходят не по порядку
+    private final ConcurrentHashMap<Integer, java.util.TreeMap<Integer, String>> largeFileChunks = new ConcurrentHashMap<>();
 
     // Сделаем конструктор приватным - теперь используется только через getInstance
     private ClientVFS(UUID fsUuid) {
@@ -62,27 +63,41 @@ public class ClientVFS implements IVfsRequester, IBlockingVFS, IAsyncVFS {
     }
     
     /**
-     * Обрабатывает ответы для больших файлов, собирая их по частям
+     * Обрабатывает ответы для больших файлов, собирая их по частям.
+     * Использует TreeMap для гарантии правильного порядка сборки, даже если пакеты приходят не по порядку.
      */
     private void handleLargeFileResponse(int callbackId, String chunkData, int chunkIndex, int totalChunks) {
         LoraCoreMod.LOGGER.info("[ClientVFS] Received chunk {}/{} for callbackId: {}", chunkIndex + 1, totalChunks, callbackId);
         
-        StringBuilder buffer = largeFileBuffers.computeIfAbsent(callbackId, k -> new StringBuilder());
-        buffer.append(chunkData);
+        // Store chunk in TreeMap to ensure ordered assembly
+        java.util.TreeMap<Integer, String> chunks = largeFileChunks.computeIfAbsent(callbackId, k -> new java.util.TreeMap<>());
+        chunks.put(chunkIndex, chunkData);
         
-        // Если это последний чанк, собираем полный файл
-        if (chunkIndex >= totalChunks - 1) {
-            String completeData = buffer.toString();
-            largeFileBuffers.remove(callbackId);
+        // Only assemble when ALL chunks are present (chunks.size() == totalChunks)
+        if (chunks.size() == totalChunks) {
+            // Assemble chunks in exact order from 0 to totalChunks - 1
+            StringBuilder completeDataBuilder = new StringBuilder();
+            for (int i = 0; i < totalChunks; i++) {
+                String chunk = chunks.get(i);
+                if (chunk == null) {
+                    LoraCoreMod.LOGGER.error("[ClientVFS] Missing chunk {} for callbackId: {} (have {}/{})", i, callbackId, chunks.size(), totalChunks);
+                    // Don't remove yet, wait for missing chunk
+                    return;
+                }
+                completeDataBuilder.append(chunk);
+            }
             
-            LoraCoreMod.LOGGER.info("[ClientVFS] Completed large file for callbackId: {} ({} chars)", callbackId, completeData.length());
+            // All chunks present and assembled successfully
+            String completeData = completeDataBuilder.toString();
+            largeFileChunks.remove(callbackId); // Clear only after successful assembly
+            
+            LoraCoreMod.LOGGER.info("[ClientVFS] Completed large file for callbackId: {} ({} chars, {} chunks)", callbackId, completeData.length(), totalChunks);
             
             // Отправляем полный файл как обычный ответ
             handleResponse(callbackId, LuaValue.valueOf(completeData));
         } else {
-            LoraCoreMod.LOGGER.info("[ClientVFS] Waiting for more chunks for callbackId: {}", callbackId);
+            LoraCoreMod.LOGGER.info("[ClientVFS] Waiting for more chunks for callbackId: {} (have {}/{})", callbackId, chunks.size(), totalChunks);
         }
-        // Иначе ждем следующий чанк
     }
 
     public UUID getFsUuid() {

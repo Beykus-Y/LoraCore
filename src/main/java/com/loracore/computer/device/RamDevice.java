@@ -24,7 +24,19 @@ public class RamDevice {
     @Callback(value = "getUsedSize", doc = "Returns the current memory usage in kilobytes.")
     public double getUsedSize() {
         try {
-            double rawUsage = vm.getMemoryUsage();
+            // НОВОЕ: Используем реальную RAM из SystemBus
+            // Пытаемся получить доступ к systemRam через рефлексию или добавить метод в VirtualMachine
+            // Пока используем гибридный подход: проверяем реальную RAM + Lua usage
+            
+            // Получаем использование памяти из Lua VM (для обратной совместимости)
+            double luaUsage = vm.getMemoryUsage();
+            
+            // Пытаемся получить реальное использование из SystemBus
+            // Для этого нужно добавить метод getSystemRamUsage() в VirtualMachine
+            double realRamUsage = vm.getSystemRamUsage();
+            
+            // Используем максимум из двух значений (Lua может использовать больше, чем реальная RAM)
+            double rawUsage = Math.max(luaUsage, realRamUsage);
             
             // ИСПРАВЛЕНИЕ: Ограничиваем использование памяти разумными пределами
             // collectgarbage("count") может возвращать очень большие значения

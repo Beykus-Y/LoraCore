@@ -1,5 +1,5 @@
 -- =======================================================
--- LoraCore ModuOS Installer v5.0 (Corrected Boot Script)
+-- ModuOS Professional Installer v6.0
 -- =======================================================
 local term = tablet.terminal
 local gpu = tablet.gpu
@@ -7,62 +7,337 @@ local fs = _G.fs
 local colors = _G.colors
 local os = _G.os
 
-term.clear()
-gpu.setBackgroundColor(colors.black)
+-- Screen dimensions
+local W, H = 480, 270
+local PROGRESS_BAR_X = 50
+local PROGRESS_BAR_Y = 200
+local PROGRESS_BAR_WIDTH = 380
+local PROGRESS_BAR_HEIGHT = 20
+
+-- Clear screen and set up
+gpu.fill(0, 0, W, H, colors.black)
 gpu.setTextColor(colors.white)
-term.setCursorPos(1, 1)
+gpu.setBackgroundColor(colors.black)
 
-term.print("Starting ModuOS Installation...")
-term.print("-------------------------------")
+-- Title
+gpu.drawText(50, 30, "ModuOS Professional Installer v6.0", colors.cyan)
+gpu.drawText(50, 50, "=====================================", colors.gray)
 
--- ИСПРАВЛЕННЫЙ BOOT SCRIPT
-local boot_script_content = [[
--- /boot.lua - Minimal Operating System v1.2 (Persistent)
+-- Progress bar background
+gpu.fill(PROGRESS_BAR_X, PROGRESS_BAR_Y, PROGRESS_BAR_WIDTH, PROGRESS_BAR_HEIGHT, colors.gray)
+gpu.fill(PROGRESS_BAR_X + 2, PROGRESS_BAR_Y + 2, PROGRESS_BAR_WIDTH - 4, PROGRESS_BAR_HEIGHT - 4, colors.black)
+
+local function updateProgress(percent, message)
+    local fillWidth = math.floor((PROGRESS_BAR_WIDTH - 4) * (percent / 100))
+    gpu.fill(PROGRESS_BAR_X + 2, PROGRESS_BAR_Y + 2, fillWidth, PROGRESS_BAR_HEIGHT - 4, colors.lime)
+    if message then
+        gpu.fill(50, 230, W - 100, 20, colors.black)
+        gpu.drawText(50, 230, message, colors.white)
+    end
+end
+
+local function logStep(step, message)
+    local y = 80 + (step * 15)
+    gpu.drawText(50, y, string.format("[%d] %s", step, message), colors.white)
+end
+
+local step = 1
+
+-- Step 1: Create directory structure
+logStep(step, "Creating directory structure...")
+updateProgress(10, "Creating directories")
+os.sleep(0.3)
+
+local dirs = {"/boot", "/bin", "/home", "/home/user", "/home/user/apps", "/etc", "/usr", "/usr/lib"}
+for _, dir in ipairs(dirs) do
+    if not fs.exists(dir) then
+        fs.makeDir(dir)
+    end
+end
+step = step + 1
+updateProgress(20, "Directories created")
+
+-- Step 1.5: Create readme.txt in /home/user/apps
+logStep(step, "Creating application directory...")
+updateProgress(22, "Creating /home/user/apps/readme.txt")
+os.sleep(0.2)
+
+local readme_content = [[
+Welcome to ModuOS!
+
+This is your application directory (/home/user/apps).
+Install your applications here and they will appear on the Desktop.
+
+Enjoy!
+]]
+
+if not fs.write("/home/user/apps/readme.txt", readme_content) then
+    gpu.setTextColor(colors.yellow)
+    gpu.drawText(50, 250, "WARNING: Failed to write readme.txt", colors.yellow)
+    -- Don't fail installation, just warn
+end
+
+-- Step 2: Write boot.lua (Simple Shell Loop)
+logStep(step, "Installing boot loader...")
+updateProgress(30, "Writing boot.lua")
+os.sleep(0.3)
+
+local boot_script = [[
+-- ModuOS Shell v2.0 - Simple command dispatcher
 local term = tablet.terminal
+local fs = _G.fs
+local os = _G.os
+local gpu = tablet.gpu
+local colors = _G.colors
 
 term.clear()
+gpu.fill(0, 0, 480, 270, colors.black)
 term.setCursorPos(1, 1)
-print("ModuOS v0.2 Loaded.")
+print("ModuOS Shell v2.0")
 print("Type 'help' for commands.")
+print("")
 
--- Главный цикл ОС
 while true do
-    term.write("> ")
-    local cmd = term.read()
-    if cmd == "help" then
-        print("Commands: help, reboot, exit")
-    elseif cmd == "reboot" then
-        os.reboot()
-        break -- Выходим из цикла, чтобы BIOS перезагрузился
-    elseif cmd == "exit" then
-        term.clear()
-        term.print("System halted. Press any key to reboot.")
-        os.pullEvent("key") -- Ждем нажатия клавиши
-        os.reboot()
-        break -- Выходим из цикла
+    term.write("/> ")
+    local input = term.read()
+    if not input then break end
+    
+    -- Split input into command and args
+    local parts = {}
+    for part in string.gmatch(input, "%S+") do
+        table.insert(parts, part)
+    end
+    
+    if #parts == 0 then
+        -- Empty input, continue
     else
-        print("Unknown command: " .. tostring(cmd))
+        local command = parts[1]
+        local args = {}
+        for i = 2, #parts do
+            table.insert(args, parts[i])
+        end
+        
+        -- Look for command in /bin/
+        local script_path = "/bin/" .. command .. ".lua"
+        if fs.exists(script_path) then
+            local script_content = fs.read(script_path)
+            if script_content then
+                -- Create environment with args accessible
+                local env = {}
+                for k, v in pairs(_G) do
+                    env[k] = v
+                end
+                env.arg = args
+                env.args = args
+                
+                local func, err = load(script_content, "@" .. script_path, "t", env)
+                if func then
+                    local success, result = pcall(func)
+                    if not success then
+                        print("Error: " .. tostring(result))
+                    end
+                else
+                    print("Error loading command: " .. tostring(err))
+                end
+            end
+        elseif command == "reboot" then
+            os.reboot()
+            break
+        elseif command == "exit" then
+            term.clear()
+            gpu.fill(0, 0, 480, 270, colors.black)
+            gpu.drawText(50, 120, "System halted. Press any key to reboot.", colors.white)
+            os.pullEvent("key")
+            os.reboot()
+            break
+        else
+            print("Unknown command: " .. command .. ". Type 'help' for available commands.")
+        end
     end
 end
 ]]
 
--- Процесс установки
-term.print("\n1. Writing boot file... ")
-fs.write("/boot.lua", boot_script_content)
-term.print("[OK]")
-
-term.print("2. Creating directories... ")
-fs.makeDir("/usr")
-fs.makeDir("/home")
-term.print("[OK]")
-
-term.print("3. Verifying installation... ")
-local content = fs.read("/boot.lua")
-if not content then
+if not fs.write("/boot.lua", boot_script) then
     gpu.setTextColor(colors.red)
-    term.print("\n   ERROR: Verification failed! Could not read boot file back.")
+    gpu.drawText(50, 250, "ERROR: Failed to write /boot.lua", colors.red)
     return false
 end
-term.print("[OK]")
+step = step + 1
+updateProgress(40, "Boot loader installed")
+
+-- Step 2.5: Create /bin/help.lua command
+logStep(step, "Installing help command...")
+updateProgress(45, "Writing /bin/help.lua")
+os.sleep(0.3)
+
+local help_script = [[
+print("ModuOS Shell Commands:")
+print("  help  - Show this help message")
+print("  ls    - List files in current directory")
+print("  ls <path> - List files in specified directory")
+print("  reboot - Reboot the system")
+print("  exit  - Halt the system")
+print("")
+print("To see available commands, check /bin/ directory.")
+]]
+
+if not fs.write("/bin/help.lua", help_script) then
+    gpu.setTextColor(colors.red)
+    gpu.drawText(50, 250, "ERROR: Failed to write /bin/help.lua", colors.red)
+    return false
+end
+
+-- Step 2.6: Create /bin/ls.lua command
+logStep(step, "Installing ls command...")
+updateProgress(50, "Writing /bin/ls.lua")
+os.sleep(0.3)
+
+local ls_script = [[
+local fs = _G.fs
+local path = arg and arg[1] or "/"
+
+if not fs.exists(path) then
+    print("Error: Path not found: " .. path)
+    return
+end
+
+local files = fs.list(path)
+if files then
+    local file_list = {}
+    -- Parse JSON array or comma-separated list
+    if string.sub(files, 1, 1) == "[" then
+        -- JSON array format
+        for file in string.gmatch(files, '"([^"]+)"') do
+            table.insert(file_list, file)
+        end
+    else
+        -- Comma-separated format
+        for file in string.gmatch(files, "([^,]+)") do
+            table.insert(file_list, file:match("^%s*(.-)%s*$"))
+        end
+    end
+    
+    if #file_list == 0 then
+        print("(empty)")
+    else
+        for _, file in ipairs(file_list) do
+            local full_path = path .. (path == "/" and "" or "/") .. file
+            if fs.isDirectory(full_path) then
+                print(file .. "/")
+            else
+                print(file)
+            end
+        end
+    end
+else
+    print("(empty)")
+end
+]]
+
+if not fs.write("/bin/ls.lua", ls_script) then
+    gpu.setTextColor(colors.red)
+    gpu.drawText(50, 250, "ERROR: Failed to write /bin/ls.lua", colors.red)
+    return false
+end
+step = step + 1
+updateProgress(55, "ls command installed")
+
+-- Step 2.7: Create /bin/cat.lua command
+logStep(step, "Installing cat command...")
+updateProgress(60, "Writing /bin/cat.lua")
+os.sleep(0.3)
+
+local cat_script = [[
+local fs = _G.fs
+local path = arg and arg[1]
+
+if not path then
+    print("Usage: cat <file>")
+    return
+end
+
+if not fs.exists(path) then
+    print("Error: File not found: " .. path)
+    return
+end
+
+if fs.isDirectory(path) then
+    print("Error: " .. path .. " is a directory")
+    return
+end
+
+local content = fs.read(path)
+if content then
+    print(content)
+else
+    print("Error: Failed to read file: " .. path)
+end
+]]
+
+if not fs.write("/bin/cat.lua", cat_script) then
+    gpu.setTextColor(colors.red)
+    gpu.drawText(50, 250, "ERROR: Failed to write /bin/cat.lua", colors.red)
+    return false
+end
+step = step + 1
+updateProgress(65, "cat command installed")
+
+-- Step 3: System Check Phase
+logStep(step, "Running system check...")
+updateProgress(70, "Verifying installation")
+os.sleep(0.3)
+
+local check_failed = false
+local required_paths = {
+    "/boot.lua",
+    "/bin/help.lua",
+    "/bin/ls.lua",
+    "/bin/cat.lua",
+    "/boot",
+    "/bin",
+    "/home",
+    "/home/user",
+    "/home/user/apps",
+    "/home/user/apps/readme.txt",
+    "/etc",
+    "/usr",
+    "/usr/lib"
+}
+
+for _, path in ipairs(required_paths) do
+    if not fs.exists(path) then
+        gpu.setTextColor(colors.red)
+        gpu.drawText(50, 250, "ERROR: Missing required path: " .. path, colors.red)
+        check_failed = true
+        break
+    end
+end
+
+if check_failed then
+    return false
+end
+
+-- Verify boot.lua content
+local boot_content = fs.read("/boot.lua")
+if not boot_content or boot_content == "" then
+    gpu.setTextColor(colors.red)
+    gpu.drawText(50, 250, "ERROR: Boot file verification failed", colors.red)
+    return false
+end
+
+step = step + 1
+updateProgress(85, "System check passed")
+
+-- Step 4: Finalization
+logStep(step, "Finalizing installation...")
+updateProgress(90, "Finalizing")
+os.sleep(0.3)
+
+step = step + 1
+updateProgress(100, "Installation complete!")
+os.sleep(0.5)
+
+gpu.setTextColor(colors.lime)
+gpu.drawText(50, 250, "Installation successful! System ready.", colors.lime)
 
 return true

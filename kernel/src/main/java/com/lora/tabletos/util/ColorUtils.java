@@ -18,19 +18,22 @@ public final class ColorUtils {
      * @return Интерполированный цвет
      */
     public static int interpolateColor(int color1, int color2, float progress) {
+        int a1 = (color1 >> 24) & 0xFF;
         int r1 = (color1 >> 16) & 0xFF;
         int g1 = (color1 >> 8) & 0xFF;
         int b1 = color1 & 0xFF;
-        
+
+        int a2 = (color2 >> 24) & 0xFF;
         int r2 = (color2 >> 16) & 0xFF;
         int g2 = (color2 >> 8) & 0xFF;
         int b2 = color2 & 0xFF;
-        
+
+        int a = (int) (a1 + (a2 - a1) * progress);
         int r = (int) (r1 + (r2 - r1) * progress);
         int g = (int) (g1 + (g2 - g1) * progress);
         int b = (int) (b1 + (b2 - b1) * progress);
-        
-        return 0xFF000000 | (r << 16) | (g << 8) | b;
+
+        return (a << 24) | (r << 16) | (g << 8) | b;
     }
     
     /**

@@ -45,8 +45,10 @@ public class JavaRuntime implements IRuntimeEnvironment {
      * @param newScreenImage Новый, только что созданный NativeImage.
      */
     public void reinitializeGraphics(NativeImage newScreenImage) {
-        // Условие 'kernelManager != null' всегда будет true, IDE права. Убираем его для чистоты.
-        kernelManager.updateGraphics(newScreenImage);
+        // Null-check for safety, though kernelManager should never be null
+        if (kernelManager != null) {
+            kernelManager.updateGraphics(newScreenImage);
+        }
     }
 
     // --- Новый, исправленный метод ---

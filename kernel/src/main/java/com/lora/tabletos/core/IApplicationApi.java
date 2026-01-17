@@ -44,6 +44,13 @@ public interface IApplicationApi {
     CompletableFuture<Boolean> runLuaScript(String path);
 
     /**
+     * Показывает всплывающее уведомление.
+     * @param message Текст уведомления.
+     * @param isError Если true - уведомление красное, иначе синее/зеленое.
+     */
+    void showNotification(String message, boolean isError);
+
+    /**
      * [НОВЫЙ МЕТОД]
      * Безопасно выполняет задачу в главном потоке отрисовки клиента.
      * @param task Задача для выполнения.
@@ -58,4 +65,22 @@ public interface IApplicationApi {
      * @return Future, который завершится с результатом от устройства.
      */
     CompletableFuture<Object[]> invokeDevice(String deviceType, String methodName, Object... args);
+    
+    /**
+     * Возвращает текущие метрики системы.
+     * @return Map с метриками: "cpu_load" (0.0-1.0), "ram_used_kb", "ram_total_kb", "disk_queue" (размер очереди задач)
+     */
+    java.util.Map<String, Double> getSystemMetrics();
+    
+    /**
+     * Возвращает строковое представление UUID планшета.
+     * @return UUID планшета в виде строки, или "N/A" если недоступно
+     */
+    String getTabletUuidStr();
+    
+    /**
+     * Возвращает строковое представление UUID файловой системы.
+     * @return UUID файловой системы в виде строки, или "N/A" если недоступно
+     */
+    String getFsUuidStr();
 }

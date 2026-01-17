@@ -1,4 +1,3 @@
-// Файл: kernel/src/main/java/com/lora/tabletos/ui/navigation/NavigationBar.java
 package com.lora.tabletos.ui.navigation;
 
 import com.lora.tabletos.ui.window.WindowManager;
@@ -16,6 +15,7 @@ import java.util.UUID;
 /**
  * Интерактивная панель навигации (Dock), отображающая запущенные приложения
  * и позволяющая переключаться между ними или вернуться на рабочий стол.
+ * Стиль: macOS Dock (парящая панель с отступами).
  */
 public class NavigationBar {
 
@@ -23,21 +23,26 @@ public class NavigationBar {
     private final IKernelApi api;
     private WindowManager windowManager;
 
-    // --- UI Константы ---
-    private static final int BAR_HEIGHT = 30;
-    private static final int BAR_COLOR = 0xEE2C3A47; // Слегка прозрачный темно-серый
-    private static final int ICON_SIZE = 24;
-    private static final int ICON_PADDING = (BAR_HEIGHT - ICON_SIZE) / 2; // = 3
-    private static final int ICON_SPACING = 5;
-    private static final int HOME_BUTTON_RADIUS = 13;
-    private static final int ICON_BG_COLOR = 0x50FFFFFF; // Полупрозрачный белый
-    private static final int ICON_BG_ACTIVE_COLOR = 0xFF4CAF50; // Ярко-зеленый для активного приложения
+    // Новый компонент (Меню Пуск)
+    private final SystemMenu systemMenu;
+
+    // --- UI Константы (Modern Dock) ---
+    private static final int DOCK_HEIGHT = 40;
+    private static final int DOCK_BOTTOM_MARGIN = 10;
+    private static final int ICON_SIZE = 32; // Иконки побольше
+    private static final int ICON_SPACING = 8;
+
+    // Цвета (Glassmorphism)
+    private static final int DOCK_BG_COLOR = 0xCC202020; // Сильно прозрачный темный фон
+    private static final int DOCK_BORDER_COLOR = 0x40FFFFFF; // Тонкая белая обводка
     private static final int ICON_TEXT_COLOR = 0xFFFFFFFF;
     private static final int HOME_ICON_COLOR = 0xFFDDDDDD;
+    private static final int START_BTN_COLOR = 0xFFFF5722; // Оранжевый для кнопки пуск
 
     // --- Внутреннее состояние ---
     private final List<DockIcon> dockIcons = new ArrayList<>();
     private ClickableArea homeButtonArea;
+    private ClickableArea startButtonArea; // Зона кнопки Пуск
 
     // Вспомогательные рекорды для управления кликабельными зонами
     private record ClickableArea(int x, int y, int width, int height) {
@@ -49,6 +54,8 @@ public class NavigationBar {
 
     public NavigationBar(IKernelApi api) {
         this.api = api;
+        // Инициализируем меню
+        this.systemMenu = new SystemMenu(api);
     }
 
     public void setWindowManager(WindowManager windowManager) {
@@ -56,117 +63,172 @@ public class NavigationBar {
     }
 
     /**
-     * Отрисовывает фон панели, кнопку "Домой" и иконки запущенных приложений.
+     * Отрисовывает фон панели, кнопку "Пуск", иконки приложений и кнопку "Домой".
      */
     public void render(IKernelGraphics g, int mouseX, int mouseY, float delta) {
         if (windowManager == null) return;
 
-        int screenHeight = g.getHeight();
-        int screenWidth = g.getWidth();
-        int barY = screenHeight - BAR_HEIGHT;
+        int screenW = g.getWidth();
+        int screenH = g.getHeight();
 
-        // 1. Рисуем фон панели
-        g.fill(0, barY, screenWidth, screenHeight, BAR_COLOR);
+        // Считаем ширину дока в зависимости от количества иконок
+        // Пуск + разделитель + (Иконки приложений) + разделитель + Домой
+        int appCount = windowManager.getRunningApps().size();
+        int totalContentWidth = ICON_SIZE // Пуск
+                + ICON_SPACING + 2 // Разделитель
+                + (appCount * (ICON_SIZE + ICON_SPACING))
+                + 2 // Разделитель (потенциальный)
+                + ICON_SIZE; // Домой
 
-        // 2. Обновляем список иконок и их расположение
-        updateAndLayoutIcons(screenWidth, barY);
+        // Минимальная ширина, чтобы док не выглядел куцым
+        int dockWidth = Math.max(200, totalContentWidth + 20);
+        int dockX = (screenW - dockWidth) / 2;
+        int dockY = screenH - DOCK_HEIGHT - DOCK_BOTTOM_MARGIN;
 
-        // 3. Рисуем кнопку "Домой"
-        g.fill(homeButtonArea.x(), homeButtonArea.y(), homeButtonArea.x() + homeButtonArea.width(), homeButtonArea.y() + homeButtonArea.height(), ICON_BG_COLOR);
-        drawHomeIcon(g, homeButtonArea.x(), homeButtonArea.y());
+        // 1. Рисуем фон Дока (скругленный по краям - имитация)
+        // Тень
+        g.fill(dockX + 2, dockY + 2, dockX + dockWidth + 2, dockY + DOCK_HEIGHT + 2, 0x40000000);
+        // Основа
+        g.fill(dockX, dockY, dockX + dockWidth, dockY + DOCK_HEIGHT, DOCK_BG_COLOR);
+        // Обводка (Border) сверху
+        g.fill(dockX, dockY, dockX + dockWidth, dockY + 1, DOCK_BORDER_COLOR);
 
-        // 4. Рисуем иконки запущенных приложений
+        int currentX = dockX + 10;
+        int iconY = dockY + (DOCK_HEIGHT - ICON_SIZE) / 2;
+
+        // 2. Кнопка Пуск (Логотип системы)
+        startButtonArea = new ClickableArea(currentX, iconY, ICON_SIZE, ICON_SIZE);
+        // Рисуем лого (оранжевый квадрат)
+        g.fill(currentX, iconY, currentX + ICON_SIZE, iconY + ICON_SIZE, START_BTN_COLOR);
+        // Простой символ "L" внутри
+        g.drawCenteredString("L", currentX + ICON_SIZE/2, iconY + 8, 0xFFFFFFFF);
+
+        currentX += ICON_SIZE + ICON_SPACING;
+
+        // Разделитель (вертикальная полоска)
+        g.fill(currentX, iconY + 4, currentX + 1, iconY + ICON_SIZE - 4, 0x40FFFFFF);
+        currentX += ICON_SPACING;
+
+        // 3. Иконки запущенных приложений
+        dockIcons.clear();
         UUID activeAppId = windowManager.getActiveAppId();
-        for (DockIcon icon : dockIcons) {
-            boolean isActive = icon.appId().equals(activeAppId);
-            int bgColor = isActive ? ICON_BG_ACTIVE_COLOR : ICON_BG_COLOR;
 
-            // Фон иконки
-            g.fill(icon.area().x, icon.area().y, icon.area().x + icon.area().width, icon.area().y + icon.area().height, bgColor);
+        for (Map.Entry<UUID, WindowManager.AppInfo> entry : windowManager.getRunningApps().entrySet()) {
+            String label = entry.getValue().path().substring(entry.getValue().path().lastIndexOf('/') + 1)
+                    .replace(".jar", "").replace(".lua", "");
 
-            // Первая буква названия как иконка
-            String iconText = icon.label().isEmpty() ? "?" : icon.label().substring(0, 1).toUpperCase();
-            g.drawCenteredString(iconText, icon.area().x + (ICON_SIZE / 2), icon.area().y + 8, ICON_TEXT_COLOR);
+            ClickableArea area = new ClickableArea(currentX, iconY, ICON_SIZE, ICON_SIZE);
+            dockIcons.add(new DockIcon(entry.getKey(), label, area));
+
+            // Фон иконки (темный квадрат)
+            g.fill(currentX, iconY, currentX + ICON_SIZE, iconY + ICON_SIZE, 0xFF444444);
+
+            // Имя (первая буква)
+            String iconLetter = label.isEmpty() ? "?" : label.substring(0, 1).toUpperCase();
+
+            // Генерация цвета для иконки на основе имени
+            int appColor = 0xFF000000 | (label.hashCode() & 0xFFFFFF);
+            // Если цвет слишком темный, делаем его светлее
+            if ((appColor & 0x00FFFFFF) < 0x202020) appColor = 0xFFCCCCCC;
+
+            g.drawCenteredString(iconLetter, currentX + ICON_SIZE/2, iconY + 8, appColor);
+
+            // Индикатор активности (белая точка под иконкой)
+            if (entry.getKey().equals(activeAppId)) {
+                g.fill(currentX + ICON_SIZE/2 - 2, iconY + ICON_SIZE - 4, currentX + ICON_SIZE/2 + 2, iconY + ICON_SIZE - 2, 0xFFFFFFFF);
+            }
+
+            currentX += ICON_SIZE + ICON_SPACING;
+        }
+
+        // 4. Кнопка "Домой" (справа)
+        // Сдвигаем кнопку "Домой" в самый конец дока
+        int homeX = dockX + dockWidth - ICON_SIZE - 10;
+        homeButtonArea = new ClickableArea(homeX, iconY, ICON_SIZE, ICON_SIZE);
+
+        // Рисуем кнопку Домой (темно-серый квадрат)
+        g.fill(homeX, iconY, homeX + ICON_SIZE, iconY + ICON_SIZE, 0xFF333333);
+        drawHomeIcon(g, homeX, iconY);
+
+        // 5. Рендер Меню (если открыто)
+        // Оно должно быть "над" панелью, поэтому рендерим последним
+        if (systemMenu.isVisible()) {
+            // Позиционируем меню над кнопкой Пуск (с небольшим отступом)
+            int menuX = dockX; // Выравниваем по левому краю дока
+            int menuY = dockY - systemMenu.getHeight() - 5;
+
+            systemMenu.setPosition(menuX, menuY);
+            systemMenu.render(g, mouseX, mouseY);
         }
     }
-    /**
-     * Рисует иконку домика с помощью примитивов.
-     */
+
     private void drawHomeIcon(IKernelGraphics g, int x, int y) {
-        int roofY = y + 5;
-        int houseY = y + 13;
-        // Крыша (треугольник)
-        g.fill(x + 12, roofY, x + 14, roofY + 2, HOME_ICON_COLOR);
-        g.fill(x + 10, roofY + 2, x + 16, roofY + 4, HOME_ICON_COLOR);
-        g.fill(x + 8, roofY + 4, x + 18, roofY + 6, HOME_ICON_COLOR);
-        g.fill(x + 6, roofY + 6, x + 20, roofY + 8, HOME_ICON_COLOR);
+        int roofY = y + 8;  // Скорректировано под ICON_SIZE = 32
+        int houseY = y + 16;
+        // Крыша (треугольник) - упрощенная
+        g.fill(x + 16, roofY, x + 18, roofY + 2, HOME_ICON_COLOR);      // Верхушка
+        g.fill(x + 12, roofY + 4, x + 22, roofY + 6, HOME_ICON_COLOR);  // Середина крыши
+        g.fill(x + 8, roofY + 8, x + 26, roofY + 10, HOME_ICON_COLOR);  // Низ крыши
+
         // Основание дома
-        g.fill(x + 6, houseY, x + 20, y + 21, HOME_ICON_COLOR);
+        g.fill(x + 10, houseY, x + 24, y + 26, HOME_ICON_COLOR);
+        // Дверь
+        g.fill(x + 15, houseY + 4, x + 19, y + 26, 0xFF333333);
     }
 
     /**
-     * Обрабатывает клики по кнопке "Домой" и иконкам приложений.
+     * Обрабатывает клики по кнопке "Пуск", "Домой" и иконкам приложений.
      */
     public boolean handleEvent(KernelEvent event) {
-        if (windowManager == null || !(event instanceof KernelEvent.MouseClicked mouseEvent)) {
+        if (windowManager == null) return false;
+
+        // 1. Сначала даем шанс Меню обработать событие (оно перекрывает всё)
+        if (systemMenu.isVisible()) {
+            if (systemMenu.onEvent(event)) {
+                // Если меню обработало событие (клик по кнопке или клик мимо), то всё.
+                return true;
+            }
+        }
+
+        if (!(event instanceof KernelEvent.MouseClicked mouseEvent)) {
             return false;
         }
 
-        // Проверяем клик по кнопке "Домой"
-        if (homeButtonArea != null && homeButtonArea.isClicked((int)mouseEvent.mouseX, (int)mouseEvent.mouseY)) {
-            LOGGER.info("Нажата кнопка 'Домой'. Возвращаемся на рабочий стол.");
-            windowManager.switchToApp(null); // null означает "на рабочий стол"
+        // 2. Проверяем клик по кнопке "Пуск"
+        if (startButtonArea != null && startButtonArea.isClicked((int)mouseEvent.mouseX, (int)mouseEvent.mouseY)) {
+            systemMenu.toggle();
             return true;
         }
 
-        // Проверяем клик по одной из иконок приложений
+        // 3. Проверяем кнопку "Домой"
+        if (homeButtonArea != null && homeButtonArea.isClicked((int)mouseEvent.mouseX, (int)mouseEvent.mouseY)) {
+            // При нажатии домой закрываем меню, если оно было открыто
+            if (systemMenu.isVisible()) systemMenu.setVisible(false);
+
+            LOGGER.info("Нажата кнопка 'Домой'.");
+            windowManager.switchToApp(null); // Переход на рабочий стол
+            return true;
+        }
+
+        // 4. Иконки приложений
         for (DockIcon icon : dockIcons) {
             if (icon.area().isClicked((int)mouseEvent.mouseX, (int)mouseEvent.mouseY)) {
-                LOGGER.info("Клик по иконке '{}'. Переключаемся на приложение {}.", icon.label(), icon.appId());
+                if (systemMenu.isVisible()) systemMenu.setVisible(false);
+
                 windowManager.switchToApp(icon.appId());
                 return true;
             }
         }
 
-        // Если клик был просто по панели, но не по кнопке, тоже считаем его обработанным
+        // Клик по пустому месту В ДОКЕ не должен проваливаться на рабочий стол
+        // Определяем зону дока грубо (низ экрана)
         int screenHeight = api.getGraphics().getHeight();
-        if (mouseEvent.mouseY >= screenHeight - BAR_HEIGHT) {
+        if (mouseEvent.mouseY >= screenHeight - DOCK_HEIGHT - DOCK_BOTTOM_MARGIN) {
+            // Если клик попал в зону дока, но не по кнопкам - просто поглощаем его
             return true;
         }
 
         return false;
-    }
-
-    /**
-     * Обновляет внутренний список иконок на основе запущенных приложений из WindowManager
-     * и рассчитывает их координаты на экране.
-     */
-    private void updateAndLayoutIcons(int screenWidth, int barY) {
-        // Очищаем старые иконки
-        dockIcons.clear();
-
-        // Располагаем кнопку "Домой" по центру
-        int homeButtonSize = HOME_BUTTON_RADIUS * 2;
-        int homeX = (screenWidth / 2) - HOME_BUTTON_RADIUS;
-        int homeY = barY + (BAR_HEIGHT - homeButtonSize) / 2;
-        homeButtonArea = new ClickableArea(homeX, homeY, homeButtonSize, homeButtonSize);
-
-        // Располагаем иконки приложений слева от кнопки "Домой"
-        int currentX = homeX - ICON_SPACING - ICON_SIZE;
-        Map<UUID, WindowManager.AppInfo> runningApps = windowManager.getRunningApps();
-
-        for (UUID appId : new ArrayList<>(runningApps.keySet())) {
-            WindowManager.AppInfo appInfo = runningApps.get(appId);
-            if (appInfo == null) continue;
-
-            String label = appInfo.path().substring(appInfo.path().lastIndexOf('/') + 1)
-                    .replace(".jar", "").replace(".lua", "");
-            ClickableArea area = new ClickableArea(currentX, barY + ICON_PADDING, ICON_SIZE, ICON_SIZE);
-            dockIcons.add(new DockIcon(appId, label, area));
-
-            // Сдвигаем позицию для следующей иконки
-            currentX -= (ICON_SIZE + ICON_SPACING);
-        }
     }
 
     public void shutdown() {

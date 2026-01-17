@@ -9,7 +9,9 @@ import com.loracore.gui.TabletScreen;
 import com.loracore.keybinding.ModKeyBindings;
 import com.loracore.network.BootTabletS2CPacket;
 import com.loracore.network.DeviceMethodResultS2CPacket;
+import com.loracore.network.SpawnDebugTabletC2SPacket;
 import com.loracore.network.SwitchToClientKernelS2CPacket;
+import com.loracore.network.SystemMetricsS2CPacket;
 import com.loracore.network.graphics.GpuCommandC2SPacket;
 import com.loracore.network.graphics.ScreenUpdateS2CPacket;
 import com.loracore.network.vfs.VfsResponseS2CPacket;
@@ -100,16 +102,55 @@ public class LoraCoreClient implements ClientModInitializer {
                 }
             });
         });
+        
+        // Обработчик метрик системы
+        ClientPlayNetworking.registerGlobalReceiver(SystemMetricsS2CPacket.ID, (payload, context) -> {
+            context.client().execute(() -> {
+                Screen currentScreen = MinecraftClient.getInstance().currentScreen;
+                if (currentScreen instanceof TabletScreen tabletScreen) {
+                    // Проверяем, что пакет предназначен для текущего открытого планшета
+                    if (tabletScreen.getTabletUuid().equals(payload.tabletUuid())) {
+                        tabletScreen.updateMetrics(
+                            payload.cpuLoad(),
+                            payload.ramUsedKb(),
+                            payload.ramTotalKb(),
+                            payload.diskQueue(),
+                            payload.tabletUuidStr(),
+                            payload.fsUuidStr()
+                        );
+                    }
+                }
+            });
+        });
     }
 
     private void registerClientCommands() {
-        ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> dispatcher.register(
-                literal("ask")
-                        .executes(context -> {
-                            openAskScreenFlag = true;
-                            return 1;
-                        })
-        ));
+        ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> {
+            dispatcher.register(
+                    literal("ask")
+                            .executes(context -> {
+                                openAskScreenFlag = true;
+                                return 1;
+                            })
+            );
+            dispatcher.register(
+                    literal("loracore_debug")
+                            .executes(context -> {
+                                var player = MinecraftClient.getInstance().player;
+                                if (player == null) {
+                                    return 0;
+                                }
+                                // Only work if the player is in Creative mode
+                                if (!player.getAbilities().creativeMode) {
+                                    player.sendMessage(net.minecraft.text.Text.literal("This command requires Creative mode.").formatted(net.minecraft.util.Formatting.RED), false);
+                                    return 0;
+                                }
+                                // Send the SpawnDebugTabletC2SPacket to the server
+                                ClientPlayNetworking.send(new SpawnDebugTabletC2SPacket());
+                                return 1;
+                            })
+            );
+        });
     }
 
     private void registerTickEvents() {

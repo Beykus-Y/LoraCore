@@ -10,7 +10,7 @@ import com.loracore.computer.kernel.IKernelGraphics;
 import com.loracore.computer.kernel.KernelEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
+import com.lora.tabletos.ui.system.NotificationManager;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.util.*;
@@ -27,6 +27,7 @@ public class WindowManager {
     private final IKernelApi api;
     private final JarClassLoader classLoader;
     private final IApplicationApi appApi;
+    private final NotificationManager notificationManager;
 
     // Внутренний record для хранения экземпляра приложения и его пути
     private record AppInstance(IApplication app, String path) {}
@@ -42,10 +43,13 @@ public class WindowManager {
     // ID активного (видимого) приложения. null, если мы на рабочем столе.
     private UUID activeAppId = null;
 
-    public WindowManager(IKernelApi api) {
+    public WindowManager(IKernelApi api, NotificationManager notificationManager) {
         this.api = api;
+        this.notificationManager = notificationManager; // Сохраняем
         this.classLoader = new JarClassLoader(getClass().getClassLoader());
-        this.appApi = new ApplicationApiImpl(api);
+
+        // Передаем менеджер в API
+        this.appApi = new ApplicationApiImpl(api, notificationManager);
     }
 
     /**
@@ -100,6 +104,42 @@ public class WindowManager {
             launchLuaApp(path);
         } else {
             LOGGER.error("Неподдерживаемый тип приложения: {}", path);
+        }
+    }
+
+    /**
+     * Запускает встроенное приложение по его классу.
+     * @param appClass Класс приложения, реализующий IApplication
+     */
+    public void launchApp(Class<? extends IApplication> appClass) {
+        String appName = appClass.getSimpleName();
+        LOGGER.info("WindowManager: Попытка запуска встроенного приложения {}", appName);
+
+        // Проверяем, не запущено ли уже это приложение
+        Optional<UUID> existingInstanceId = runningApps.entrySet().stream()
+                .filter(entry -> entry.getValue().app().getClass() == appClass)
+                .map(Map.Entry::getKey)
+                .findFirst();
+
+        if (existingInstanceId.isPresent()) {
+            LOGGER.info("Встроенное приложение {} уже запущено. Переключаемся на экземпляр {}.", appName, existingInstanceId.get());
+            switchToApp(existingInstanceId.get());
+            return;
+        }
+
+        try {
+            IApplication newApp = appClass.getDeclaredConstructor().newInstance();
+            UUID newAppId = UUID.randomUUID();
+            // Используем специальный путь для встроенных приложений
+            String builtInPath = "builtin://" + appName;
+
+            runningApps.put(newAppId, new AppInstance(newApp, builtInPath));
+            LOGGER.info("Встроенное приложение '{}' успешно загружено. ID экземпляра: {}", appName, newAppId);
+
+            newApp.onLoad(appApi);
+            switchToApp(newAppId);
+        } catch (Exception e) {
+            LOGGER.error("Критическая ошибка при запуске встроенного приложения: {}", appName, e);
         }
     }
 
@@ -263,5 +303,12 @@ public class WindowManager {
             }
         }
         return classData;
+    }
+    public AppInfo getActiveAppInfo() {
+        if (activeAppId == null) return null;
+        return runningApps.entrySet().stream()
+                .filter(e -> e.getKey().equals(activeAppId))
+                .map(e -> new AppInfo(e.getValue().path()))
+                .findFirst().orElse(null);
     }
 }

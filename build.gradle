@@ -34,6 +34,7 @@ loom {
 			sourceSet sourceSets.client
 		}
 	}
+
 }
 
 
@@ -41,8 +42,6 @@ dependencies {
 	// To change the versions see the gradle.properties file
 	minecraft       "com.mojang:minecraft:${project.minecraft_version}"
 	mappings        "net.fabricmc:yarn:${project.yarn_mappings}:v2"
-	modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
-	modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
 
 	// Fabric API. This is technically optional, but you probably want it anyway.
 	modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
@@ -149,4 +148,19 @@ publishing {
 		// The repositories here will be used for publishing your artifact, not for
 		// retrieving dependencies.
 	}
+}
+subprojects {
+    // Отключаем генерацию исходников Minecraft для подпроектов,
+    // чтобы они не пытались одновременно писать в один и тот же файл кэша
+    tasks.configureEach {
+        if (name == "genSources" || name == "genSourcesWithVineflower" || name == "genSourcesWithCfr") {
+            enabled = false
+        }
+
+        // Отключаем запуск клиента и сервера для подпроектов,
+        // так как они не являются самостоятельными модами
+        if (name == "runClient" || name == "runServer") {
+            enabled = false
+        }
+    }
 }

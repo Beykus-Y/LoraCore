@@ -78,8 +78,16 @@ public class TabletConfigScreen extends Screen {
         // GPU Information
         context.drawTextWithShadow(this.textRenderer, Text.literal("GPU:").formatted(Formatting.YELLOW), 20, y, 0xFFFFFF);
         if (motherboard.gpu().isPresent()) {
-            String gpuInfo = motherboard.gpu().get().get(ModComponents.GPU_DATA).tier();
-            context.drawTextWithShadow(this.textRenderer, Text.literal("  " + gpuInfo).formatted(Formatting.WHITE), 20, y + 12, 0xFFFFFF);
+            var gpuStack = motherboard.gpu().get();
+            var gpuData = gpuStack.get(ModComponents.GPU_DATA);
+            if (gpuData != null) {
+                String gpuTier = gpuData.tier();
+                int vramKb = gpuData.vramKb();
+                String gpuInfo = gpuTier + " (" + (vramKb / 1024) + " MB VRAM)";
+                context.drawTextWithShadow(this.textRenderer, Text.literal("  " + gpuInfo).formatted(Formatting.WHITE), 20, y + 12, 0xFFFFFF);
+            } else {
+                context.drawTextWithShadow(this.textRenderer, Text.literal("  None").formatted(Formatting.GRAY), 20, y + 12, 0xFFFFFF);
+            }
         } else {
             context.drawTextWithShadow(this.textRenderer, Text.literal("  None").formatted(Formatting.GRAY), 20, y + 12, 0xFFFFFF);
         }

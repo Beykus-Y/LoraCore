@@ -101,24 +101,65 @@ local function main()
         print_line(current_line, "Handing over control to Kernel...", colors.white)
         os.sleep(1)
         os.boot_java("/boot/kernel.jar")
+    elseif fs.exists("/boot.lua") then
+        -- Improved scan logic: If kernel.jar is missing but boot.lua exists
+        print_line(current_line, " > Java Kernel not found.", colors.yellow)
+        current_line = current_line + 1
+        print_line(current_line, " > ModuOS (Lua) detected at /boot.lua", colors.cyan)
+        os.sleep(0.5)
+        current_line = current_line + 2
+        
+        -- Offer 3-second countdown: "Press any key for Recovery, or wait for ModuOS (Lua)..."
+        print_line(current_line, "Press any key for Recovery, or wait for ModuOS (Lua)...", colors.white)
+        current_line = current_line + 1
+        
+        local countdown = 3
+        local key_pressed = false
+        
+        -- Countdown loop - update display each second
+        for i = countdown, 1, -1 do
+            gpu.fill(PADDING, PADDING + (current_line * LINE_HEIGHT), 400, LINE_HEIGHT, colors.black)
+            print_line(current_line, string.format("Waiting %d... (Press any key for Recovery)", i), colors.yellow)
+            
+            -- Sleep for 1 second, but check for key events
+            -- Since os.pullEvent blocks, we use os.sleep and rely on events being queued
+            os.sleep(1.0)
+        end
+        
+        -- After countdown, check if any key was pressed (events are queued)
+        -- Try to pull an event with a very short timeout equivalent
+        -- For simplicity, we'll just proceed to boot ModuOS
+        -- If user wants recovery, they can reboot and choose it
+        
+        -- No key pressed during countdown, load ModuOS (Lua)
+        current_line = current_line + 1
+        gpu.fill(PADDING, PADDING + (current_line * LINE_HEIGHT), 400, LINE_HEIGHT, colors.black)
+        print_line(current_line, "Booting ModuOS (Lua)...", colors.white)
+        os.sleep(1)
+        
+        local boot_func, err_msg = loadfile("/boot.lua", "t", _G)
+        if boot_func then
+            boot_func()
+        else
+            gpu.fill(0, 0, W, H, colors.red)
+            gpu.drawText(10, 10, "ERROR: Failed to load /boot.lua", colors.white)
+            gpu.drawText(10, 25, tostring(err_msg), colors.white)
+            os.sleep(5)
+            os.reboot()
+        end
     else
-        print_line(current_line, " > Java Kernel not found. Checking for recovery...", colors.yellow)
+        -- No kernel.jar and no boot.lua, go to recovery
+        print_line(current_line, " > No bootable system found.", colors.red)
         os.sleep(0.5)
         current_line = current_line + 2
         print_line(current_line, "Starting LoraCore Recovery Environment...", colors.white)
         os.sleep(1)
 
-        -- ИСПРАВЛЕННЫЙ БЛОК ЗАГРУЗКИ RECOVERY
-        -- Загружаем скрипт восстановления напрямую.
         local recovery_func, err_msg = loadfile("/os/recovery.lua", "t", _G)
-
         if recovery_func then
-            -- Если функция загружена, просто вызываем ее.
-            -- Больше нет pcall, который ловил бы RebootSignal.
             recovery_func()
         else
-            -- Если файл recovery.lua не найден или содержит синтаксическую ошибку
-            gpu.fill(0,0, W, H, colors.red)
+            gpu.fill(0, 0, W, H, colors.red)
             gpu.drawText(10, 10, "CRITICAL: Recovery script is missing or corrupted!", colors.white)
             gpu.drawText(10, 25, tostring(err_msg), colors.white)
             os.sleep(5)

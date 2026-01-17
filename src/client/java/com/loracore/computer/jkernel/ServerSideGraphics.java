@@ -23,8 +23,16 @@ public class ServerSideGraphics implements IKernelGraphics {
 
     @Override
     public void drawString(String text, int x, int y, int color) {
-        // Отправляем команду на сервер через GPU API
+        // Старый метод
         com.loracore.api.GpuApi.sendCommand(this.tabletUuid, new GpuCommand.DrawText(x, y, text, color));
+    }
+
+    @Override
+    public void drawString(String text, int x, int y, int color, float scale) {
+        // Новый метод. Пока что ИГНОРИРУЕМ scale для сетевой отрисовки,
+        // чтобы код скомпилировался. Текст будет обычного размера.
+        // TODO: Добавить поддержку scale в GpuCommand.DrawText
+        drawString(text, x, y, color);
     }
 
     @Override 

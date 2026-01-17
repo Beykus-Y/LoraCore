@@ -3,10 +3,8 @@ package com.loracore.gui;
 
 import com.loracore.LoraCoreClient;
 import com.loracore.LoraCoreMod;
-import com.loracore.computer.ClientVFS;
 import com.loracore.computer.IRuntimeEnvironment;
 import com.loracore.computer.jkernel.JavaRuntime;
-import com.loracore.network.RequestTabletDataC2SPacket;
 import com.loracore.network.input.CharTypedC2SPacket;
 import com.loracore.network.input.KeyPressedC2SPacket;
 import com.loracore.network.input.MouseClickedC2SPacket;
@@ -30,6 +28,10 @@ public class TabletScreen extends Screen {
 
     private int tabletX, tabletY, tabletWidth, tabletHeight;
 
+    // Внутреннее разрешение планшета (High DPI)
+    public static final int INTERNAL_WIDTH = 960;
+    public static final int INTERNAL_HEIGHT = 540;
+
     private NativeImage screenImage;
     private NativeImageBackedTexture screenTexture;
     private Identifier screenTextureId;
@@ -43,7 +45,6 @@ public class TabletScreen extends Screen {
 
     public UUID getTabletUuid() { return this.tabletUuid; }
 
-    // Этот геттер нужен для JavaRuntime, чтобы он мог передать его в KernelManager
     public NativeImage getScreenImage() { return this.screenImage; }
 
     @Override
@@ -51,38 +52,69 @@ public class TabletScreen extends Screen {
         super.init();
         calculateTabletDimensions();
 
-        // 1. Создаем новые графические ресурсы для этого экземпляра экрана
-        this.screenImage = new NativeImage(NativeImage.Format.RGBA, 480, 270, false);
+        // Всегда создаем текстуру высокого разрешения
+        this.screenImage = new NativeImage(NativeImage.Format.RGBA, INTERNAL_WIDTH, INTERNAL_HEIGHT, false);
+
+        // Заливаем черным при инициализации
+        this.screenImage.fillRect(0, 0, INTERNAL_WIDTH, INTERNAL_HEIGHT, 0xFF000000);
+
         this.screenTexture = new NativeImageBackedTexture(this.screenImage);
         this.client.getTextureManager().registerTexture(this.screenTextureId, this.screenTexture);
 
-        // ✅ ИСПРАВЛЕНИЕ 2: Проверяем, существует ли уже JavaRuntime.
-        // Если да, значит, экран был пересоздан (например, из-за ресайза),
-        // и нам нужно передать ему ссылку на новый NativeImage.
         if (this.clientRuntime instanceof JavaRuntime javaRuntime) {
             javaRuntime.reinitializeGraphics(this.screenImage);
         }
     }
 
     public void onScreenUpdate(byte[] pixelBuffer) {
-        if (this.screenImage == null || this.screenTexture == null || pixelBuffer == null || pixelBuffer.length != (480 * 270 * 4)) {
+        if (this.screenImage == null || this.screenTexture == null || pixelBuffer == null) {
             return;
         }
-        // Если у нас активен клиентский рантайм, мы не должны принимать обновления от сервера.
+        // Если работает Java-ядро, игнорируем серверные обновления (они низкого разрешения)
         if (clientRuntime != null && clientRuntime.isRunning()) {
             return;
         }
 
-        for (int y = 0; y < 270; y++) {
-            for (int x = 0; x < 480; x++) {
-                int i = (y * 480 + x) * 4;
-                int r = pixelBuffer[i] & 0xFF;
-                int g = pixelBuffer[i + 1] & 0xFF;
-                int b = pixelBuffer[i + 2] & 0xFF;
-                int a = pixelBuffer[i + 3] & 0xFF;
-                this.screenImage.setColor(x, y, (a << 24) | (b << 16) | (g << 8) | r);
+        // Сервер присылает 480x270. Нам нужно растянуть это на 960x540.
+        int serverWidth = 480;
+        int serverHeight = 270;
+
+        if (pixelBuffer.length == serverWidth * serverHeight * 4) {
+            // Апскейлинг 2x (Nearest Neighbor)
+            for (int y = 0; y < serverHeight; y++) {
+                for (int x = 0; x < serverWidth; x++) {
+                    int i = (y * serverWidth + x) * 4;
+                    int r = pixelBuffer[i] & 0xFF;
+                    int g = pixelBuffer[i + 1] & 0xFF;
+                    int b = pixelBuffer[i + 2] & 0xFF;
+                    int a = pixelBuffer[i + 3] & 0xFF;
+                    int color = (a << 24) | (b << 16) | (g << 8) | r;
+
+                    // Рисуем блок 2x2 пикселя
+                    int targetX = x * 2;
+                    int targetY = y * 2;
+
+                    this.screenImage.setColor(targetX, targetY, color);
+                    this.screenImage.setColor(targetX + 1, targetY, color);
+                    this.screenImage.setColor(targetX, targetY + 1, color);
+                    this.screenImage.setColor(targetX + 1, targetY + 1, color);
+                }
+            }
+        } else if (pixelBuffer.length == INTERNAL_WIDTH * INTERNAL_HEIGHT * 4) {
+            // Если вдруг сервер прислал полное разрешение (на будущее)
+            for (int y = 0; y < INTERNAL_HEIGHT; y++) {
+                for (int x = 0; x < INTERNAL_WIDTH; x++) {
+                    int i = (y * INTERNAL_WIDTH + x) * 4;
+                    // ... стандартное копирование ...
+                    int r = pixelBuffer[i] & 0xFF;
+                    int g = pixelBuffer[i + 1] & 0xFF;
+                    int b = pixelBuffer[i + 2] & 0xFF;
+                    int a = pixelBuffer[i + 3] & 0xFF;
+                    this.screenImage.setColor(x, y, (a << 24) | (b << 16) | (g << 8) | r);
+                }
             }
         }
+
         this.screenTexture.upload();
     }
 
@@ -92,14 +124,11 @@ public class TabletScreen extends Screen {
         context.fill(0, 0, this.width, this.height, 0xB0000000); // Overlay
         context.fill(tabletX, tabletY, tabletX + tabletWidth, tabletY + tabletHeight, 0xFF0A0A0A); // Border
 
-        // Если у нас есть клиентский рантайм И он должен рендерить на клиенте, то он главный.
         if (clientRuntime != null && clientRuntime.needsClientSideRendering()) {
             clientRuntime.render(mouseX, mouseY, delta);
             this.screenTexture.upload();
         }
 
-        // В любом случае (даже поверх клиентского рендера, если он был) рисуем текстуру.
-        // Для клиентского рендера это покажет результат, для серверного - пришедшую картинку.
         if (screenTextureId != null) {
             RenderSystem.setShader(GameRenderer::getPositionTexProgram);
             RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
@@ -143,14 +172,21 @@ public class TabletScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        double localX = (mouseX - (tabletX + 2)) * (480.0 / (tabletWidth - 4));
-        double localY = (mouseY - (tabletY + 2)) * (270.0 / (tabletHeight - 4));
+        // ИСПРАВЛЕНО: Используем INTERNAL_WIDTH/HEIGHT (960x540) для расчета координат
+        double localX = (mouseX - (tabletX + 2)) * ((double) INTERNAL_WIDTH / (tabletWidth - 4));
+        double localY = (mouseY - (tabletY + 2)) * ((double) INTERNAL_HEIGHT / (tabletHeight - 4));
 
-        if (localX >= 0 && localX < 480 && localY >= 0 && localY < 270) {
+        if (localX >= 0 && localX < INTERNAL_WIDTH && localY >= 0 && localY < INTERNAL_HEIGHT) {
             if (clientRuntime != null) {
                 return clientRuntime.onMouseClicked(localX, localY, button);
             }
-            ClientPlayNetworking.send(new MouseClickedC2SPacket(this.tabletUuid, localX, localY, button));
+
+            // Для Lua режима (который 480x270) нам нужно даунскейлить координаты перед отправкой
+            // чтобы os.pullEvent получал корректные данные
+            double serverX = localX / 2.0;
+            double serverY = localY / 2.0;
+
+            ClientPlayNetworking.send(new MouseClickedC2SPacket(this.tabletUuid, serverX, serverY, button));
             return true;
         }
         return super.mouseClicked(mouseX, mouseY, button);
@@ -161,7 +197,7 @@ public class TabletScreen extends Screen {
             clientRuntime.shutdown();
         }
         LoraCoreClient.LOGGER.info("Переключение на клиентское ядро. Путь: {}", kernelPath);
-        ClientVFS vfs = ClientVFS.getInstance(this.fileSystemUuid);
+        com.loracore.computer.ClientVFS vfs = com.loracore.computer.ClientVFS.getInstance(this.fileSystemUuid);
         boolean isOwner = true;
         clientRuntime = new JavaRuntime(vfs, this.tabletUuid, this.screenImage, isOwner, this);
         clientRuntime.boot(kernelPath);
@@ -169,18 +205,14 @@ public class TabletScreen extends Screen {
 
     @Override
     public void removed() {
-        // ✅ ИСПРАВЛЕНИЕ 4: Теперь мы НЕ выключаем рантайм при закрытии экрана,
-        // так как он должен "пережить" ресайз. Он будет выключен только в close().
         super.removed();
     }
 
     @Override
     public void close() {
-        // ✅ ИСПРАВЛЕНИЕ 5: Полное выключение и очистка ресурсов происходит только здесь,
-        // когда пользователь действительно закрывает экран (например, через Esc).
         if (clientRuntime != null) {
             clientRuntime.shutdown();
-            clientRuntime = null; // Очищаем статическую ссылку
+            clientRuntime = null;
         }
         if (this.client != null && this.screenTextureId != null) {
             this.client.getTextureManager().destroyTexture(this.screenTextureId);
@@ -193,10 +225,11 @@ public class TabletScreen extends Screen {
 
     private void calculateTabletDimensions() {
         this.tabletHeight = (int) (this.height * 0.9);
-        this.tabletWidth = (int) (this.tabletHeight * (480.0 / 270.0));
+        // Сохраняем соотношение сторон 16:9
+        this.tabletWidth = (int) (this.tabletHeight * (16.0 / 9.0));
         if (this.tabletWidth > this.width * 0.95) {
             this.tabletWidth = (int) (this.width * 0.95);
-            this.tabletHeight = (int) (this.tabletWidth * (270.0 / 480.0));
+            this.tabletHeight = (int) (this.tabletWidth * (9.0 / 16.0));
         }
         this.tabletX = (this.width - this.tabletWidth) / 2;
         this.tabletY = (this.height - this.tabletHeight) / 2;
@@ -205,14 +238,19 @@ public class TabletScreen extends Screen {
     public void reboot() {
         if (this.client != null) {
             this.close();
-            ClientPlayNetworking.send(new RequestTabletDataC2SPacket());
+            ClientPlayNetworking.send(new com.loracore.network.RequestTabletDataC2SPacket());
         }
     }
+
     public void onDeviceResult(int requestId, boolean success, Object[] result) {
         if (clientRuntime instanceof JavaRuntime javaRuntime) {
-            // У JavaRuntime должен быть KernelManager, который обработает результат
-            // Нам нужно добавить геттер для KernelManager в JavaRuntime
             javaRuntime.getKernelManager().onDeviceResult(requestId, success, result);
+        }
+    }
+
+    public void updateMetrics(double cpuLoad, double ramUsedKb, double ramTotalKb, int diskQueue, String tabletUuidStr, String fsUuidStr) {
+        if (clientRuntime instanceof JavaRuntime javaRuntime) {
+            javaRuntime.getKernelManager().updateMetrics(cpuLoad, ramUsedKb, ramTotalKb, diskQueue, tabletUuidStr, fsUuidStr);
         }
     }
 

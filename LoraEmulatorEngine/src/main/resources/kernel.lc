@@ -1,0 +1,105 @@
+// LoraOS Kernel v3.0 (Global State - Compiler Workaround)
+
+// --- SYSTEM GLOBALS (RAM) ---
+// 0x0200 (512): ARG_CHAR
+// 0x0204 (516): ARG_X
+// 0x0208 (520): ARG_Y
+
+func print_char_global() {
+    // 1. Read Arguments from RAM directly
+    var char_code = *(512); // 0x0200
+    var px = *(516);        // 0x0204
+    var py = *(520);        // 0x0208
+
+    // 2. Setup Constants
+    var vram_base = 16384;  // 0x4000
+    var font_base = 8192;   // 0x2000
+    var stride = 1024;      // 256 * 4
+
+    // 3. Pointers
+    var ptr_font = font_base + (char_code * 8);
+    var ptr_vram = vram_base + (py * stride) + (px * 4);
+
+    var row = 0;
+    var pattern = 0;
+    var cx = 0;
+    var mask = 0;
+
+    while (row < 8) {
+        pattern = *ptr_font;
+        mask = 128;
+        cx = 0;
+
+        while (cx < 8) {
+            if ((pattern & mask) != 0) {
+                *(ptr_vram + (cx * 4)) = 0xFFFFFFFF;
+            }
+            mask = mask / 2;
+            cx = cx + 1;
+        }
+
+        ptr_font = ptr_font + 1;
+        ptr_vram = ptr_vram + stride;
+        row = row + 1;
+    }
+}
+
+func main() {
+    var regs_base = 278528; // 0x44000
+
+    // === INIT GPU ===
+    *(regs_base + 24) = 0xFF0000AA; // Blue
+    *(regs_base + 4) = 1;           // Clear
+    while (*(regs_base) != 0) { }
+
+    // === DRAW "LORA" ===
+
+    // L
+    *(512) = 76; *(516) = 10; *(520) = 10;
+    print_char_global();
+
+    // O
+    *(512) = 79; *(516) = 18; *(520) = 10;
+    print_char_global();
+
+    // R
+    *(512) = 82; *(516) = 26; *(520) = 10;
+    print_char_global();
+
+    // A
+    *(512) = 65; *(516) = 34; *(520) = 10;
+    print_char_global();
+
+    // >
+    *(512) = 62; *(516) = 10; *(520) = 30;
+    print_char_global();
+
+    // === SHELL LOOP ===
+    var running = 1;
+    var key = 0;
+    var cursor_x = 18;
+    var cursor_y = 30;
+
+    while (running == 1) {
+        key = *(15728640); // Keyboard 0xF00000
+
+        if (key != 0) {
+            // Pass args via RAM
+            *(512) = key;
+            *(516) = cursor_x;
+            *(520) = cursor_y;
+
+            print_char_global();
+
+            cursor_x = cursor_x + 8;
+            if (cursor_x > 240) {
+                cursor_x = 10;
+                cursor_y = cursor_y + 10;
+            }
+
+            // Delay
+            var d = 0;
+            while (d < 1000) { d = d + 1; }
+        }
+    }
+}

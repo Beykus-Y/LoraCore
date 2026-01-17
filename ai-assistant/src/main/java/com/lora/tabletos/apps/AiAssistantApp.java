@@ -2,203 +2,166 @@ package com.lora.tabletos.apps;
 
 import com.lora.tabletos.core.IApplication;
 import com.lora.tabletos.core.IApplicationApi;
+import com.lora.tabletos.ui.layout.VerticalLayout;
+import com.lora.tabletos.ui.widgets.LabelWidget;
+import com.lora.tabletos.ui.widgets.ScrollPane;
 import com.loracore.computer.kernel.IKernelGraphics;
 import com.loracore.computer.kernel.KernelEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * Приложение "AI Assistant" - флагманское приложение LoraCore OS.
- * Предоставляет интерфейс для взаимодействия с ИИ.
+ * Обновленный AI Assistant с использованием системы Layouts.
  */
 public class AiAssistantApp implements IApplication {
-    
+
     private static final Logger LOGGER = LoggerFactory.getLogger(AiAssistantApp.class);
-    
+
     private IApplicationApi api;
-    private List<ChatMessage> chatHistory = new ArrayList<>();
+
+    // UI Компоненты
+    private ScrollPane chatScroll;
+    private VerticalLayout messageList;
+
+    // Логика ввода
     private String currentInput = "";
     private boolean isTyping = false;
     private CompletableFuture<String> currentAiResponse = null;
-    
-    // UI константы
+
+    // Цвета
     private static final int BACKGROUND_COLOR = 0xFF1E1E1E;
-    private static final int CHAT_BACKGROUND_COLOR = 0xFF2D2D2D;
-    private static final int INPUT_BACKGROUND_COLOR = 0xFF3D3D3D;
+    private static final int INPUT_BG_COLOR = 0xFF2D2D2D;
+    private static final int USER_MSG_COLOR = 0xFF2196F3; // Голубой
+    private static final int AI_MSG_COLOR = 0xFF4CAF50;   // Зеленый
     private static final int TEXT_COLOR = 0xFFFFFFFF;
-    private static final int AI_TEXT_COLOR = 0xFF4CAF50;
-    private static final int USER_TEXT_COLOR = 0xFF2196F3;
-    
-    private static final int PADDING = 10;
-    private static final int CHAT_HEIGHT = 400;
-    private static final int INPUT_HEIGHT = 40;
-    
+
     @Override
     public void onLoad(IApplicationApi api) {
         this.api = api;
-        LOGGER.info("AI Assistant app loaded");
-        
-        // Добавляем приветственное сообщение
-        chatHistory.add(new ChatMessage("AI Assistant", "Привет! Я ваш ИИ-ассистент. Чем могу помочь?", true));
+        int[] size = api.getScreenSize();
+        int width = size[0];
+        // Высота экрана минус статус-бар (20) и поле ввода (30)
+        int chatHeight = size[1] - 20 - 30;
+
+        // 1. Создаем контейнер для списка сообщений
+        // Ширина чуть меньше экрана, чтобы влез скроллбар
+        this.messageList = new VerticalLayout(0, 0, width - 10);
+        this.messageList.setPadding(10);
+        this.messageList.setSpacing(5); // Отступ между сообщениями
+
+        // 2. Создаем панель прокрутки и кладем в нее список
+        this.chatScroll = new ScrollPane(0, 0, width, chatHeight);
+        this.chatScroll.setContent(this.messageList);
+
+        // Приветствие
+        addMessage("AI Assistant", "Привет! Я использую новую систему Layouts. Напиши мне что-нибудь.", true);
     }
-    
+
+    private void addMessage(String sender, String content, boolean isAi) {
+        // Создаем виджет текста
+        int color = isAi ? AI_MSG_COLOR : USER_MSG_COLOR;
+        String prefix = isAi ? "[AI] " : "[YOU] ";
+
+        // LabelWidget теперь просто добавляется в лейаут.
+        // Нам не нужно считать Y координату!
+        LabelWidget label = new LabelWidget(0, 0, prefix + content, color);
+        messageList.addWidget(label);
+
+        // Можно добавить пустую строку для отступа (костыль, пока нет margin)
+        // messageList.addWidget(new LabelWidget(0,0, "", 0));
+    }
+
     @Override
     public void onRender(IKernelGraphics g, int mouseX, int mouseY, float delta) {
-        int[] screenSize = api.getScreenSize();
-        int screenWidth = screenSize[0];
-        int screenHeight = screenSize[1];
-        
-        // Рисуем фон
-        g.fill(0, 0, screenWidth, screenHeight, BACKGROUND_COLOR);
-        
-        // Рисуем заголовок
-        g.drawString("AI Assistant", PADDING, PADDING, TEXT_COLOR);
-        
-        // Рисуем область чата
-        int chatY = PADDING + 30;
-        g.fill(PADDING, chatY, screenWidth - PADDING, chatY + CHAT_HEIGHT, CHAT_BACKGROUND_COLOR);
-        
-        // Рисуем историю чата
-        int messageY = chatY + PADDING;
-        for (ChatMessage message : chatHistory) {
-            String text = message.sender + ": " + message.content;
-            int color = message.isAi ? AI_TEXT_COLOR : USER_TEXT_COLOR;
-            g.drawString(text, PADDING + 5, messageY, color);
-            messageY += 20;
-            
-            // Если сообщение слишком длинное, переносим на новую строку
-            if (text.length() > 60) {
-                messageY += 15;
-            }
-        }
-        
-        // Рисуем область ввода
-        int inputY = chatY + CHAT_HEIGHT + PADDING;
-        g.fill(PADDING, inputY, screenWidth - PADDING, inputY + INPUT_HEIGHT, INPUT_BACKGROUND_COLOR);
-        
-        // Рисуем текст ввода
-        String displayText = currentInput + (isTyping ? "|" : "");
-        g.drawString(displayText, PADDING + 5, inputY + 10, TEXT_COLOR);
-        
-        // Рисуем кнопку отправки
-        int sendButtonX = screenWidth - 80;
-        int sendButtonY = inputY + 5;
-        g.fill(sendButtonX, sendButtonY, sendButtonX + 60, sendButtonY + 30, 0xFF4CAF50);
-        g.drawString("Send", sendButtonX + 15, sendButtonY + 8, TEXT_COLOR);
+        int[] size = api.getScreenSize();
+        int width = size[0];
+        int height = size[1];
+        int inputY = height - 30;
+
+        // 1. Рисуем фон всего приложения
+        g.fill(0, 0, width, height, BACKGROUND_COLOR);
+
+        // 2. Рисуем скролл с сообщениями
+        // Важно: ScrollPane сам обрежет лишнее (scissor) и сдвинет контент
+        chatScroll.render(g, mouseX, mouseY);
+
+        // 3. Рисуем поле ввода внизу (фиксированное)
+        g.fill(0, inputY, width, height, INPUT_BG_COLOR);
+        g.fill(0, inputY, width, inputY + 1, 0xFF555555); // Линия разделитель
+
+        String prompt = "Запрос: " + currentInput + (isTyping ? "_" : "");
+        g.drawString(prompt, 10, inputY + 10, TEXT_COLOR);
     }
 
     @Override
     public boolean onEvent(KernelEvent event) {
+        // Сначала даем шанс скроллу обработать событие (прокрутка колесиком)
+        if (chatScroll.onEvent(event)) {
+            return true;
+        }
+
         switch (event) {
             case KernelEvent.KeyPressed keyEvent -> {
-                handleKeyPress(keyEvent);
-                return true; // Считаем, что любое нажатие клавиши обработано
+                if (keyEvent.keyCode == 256) { // ESC
+                    onClose();
+                    return true;
+                }
+                if (keyEvent.keyCode == 257) { // Enter
+                    sendMessage();
+                    return true;
+                }
+                if (keyEvent.keyCode == 259) { // Backspace
+                    if (!currentInput.isEmpty()) {
+                        currentInput = currentInput.substring(0, currentInput.length() - 1);
+                    }
+                    return true;
+                }
+                // Ввод символов лучше обрабатывать в CharTyped, но для простоты оставим здесь основные
             }
-            case KernelEvent.MouseClicked mouseEvent -> {
-                handleMouseClick((int)mouseEvent.mouseX, (int)mouseEvent.mouseY);
-                return true; // Считаем, что любой клик обработан
+            case KernelEvent.CharTyped charEvent -> {
+                currentInput += charEvent.chr;
+                isTyping = true;
+                return true;
             }
-            default -> {
-                return false; // Игнорируем другие события
-            }
+            default -> {}
         }
+        return false;
     }
-    
-    private void handleKeyPress(KernelEvent.KeyPressed keyEvent) {
-        if (keyEvent.keyCode == 256) { // ESC - закрыть приложение
-            onClose();
-            return;
-        }
-        
-        if (keyEvent.keyCode == 257) { // Enter - отправить сообщение
-            sendMessage();
-            return;
-        }
-        
-        if (keyEvent.keyCode == 259) { // Backspace
-            if (!currentInput.isEmpty()) {
-                currentInput = currentInput.substring(0, currentInput.length() - 1);
-            }
-            return;
-        }
-        
-        // Добавляем символ к вводу (только для печатаемых символов)
-        if (keyEvent.keyCode >= 32 && keyEvent.keyCode <= 126) { // Печатаемые символы
-            currentInput += (char) keyEvent.keyCode;
-        }
-    }
-    
-    private void handleMouseClick(int mouseX, int mouseY) {
-        int[] screenSize = api.getScreenSize();
-        int screenWidth = screenSize[0];
-        
-        // Проверяем клик по кнопке отправки
-        int inputY = PADDING + 30 + CHAT_HEIGHT + PADDING;
-        int sendButtonX = screenWidth - 80;
-        int sendButtonY = inputY + 5;
-        
-        if (mouseX >= sendButtonX && mouseX <= sendButtonX + 60 &&
-            mouseY >= sendButtonY && mouseY <= sendButtonY + 30) {
-            sendMessage();
-        }
-    }
-    
+
     private void sendMessage() {
-        if (currentInput.trim().isEmpty() || currentAiResponse != null) {
-            return; // Не отправляем пустые сообщения или если уже ждем ответ
-        }
-        
+        if (currentInput.trim().isEmpty() || currentAiResponse != null) return;
+
         String userMessage = currentInput.trim();
-        chatHistory.add(new ChatMessage("You", userMessage, false));
+        addMessage("You", userMessage, false);
         currentInput = "";
-        
-        // Отправляем запрос к ИИ
+
+        // Показываем уведомление, что запрос ушел
+        api.showNotification("Думаю...", false);
+
         currentAiResponse = api.askAI(userMessage);
         currentAiResponse.whenComplete((response, throwable) -> {
-            if (throwable != null) {
-                chatHistory.add(new ChatMessage("AI Assistant", "Извините, произошла ошибка: " + throwable.getMessage(), true));
-            } else {
-                chatHistory.add(new ChatMessage("AI Assistant", response, true));
-            }
-            currentAiResponse = null;
+            // ВАЖНО: Обновление UI должно происходить в потоке рендера!
+            api.runOnRenderThread(() -> {
+                if (throwable != null) {
+                    addMessage("System", "Ошибка: " + throwable.getMessage(), true);
+                    api.showNotification("Ошибка сети", true);
+                } else {
+                    addMessage("AI", response, true);
+                    // Уведомление о готовности
+                    api.showNotification("Ответ получен", false);
+                }
+                currentAiResponse = null;
+            });
         });
-    }
-    
-    @Override
-    public void onClose() {
-        LOGGER.info("AI Assistant app closing");
-        if (currentAiResponse != null) {
-            currentAiResponse.cancel(true);
-        }
-    }
-    
-    /**
-     * Представляет сообщение в чате.
-     */
-    private static class ChatMessage {
-        final String sender;
-        final String content;
-        final boolean isAi;
-        
-        ChatMessage(String sender, String content, boolean isAi) {
-            this.sender = sender;
-            this.content = content;
-            this.isAi = isAi;
-        }
-    }
-    @Override
-    public void onResume() {
-        // Этот метод будет вызван, когда пользователь откроет приложение
-        LOGGER.info("AI Assistant app resumed");
     }
 
     @Override
-    public void onPause() {
-        // Этот метод будет вызван, когда пользователь свернет приложение
-        LOGGER.info("AI Assistant app paused");
+    public void onClose() {
+        LOGGER.info("AI Assistant closing");
     }
+
+    @Override public void onResume() {}
+    @Override public void onPause() {}
 }

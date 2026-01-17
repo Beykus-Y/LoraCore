@@ -69,6 +69,11 @@ public class LuaThreadRunner implements Runnable {
     public void stop() {
         if (workerThread != null && workerThread.isAlive()) {
             workerThread.interrupt();
+            // Очищаем очереди событий
+            eventQueue.clear();
+            resumeQueue.clear();
+            // Обнуляем корутину для предотвращения OrphanedThread
+            kernelCoroutine = null;
             workerThread = null;
         }
     }
@@ -102,9 +107,7 @@ public class LuaThreadRunner implements Runnable {
             this.kernelCoroutine = new LuaThread(globals, bootloader);
             Varargs resumeArgs = LuaValue.NIL;
 
-            // --- ВРЕМЕННО ОТКЛЮЧЕНА НОВАЯ СИСТЕМА КОНТРОЛЯ ПАМЯТИ ДЛЯ ДИАГНОСТИКИ ---
-            // TODO: Включить обратно после исправления проблем с recovery.lua
-            /*
+            // === ВКЛЮЧЕНА СИСТЕМА ОГРАНИЧЕНИЯ ТАКТОВ ===
             try {
                 // Получаем доступ к библиотеке debug
                 LuaValue debug_lib = globals.get("debug");
@@ -112,38 +115,32 @@ public class LuaThreadRunner implements Runnable {
                     throw new LuaError("Debug library not available.");
                 }
 
-                // Получаем лимит памяти из VirtualMachine
-                final double memoryLimitKb = vm.getTotalRamKb();
-
-                // Создаем Lua-функцию (наш хук) на лету
-                LuaFunction memory_hook = new TwoArgFunction() {
+                // Создаем Lua-функцию (наш хук) для ограничения тактов
+                LuaFunction cycle_hook = new TwoArgFunction() {
                     @Override
                     public LuaValue call(LuaValue event, LuaValue line) {
-                        // Получаем текущее использование памяти в КБ
-                        double currentUsageKb = vm.getMemoryUsage();
-
-                        if (currentUsageKb > memoryLimitKb) {
-                            // Если лимит превышен, мы немедленно прерываем выполнение,
-                            // выбрасывая ошибку прямо изнутри Lua VM.
-                            // Это намного быстрее, чем ждать проверки из Java.
-                            throw new LuaError(String.format("Out of Memory: %.2fKB / %.2fKB", currentUsageKb, memoryLimitKb));
+                        // Потребляем 1000 тактов из бюджета
+                        boolean consumed = vm.consumeCycles(1000);
+                        
+                        if (!consumed) {
+                            // Если бюджет закончился, принудительно делаем yield
+                            // Это "усыпит" скрипт до следующего серверного тика
+                            throw new LuaError("Out of cycles - yielding until next tick");
                         }
                         return NIL;
                     }
                 };
 
-                // Устанавливаем хук: вызывать `memory_hook` каждые 20000 инструкций Lua.
+                // Устанавливаем хук: вызывать `cycle_hook` каждые 1000 инструкций Lua.
                 // Пустая строка "" означает, что нас не интересуют события (call, line, return).
-                debug_lib.get("sethook").call(memory_hook, valueOf(""), valueOf(20000));
+                debug_lib.get("sethook").call(cycle_hook, valueOf(""), valueOf(1000));
 
-                LoraCoreMod.LOGGER.info("[LuaThreadRunner] Memory hook установлен успешно. Лимит: {}KB", (int)memoryLimitKb);
+                LoraCoreMod.LOGGER.info("[LuaThreadRunner] Cycle hook установлен успешно (1000 cycles per 1000 instructions)");
             } catch (Exception e) {
-                LoraCoreMod.LOGGER.warn("[LuaThreadRunner] Не удалось установить memory hook: {}. Используем старую систему проверки.", e.getMessage());
+                LoraCoreMod.LOGGER.warn("[LuaThreadRunner] Не удалось установить cycle hook: {}. Lua будет работать без ограничений.", e.getMessage());
             }
-            */
-            LoraCoreMod.LOGGER.info("[LuaThreadRunner] Memory hook временно отключен для диагностики");
 
-            while (kernelCoroutine.state.status != LuaThread.STATUS_DEAD && !Thread.currentThread().isInterrupted()) {
+            while (kernelCoroutine != null && kernelCoroutine.state.status != LuaThread.STATUS_DEAD && !Thread.currentThread().isInterrupted()) {
                 Resumable toResume = resumeQueue.poll();
 
                 if (toResume != null) {
@@ -160,10 +157,27 @@ public class LuaThreadRunner implements Runnable {
                     }
                 }
 
-                Varargs result = kernelCoroutine.resume(resumeArgs);
+                // Проверяем, что корутина еще существует (защита от OrphanedThread)
+                if (kernelCoroutine == null) {
+                    LoraCoreMod.LOGGER.warn("[LuaThreadRunner] Kernel coroutine was nulled, stopping thread");
+                    break;
+                }
 
-                if (!result.checkboolean(1)) {
-                    throw new LuaError(result.optjstring(2, "Kernel error"));
+                try {
+                    Varargs result = kernelCoroutine.resume(resumeArgs);
+
+                    if (!result.checkboolean(1)) {
+                        throw new LuaError(result.optjstring(2, "Kernel error"));
+                    }
+                } catch (LuaError e) {
+                    // Проверяем, не является ли это OrphanedThread ошибкой
+                    if (e.getMessage() != null && e.getMessage().contains("OrphanedThread")) {
+                        LoraCoreMod.LOGGER.warn("[LuaThreadRunner] OrphanedThread detected, cleaning up and stopping thread");
+                        kernelCoroutine = null;
+                        break;
+                    }
+                    // Если это другая ошибка, пробрасываем дальше
+                    throw e;
                 }
 
                 // СТАРАЯ ПЕРИОДИЧЕСКАЯ ПРОВЕРКА ПАМЯТИ УДАЛЕНА
@@ -176,8 +190,14 @@ public class LuaThreadRunner implements Runnable {
             Thread.currentThread().interrupt();
         } catch (Throwable t) {
             // =======================================================
-            //          ФИНАЛЬНОЕ ИСПРАВЛЕНИЕ v2
+            //          ФИНАЛЬНОЕ ИСПРАВЛЕНИЕ v3
             // =======================================================
+            // Проверяем OrphanedThread - это нормальное поведение при закрытии
+            if (t instanceof org.luaj.vm2.OrphanedThread) {
+                LoraCoreMod.LOGGER.info("[LuaThreadRunner] Lua thread cleaned up (OrphanedThread)");
+                return; // Не вызываем setCrashState, это нормально
+            }
+            
             // Проверяем, содержит ли ТЕКСТ СООБЩЕНИЯ ошибки название нашего класса-сигнала.
             // Это надежнее, чем проверять getCause(), так как LuaJ вставляет его как текст.
             if (t instanceof LuaError && t.getMessage() != null && t.getMessage().contains(RebootSignalException.class.getName())) {

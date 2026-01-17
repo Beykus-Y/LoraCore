@@ -5,6 +5,8 @@ import com.lora.tabletos.state.KernelState;
 import com.lora.tabletos.state.StateManager;
 import com.lora.tabletos.ui.desktop.Desktop;
 import com.lora.tabletos.ui.navigation.NavigationBar;
+import com.lora.tabletos.ui.system.NotificationManager;
+import com.lora.tabletos.ui.system.StatusBar;
 import com.lora.tabletos.ui.renderer.BootScreenRenderer;
 import com.lora.tabletos.ui.window.WindowManager;
 import org.slf4j.Logger;
@@ -30,6 +32,8 @@ public class LoraOSKernel implements IKernel {
     private Desktop desktop;
     private WindowManager windowManager;
     private NavigationBar navigationBar;
+    private StatusBar statusBar;
+    private NotificationManager notificationManager;
     
     // --- Утилиты и API ---
     private IKernelApi api;
@@ -114,16 +118,24 @@ public class LoraOSKernel implements IKernel {
      */
     private void initializeUI() {
         stateManager.setBusy(true);
-        this.statusMessage = "Loading Desktop...";
-        
+        this.statusMessage = "Loading UI Services...";
+
         try {
-            this.windowManager = new WindowManager(api);
+            // 1. Сначала создаем NotificationManager, так как он ни от чего не зависит
+            this.notificationManager = new NotificationManager();
+
+            // 2. Создаем WindowManager, передавая ему API и NotificationManager
+            this.windowManager = new WindowManager(api, this.notificationManager);
+
+            // 3. Создаем StatusBar, которому нужен уже созданный WindowManager
+            this.statusBar = new StatusBar(this.windowManager);
+
+            // 4. Создаем Desktop и NavigationBar, которым тоже нужен WindowManager
             this.desktop = new Desktop(api, this.windowManager);
             this.navigationBar = new NavigationBar(api);
-            
-            // Устанавливаем ссылку на WindowManager в NavigationBar
             this.navigationBar.setWindowManager(this.windowManager);
-            
+
+            // 5. Запускаем асинхронную загрузку иконок
             desktop.initialize().whenComplete((success, throwable) -> {
                 if (throwable != null) {
                     LOGGER.error("UI initialization failed", throwable);
@@ -148,47 +160,44 @@ public class LoraOSKernel implements IKernel {
     @Override
     public void onRender(int mouseX, int mouseY, float delta) {
         if (graphics == null) return;
-
         try {
             graphics.beginFrame();
 
-            // Если система находится в рабочем состоянии
             if (stateManager.getCurrentState() == KernelState.RUNNING) {
+                int screenW = graphics.getWidth();
+                int screenH = graphics.getHeight();
+                int statusBarHeight = statusBar.getHeight();
 
-                // 1. Рисуем фон рабочего стола (обои). Это основа для всего.
+                // 1. Рисуем рабочий стол
                 desktop.render(graphics, mouseX, mouseY, delta);
 
-                // 2. Определяем область для контента приложения
+                // 2. Область контента теперь меньше из-за статус-бара
                 final int contentAreaWidth = 480;
-                final int contentAreaHeight = 240; // 270 (экран) - 30 (панель)
+                final int contentAreaHeight = 240 - statusBarHeight; // Вычитаем высоту бара
 
-                // 3. Рендерим активное приложение или ничего, если его нет
+                // 3. Рендерим приложение со смещением
                 if (windowManager.hasActiveApp()) {
                     graphics.pushMatrix();
+                    // Сдвигаем все приложение вниз под статус-бар
+                    graphics.translate(0, statusBarHeight, 0);
 
-                    // 3.1. Ограничиваем область рисования зоной контента
-                    graphics.enableScissor(0, 0, contentAreaWidth, contentAreaHeight);
+                    // Корректируем область отсечения
+                    graphics.enableScissor(0, statusBarHeight, contentAreaWidth, contentAreaHeight);
 
-                    // 3.2. Масштабируем координаты мыши для приложения
-                    // Приложениям не нужно знать о панели навигации.
-                    // Для них мир начинается в (0, 0) и заканчивается в (480, 240).
-                    // Мы передаем им уже скорректированные координаты.
-                    int appMouseX = mouseX;
-                    int appMouseY = mouseY;
+                    // Корректируем мышь для приложения
+                    int appMouseY = mouseY - statusBarHeight;
 
-                    // 3.3. Вызываем рендер активного приложения
-                    windowManager.render(graphics, appMouseX, appMouseY, delta);
+                    windowManager.render(graphics, mouseX, appMouseY, delta);
 
-                    // 3.4. Снимаем ограничение и восстанавливаем матрицу
                     graphics.disableScissor();
                     graphics.popMatrix();
                 }
-                // ВАЖНО: ветки 'else' здесь нет. Рабочий стол (обои) уже нарисован.
-                // Если нет активного приложения, мы просто видим обои.
 
-                // 4. Рисуем панель навигации поверх всего остального.
-                // Она находится вне зоны отсечения (scissor) и всегда видна.
+                // 4. Рисуем системные элементы ПОВЕРХ приложений
                 navigationBar.render(graphics, mouseX, mouseY, delta);
+                statusBar.render(graphics, screenW);
+                notificationManager.render(graphics, screenW, screenH);
+
 
             } else {
                 // Во всех остальных состояниях (загрузка, сбой) рисуем системный экран

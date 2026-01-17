@@ -6,6 +6,7 @@ import com.loracore.computer.*;
 import com.loracore.item.ModItems;
 import com.loracore.item.TabletItem;
 import com.loracore.network.ModNetworking;
+import com.loracore.network.SystemMetricsS2CPacket;
 import com.loracore.network.graphics.ScreenUpdateS2CPacket;
 import com.loracore.util.PromptManager;
 import net.fabricmc.api.ModInitializer;
@@ -53,10 +54,27 @@ public class LoraCoreMod implements ModInitializer {
 		});
 
 		ServerTickEvents.END_SERVER_TICK.register(server -> {
+			// Вызываем tick() для всех активных VirtualMachine
+			VirtualMachineManager vmManager = VirtualMachineManager.getInstance();
+			for (VirtualMachine vm : vmManager.getRunningMachines().values()) {
+				if (vm != null && vm.isOn()) {
+					vm.tick();
+				}
+			}
+
+			// Отправляем метрики каждые 20 тиков (1 секунда)
+			long currentTick = server.getTicks();
+			boolean shouldSendMetrics = (currentTick % 20 == 0);
+
 			for (ServerPlayerEntity player : server.getPlayerManager().getPlayerList()) {
 				ItemStack mainHandStack = player.getMainHandStack();
 				if (mainHandStack.getItem() instanceof TabletItem) {
 					updateTabletScreen(player, mainHandStack);
+					
+					// Отправляем метрики для планшета в главной руке
+					if (shouldSendMetrics) {
+						sendMetricsIfNeeded(player, mainHandStack, vmManager);
+					}
 				}
 
 				for (ItemStack stack : player.getInventory().main) {
@@ -64,6 +82,11 @@ public class LoraCoreMod implements ModInitializer {
 						ServerScreenState screen = TabletScreenManager.getInstance().getOrCreateScreen(stack);
 						if (screen.isDirty()) {
 							updateTabletScreen(player, stack);
+						}
+						
+						// Отправляем метрики для всех планшетов в инвентаре
+						if (shouldSendMetrics) {
+							sendMetricsIfNeeded(player, stack, vmManager);
 						}
 					}
 				}
@@ -166,6 +189,31 @@ public class LoraCoreMod implements ModInitializer {
 			}
 		} catch (Exception e) {
 			LOGGER.error("Error updating tablet screen for player {}: {}", player.getName().getString(), e.getMessage());
+		}
+	}
+
+	private static void sendMetricsIfNeeded(ServerPlayerEntity player, ItemStack stack, VirtualMachineManager vmManager) {
+		try {
+			UUID tabletUuid = stack.get(ModComponents.TABLET_UUID);
+			if (tabletUuid == null) return;
+
+			VirtualMachine vm = vmManager.get(tabletUuid);
+			if (vm == null || !vm.isOn()) return;
+
+			VirtualMachine.SystemMetrics metrics = vm.getMetricsForClient();
+			if (metrics == null) return; // Метрики еще не готовы
+
+			ServerPlayNetworking.send(player, new SystemMetricsS2CPacket(
+					tabletUuid,
+					metrics.cpuLoad(),
+					metrics.ramUsedKb(),
+					metrics.ramTotalKb(),
+					metrics.diskQueue(),
+					metrics.tabletUuidStr(),
+					metrics.fsUuidStr()
+			));
+		} catch (Exception e) {
+			LOGGER.error("Error sending metrics for tablet {}: {}", stack.get(ModComponents.TABLET_UUID), e.getMessage());
 		}
 	}
 }

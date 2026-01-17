@@ -97,7 +97,11 @@ public class VirtualFileSystemManager {
                     Path filePath = new WorldStorageVFS(worldSavePath, fsUuid).getValidatedPath(path);
                     if (Files.exists(filePath) && !Files.isDirectory(filePath)) {
                         byte[] bytes = Files.readAllBytes(filePath);
+                        // Explicitly use Base64.getEncoder().encodeToString(bytes) - no extra characters or headers
                         String base64 = Base64.getEncoder().encodeToString(bytes);
+                        
+                        // Ensure no extra characters or headers are added to the data field of VFSResponse
+                        // The base64 string is clean and contains only valid Base64 characters
                         
                         LoraCoreMod.LOGGER.info("File {}: {} bytes, {} base64 chars, limit: {}", 
                             path, bytes.length, base64.length(), MAX_CHUNK_SIZE);

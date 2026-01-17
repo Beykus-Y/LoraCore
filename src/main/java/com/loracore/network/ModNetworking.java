@@ -9,6 +9,7 @@ import com.loracore.component.data.*;
 // ИСПРАВЛЕНО: Полностью переработан обработчик VFS
 import com.loracore.computer.*;
 import com.loracore.computer.device.IDevice;
+import com.loracore.item.ModItems;
 import com.loracore.item.TabletItem;
 import com.loracore.network.graphics.GpuCommand;
 import com.loracore.network.graphics.GpuCommandC2SPacket;
@@ -63,9 +64,11 @@ public class ModNetworking {
         PayloadTypeRegistry.playC2S().register(CharTypedC2SPacket.ID, CharTypedC2SPacket.CODEC);
         PayloadTypeRegistry.playC2S().register(MouseClickedC2SPacket.ID, MouseClickedC2SPacket.CODEC);
         PayloadTypeRegistry.playS2C().register(SwitchToClientKernelS2CPacket.ID, SwitchToClientKernelS2CPacket.CODEC);
+        PayloadTypeRegistry.playS2C().register(SystemMetricsS2CPacket.ID, SystemMetricsS2CPacket.CODEC);
 
         PayloadTypeRegistry.playC2S().register(InvokeDeviceMethodC2SPacket.ID, InvokeDeviceMethodC2SPacket.CODEC);
         PayloadTypeRegistry.playS2C().register(DeviceMethodResultS2CPacket.ID, DeviceMethodResultS2CPacket.CODEC);
+        PayloadTypeRegistry.playC2S().register(SpawnDebugTabletC2SPacket.ID, SpawnDebugTabletC2SPacket.CODEC);
 
 
         // Регистрация обработчиков
@@ -76,6 +79,7 @@ public class ModNetworking {
         registerInputHandlers();
         registerLuaScriptHandlers();
         registerDeviceHandlers();
+        registerDebugHandlers();
     }
 
     /**
@@ -88,82 +92,113 @@ public class ModNetworking {
             if (server == null || payload.fsUuid() == null) return;
 
             server.execute(() -> {
-                try {
-                    // Ключевое исправление: Получаем экземпляр ImageVfs, который работает с .img файлом,
-                    // а не WorldStorageVFS, который работает с папками.
-                    // Емкость здесь не так важна, так как к моменту запроса файлов
-                    // ВМ уже должна была быть создана и инициализировала VFS с правильной емкостью.
-                    IFileSystem vfs = ImageVfsManager.getInstance().getFor(payload.fsUuid(), 1024);
-
-                    VfsResponseS2CPacket.ResponseType responseType;
-                    String responseData;
-
-                    switch (payload.operation()) {
-                        case READ_BYTES:
-                            // Этот кейс используется для загрузки .jar файлов ядра и приложений
-                            byte[] bytes = vfs.readBytes(payload.path());
-                            responseData = Base64.getEncoder().encodeToString(bytes);
-                            responseType = VfsResponseS2CPacket.ResponseType.STRING;
-                            break;
-
-                        case READ:
-                            // Для обычных текстовых файлов
-                            responseData = vfs.read(payload.path()).tojstring();
-                            responseType = responseData != null ? VfsResponseS2CPacket.ResponseType.STRING : VfsResponseS2CPacket.ResponseType.NIL;
-                            break;
-
-                        case EXISTS:
-                            responseData = "";
-                            responseType = vfs.exists(payload.path()) ? VfsResponseS2CPacket.ResponseType.TRUE : VfsResponseS2CPacket.ResponseType.FALSE;
-                            break;
-
-                        case ISDIR:
-                            responseData = "";
-                            responseType = vfs.isDirectory(payload.path()) ? VfsResponseS2CPacket.ResponseType.TRUE : VfsResponseS2CPacket.ResponseType.FALSE;
-                            break;
-
-                        case WRITE:
-                            boolean wrote = vfs.write(payload.path(), payload.content());
-                            responseData = "";
-                            responseType = wrote ? VfsResponseS2CPacket.ResponseType.TRUE : VfsResponseS2CPacket.ResponseType.FALSE;
-                            break;
-
-                        case MAKEDIR:
-                            boolean madeDir = vfs.makeDir(payload.path());
-                            responseData = "";
-                            responseType = madeDir ? VfsResponseS2CPacket.ResponseType.TRUE : VfsResponseS2CPacket.ResponseType.FALSE;
-                            break;
-
-                        case DELETE:
-                            boolean deleted = vfs.delete(payload.path());
-                            responseData = "";
-                            responseType = deleted ? VfsResponseS2CPacket.ResponseType.TRUE : VfsResponseS2CPacket.ResponseType.FALSE;
-                            break;
-
-                        case LIST:
-                            responseData = vfs.list(payload.path());
-                            responseType = responseData != null ? VfsResponseS2CPacket.ResponseType.TABLE_JSON : VfsResponseS2CPacket.ResponseType.NIL;
-                            break;
-
-                        default:
-                            responseData = "";
-                            responseType = VfsResponseS2CPacket.ResponseType.NIL;
-                            break;
+                // Получаем VM для постановки задачи в очередь
+                // Ищем VM по fsUuid через все активные VM
+                VirtualMachine vm = null;
+                for (VirtualMachine activeVm : VirtualMachineManager.getInstance().getRunningMachines().values()) {
+                    if (activeVm != null && activeVm.getFsUuid() != null && activeVm.getFsUuid().equals(payload.fsUuid())) {
+                        vm = activeVm;
+                        break;
                     }
-
-                    // Ваша логика по отправке больших файлов остается актуальной.
-                    // Теперь она будет работать, так как vfs.readBytes сможет найти kernel.jar.
-                    if (responseData.length() > 25000) { // Безопасный лимит для одного пакета
-                        sendLargeFileInChunks(player, payload.fsUuid(), payload.callbackId(), responseData);
-                    } else {
-                        ServerPlayNetworking.send(player, new VfsResponseS2CPacket(payload.fsUuid(), payload.callbackId(), responseType, responseData));
-                    }
-
-                } catch (Exception e) {
-                    LoraCoreMod.LOGGER.error("VFS Operation failed for fsUUID {} path '{}': {}", payload.fsUuid(), payload.path(), e.getMessage());
-                    // Отправляем клиенту ответ о неудаче
-                    ServerPlayNetworking.send(player, new VfsResponseS2CPacket(payload.fsUuid(), payload.callbackId(), VfsResponseS2CPacket.ResponseType.NIL, ""));
                 }
+                
+                // Если VM не найдена или выключена, отправляем ошибку сразу
+                if (vm == null || !vm.isOn()) {
+                    ServerPlayNetworking.send(player, new VfsResponseS2CPacket(payload.fsUuid(), payload.callbackId(), VfsResponseS2CPacket.ResponseType.NIL, ""));
+                    return;
+                }
+                
+                // READ_BYTES выполняется сразу (бесплатно, для загрузки ОС)
+                // Все остальные операции ставятся в очередь
+                if (payload.operation() == VfsRequestC2SPacket.Operation.READ_BYTES) {
+                    try {
+                        IFileSystem vfs = ImageVfsManager.getInstance().getFor(payload.fsUuid(), 1024);
+                        byte[] bytes = vfs.readBytes(payload.path());
+                        String responseData = Base64.getEncoder().encodeToString(bytes);
+                        
+                        if (responseData.length() > 25000) {
+                            sendLargeFileInChunks(player, payload.fsUuid(), payload.callbackId(), responseData);
+                        } else {
+                            ServerPlayNetworking.send(player, new VfsResponseS2CPacket(payload.fsUuid(), payload.callbackId(), VfsResponseS2CPacket.ResponseType.STRING, responseData));
+                        }
+                    } catch (Exception e) {
+                        LoraCoreMod.LOGGER.error("VFS READ_BYTES failed for fsUUID {} path '{}': {}", payload.fsUuid(), payload.path(), e.getMessage());
+                        ServerPlayNetworking.send(player, new VfsResponseS2CPacket(payload.fsUuid(), payload.callbackId(), VfsResponseS2CPacket.ResponseType.NIL, ""));
+                    }
+                    return;
+                }
+                
+                // Для всех остальных операций: создаем задачу и ставим в очередь
+                // Задача будет выполнена, когда VM накопит достаточно циклов (100 за задачу)
+                Runnable vfsTask = () -> {
+                    try {
+                        IFileSystem vfs = ImageVfsManager.getInstance().getFor(payload.fsUuid(), 1024);
+
+                        VfsResponseS2CPacket.ResponseType responseType;
+                        String responseData;
+
+                        switch (payload.operation()) {
+                            case READ:
+                                // Для обычных текстовых файлов
+                                responseData = vfs.read(payload.path()).tojstring();
+                                responseType = responseData != null ? VfsResponseS2CPacket.ResponseType.STRING : VfsResponseS2CPacket.ResponseType.NIL;
+                                break;
+
+                            case EXISTS:
+                                responseData = "";
+                                responseType = vfs.exists(payload.path()) ? VfsResponseS2CPacket.ResponseType.TRUE : VfsResponseS2CPacket.ResponseType.FALSE;
+                                break;
+
+                            case ISDIR:
+                                responseData = "";
+                                responseType = vfs.isDirectory(payload.path()) ? VfsResponseS2CPacket.ResponseType.TRUE : VfsResponseS2CPacket.ResponseType.FALSE;
+                                break;
+
+                            case WRITE:
+                                boolean wrote = vfs.write(payload.path(), payload.content());
+                                responseData = "";
+                                responseType = wrote ? VfsResponseS2CPacket.ResponseType.TRUE : VfsResponseS2CPacket.ResponseType.FALSE;
+                                break;
+
+                            case MAKEDIR:
+                                boolean madeDir = vfs.makeDir(payload.path());
+                                responseData = "";
+                                responseType = madeDir ? VfsResponseS2CPacket.ResponseType.TRUE : VfsResponseS2CPacket.ResponseType.FALSE;
+                                break;
+
+                            case DELETE:
+                                boolean deleted = vfs.delete(payload.path());
+                                responseData = "";
+                                responseType = deleted ? VfsResponseS2CPacket.ResponseType.TRUE : VfsResponseS2CPacket.ResponseType.FALSE;
+                                break;
+
+                            case LIST:
+                                responseData = vfs.list(payload.path());
+                                responseType = responseData != null ? VfsResponseS2CPacket.ResponseType.TABLE_JSON : VfsResponseS2CPacket.ResponseType.NIL;
+                                break;
+
+                            default:
+                                responseData = "";
+                                responseType = VfsResponseS2CPacket.ResponseType.NIL;
+                                break;
+                        }
+
+                        // Отправляем результат клиенту
+                        if (responseData.length() > 25000) {
+                            sendLargeFileInChunks(player, payload.fsUuid(), payload.callbackId(), responseData);
+                        } else {
+                            ServerPlayNetworking.send(player, new VfsResponseS2CPacket(payload.fsUuid(), payload.callbackId(), responseType, responseData));
+                        }
+
+                    } catch (Exception e) {
+                        LoraCoreMod.LOGGER.error("VFS Operation failed for fsUUID {} path '{}': {}", payload.fsUuid(), payload.path(), e.getMessage());
+                        // Отправляем клиенту ответ о неудаче
+                        ServerPlayNetworking.send(player, new VfsResponseS2CPacket(payload.fsUuid(), payload.callbackId(), VfsResponseS2CPacket.ResponseType.NIL, ""));
+                    }
+                };
+                
+                // Ставим задачу в очередь VM
+                vm.enqueueTask(vfsTask);
             });
         });
     }
@@ -195,13 +230,8 @@ public class ModNetworking {
             
             ServerPlayNetworking.send(player, packet);
             
-            // Небольшая задержка между чанками для предотвращения переполнения буфера
-            try {
-                Thread.sleep(10);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                break;
-            }
+            // УДАЛЕНО: Thread.sleep() заменен на синхронный бюджет инструкций
+            // Задержка между чанками теперь контролируется через Instruction Budget в VirtualMachine.tick()
         }
         
         LoraCoreMod.LOGGER.info("[VFS] Finished sending large file in {} chunks", totalChunks);
@@ -613,7 +643,13 @@ public class ModNetworking {
             MinecraftServer server = player.getServer();
             server.execute(() -> {
                 VirtualMachine vm = VirtualMachineManager.getInstance().get(payload.tabletUuid());
-                if (vm == null) return;
+                
+                // Если VM не найдена или выключена, отправляем ошибку сразу
+                if (vm == null || !vm.isOn()) {
+                    String errorMsg = "Device call rejected: VM not available";
+                    ServerPlayNetworking.send(player, new DeviceMethodResultS2CPacket(payload.requestId(), false, DeviceMethodResultS2CPacket.resultToJson(errorMsg)));
+                    return;
+                }
 
                 Object deviceObj = vm.getDevices().stream()
                         .filter(d -> d.getClass().getSimpleName().equalsIgnoreCase(payload.deviceType() + "Device"))
@@ -626,45 +662,85 @@ public class ModNetworking {
                     return;
                 }
 
-                // =======================================================
-                //          НАЧАЛО НОВОГО КОДА
-                // =======================================================
+                // Создаем задачу для выполнения вызова устройства
+                // Задача будет поставлена в очередь и выполнена, когда у VM будет достаточно циклов (100 за задачу)
+                Runnable deviceTask = () -> {
+                    try {
+                        // Проверяем, реализует ли устройство наш интерфейс IDevice
+                        if (deviceObj instanceof IDevice device) {
+                            // Получаем актуальный мир и позицию, на которую смотрит игрок
+                            ServerWorld world = player.getServerWorld();
+                            net.minecraft.util.hit.HitResult hit = player.raycast(5.0, 0.0f, false);
+                            net.minecraft.util.math.BlockPos targetPos = null;
+                            if (hit.getType() == net.minecraft.util.hit.HitResult.Type.BLOCK) {
+                                targetPos = ((net.minecraft.util.hit.BlockHitResult) hit).getBlockPos();
+                            }
 
-                // Проверяем, реализует ли устройство наш интерфейс IDevice
-                if (deviceObj instanceof IDevice device) {
-                    // Получаем актуальный мир и позицию, на которую смотрит игрок
-                    ServerWorld world = player.getServerWorld();
-                    net.minecraft.util.hit.HitResult hit = player.raycast(5.0, 0.0f, false);
-                    net.minecraft.util.math.BlockPos targetPos = null;
-                    if (hit.getType() == net.minecraft.util.hit.HitResult.Type.BLOCK) {
-                        targetPos = ((net.minecraft.util.hit.BlockHitResult) hit).getBlockPos();
+                            // ВЫПОЛНЯЕМ ПРИВЯЗКУ!
+                            device.rebind(player, world, targetPos);
+                        }
+                        
+                        Object[] args = payload.getArgs();
+                        Method methodToCall = Arrays.stream(deviceObj.getClass().getMethods())
+                                .filter(m -> m.isAnnotationPresent(com.loracore.computer.api.Callback.class))
+                                .filter(m -> m.getName().equals(payload.methodName()))
+                                .findFirst()
+                                .orElseThrow(() -> new NoSuchMethodException("Method '" + payload.methodName() + "' not found or not a @Callback."));
+
+                        Object result = methodToCall.invoke(deviceObj, args);
+
+                        String resultJson = DeviceMethodResultS2CPacket.resultToJson(result);
+                        ServerPlayNetworking.send(player, new DeviceMethodResultS2CPacket(payload.requestId(), true, resultJson));
+
+                    } catch (Exception e) {
+                        String errorMsg = e.getCause() != null ? e.getCause().getMessage() : e.getMessage();
+                        ServerPlayNetworking.send(player, new DeviceMethodResultS2CPacket(payload.requestId(), false, DeviceMethodResultS2CPacket.resultToJson(errorMsg)));
                     }
+                };
+                
+                // Ставим задачу в очередь VM (100 циклов будет потреблено автоматически в tick())
+                vm.enqueueTask(deviceTask);
+            });
+        });
+    }
 
-                    // ВЫПОЛНЯЕМ ПРИВЯЗКУ!
-                    device.rebind(player, world, targetPos);
-                }
+    /**
+     * Обработчик для создания отладочного планшета "Flagship".
+     */
+    private static void registerDebugHandlers() {
+        ServerPlayNetworking.registerGlobalReceiver(SpawnDebugTabletC2SPacket.ID, (payload, context) -> {
+            ServerPlayerEntity player = context.player();
+            MinecraftServer server = player.getServer();
+            if (server == null) return;
 
-                // =======================================================
-                //          КОНЕЦ НОВОГО КОДА
-                // =======================================================
+            server.execute(() -> {
+                // Create a tablet ItemStack
+                ItemStack stack = new ItemStack(ModItems.TABLET);
 
-                try {
-                    Object[] args = payload.getArgs();
-                    Method methodToCall = Arrays.stream(deviceObj.getClass().getMethods())
-                            .filter(m -> m.isAnnotationPresent(com.loracore.computer.api.Callback.class))
-                            .filter(m -> m.getName().equals(payload.methodName()))
-                            .findFirst()
-                            .orElseThrow(() -> new NoSuchMethodException("Method '" + payload.methodName() + "' not found or not a @Callback."));
+                // Apply a unique TABLET_UUID
+                stack.set(ModComponents.TABLET_UUID, UUID.randomUUID());
 
-                    Object result = methodToCall.invoke(deviceObj, args);
+                // Create motherboard with upgraded components: CPU_T3, RAM_T3, HDD_T1
+                ItemStack cpu = new ItemStack(ModItems.CPU_T3);
+                ItemStack ram = new ItemStack(ModItems.RAM_T3);
+                ItemStack hdd = new ItemStack(ModItems.HDD_T1);
+                ItemStack firmware = new ItemStack(ModItems.FIRMWARE_ROM);
 
-                    String resultJson = DeviceMethodResultS2CPacket.resultToJson(result);
-                    ServerPlayNetworking.send(player, new DeviceMethodResultS2CPacket(payload.requestId(), true, resultJson));
+                // Ensure HDD has FileSystemsData
+                hdd.set(ModComponents.FILE_SYSTEMS_DATA, new FileSystemsData(UUID.randomUUID()));
 
-                } catch (Exception e) {
-                    String errorMsg = e.getCause() != null ? e.getCause().getMessage() : e.getMessage();
-                    ServerPlayNetworking.send(player, new DeviceMethodResultS2CPacket(payload.requestId(), false, DeviceMethodResultS2CPacket.resultToJson(errorMsg)));
-                }
+                MotherboardData mobo = new MotherboardData(
+                        Optional.of(cpu),
+                        Optional.empty(),
+                        List.of(ram),
+                        List.of(hdd),
+                        Optional.of(firmware)
+                );
+
+                stack.set(ModComponents.MOTHERBOARD_DATA, mobo);
+
+                // Give the item to the player
+                player.giveItemStack(stack);
             });
         });
     }

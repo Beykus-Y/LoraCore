@@ -55,4 +55,9 @@ public interface IKernelGraphics {
      * Возвращает высоту экрана в пикселях.
      */
     int getHeight();
+    /**
+     * Рисует текст с указанным масштабом.
+     * @param scale Масштаб (1.0 - стандарт, 2.0 - двойной размер и т.д.)
+     */
+    void drawString(String text, int x, int y, int color, float scale);
 }

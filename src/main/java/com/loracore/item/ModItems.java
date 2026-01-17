@@ -25,6 +25,14 @@ public class ModItems {
             new CpuItem(new Item.Settings().component(ModComponents.CPU_DATA, new CpuData("lora_mobile_v1", 25))),
             ItemGroups.INGREDIENTS);
 
+    public static final Item CPU_T2 = registerItem("cpu_t2",
+            new CpuItem(new Item.Settings().component(ModComponents.CPU_DATA, new CpuData("tier2", 50))),
+            ItemGroups.INGREDIENTS);
+
+    public static final Item CPU_T3 = registerItem("cpu_t3",
+            new CpuItem(new Item.Settings().component(ModComponents.CPU_DATA, new CpuData("tier3", 75))),
+            ItemGroups.INGREDIENTS);
+
     public static final Item RAM_T1 = registerItem("ram_t1",
             new RamItem(new Item.Settings().component(ModComponents.RAM_DATA, new RamData(512))),
             ItemGroups.INGREDIENTS);

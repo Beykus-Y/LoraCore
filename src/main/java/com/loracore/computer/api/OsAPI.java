@@ -77,7 +77,12 @@ public class OsAPI extends LibFunction {
         public LuaValue call(LuaValue arg) {
             double seconds = arg.checkdouble();
             LUA_TIMER.schedule(new TimerTask() {
-                @Override public void run() { vm.pushEvent("timer"); }
+                @Override
+                public void run() {
+                    if (vm.isOn()) {
+                        vm.pushEvent("timer");
+                    }
+                }
             }, (long)(seconds * 1000));
 
             // Используем `invoke()` для Varargs, а не `call()`
