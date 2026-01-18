@@ -62,4 +62,13 @@ public class TabletScreenManager {
     public ServerScreenState getScreen(UUID tabletUuid) {
         return screenStates.get(tabletUuid);
     }
+
+    /**
+     * [НОВЫЙ МЕТОД] Получает или создает состояние экрана по UUID.
+     * Используется Виртуальной Машиной при инициализации GPU.
+     */
+    public ServerScreenState getOrCreateScreen(UUID tabletUuid) {
+        return screenStates.computeIfAbsent(tabletUuid, uuid -> new ServerScreenState());
+    }
+
 }

@@ -59,7 +59,6 @@ public class ModNetworking {
         PayloadTypeRegistry.playS2C().register(VfsResponseS2CPacket.ID, VfsResponseS2CPacket.CODEC);
         PayloadTypeRegistry.playC2S().register(GpuCommandC2SPacket.ID, GpuCommandC2SPacket.CODEC);
         PayloadTypeRegistry.playS2C().register(ScreenUpdateS2CPacket.ID, ScreenUpdateS2CPacket.CODEC);
-        PayloadTypeRegistry.playC2S().register(RunLuaScriptC2SPacket.ID, RunLuaScriptC2SPacket.CODEC);
         PayloadTypeRegistry.playC2S().register(KeyPressedC2SPacket.ID, KeyPressedC2SPacket.CODEC);
         PayloadTypeRegistry.playC2S().register(CharTypedC2SPacket.ID, CharTypedC2SPacket.CODEC);
         PayloadTypeRegistry.playC2S().register(MouseClickedC2SPacket.ID, MouseClickedC2SPacket.CODEC);
@@ -77,7 +76,7 @@ public class ModNetworking {
         registerVfsHandlers(); // ИСПРАВЛЕНО: Этот метод теперь содержит правильную логику
         registerGpuHandlers();
         registerInputHandlers();
-        registerLuaScriptHandlers();
+        
         registerDeviceHandlers();
         registerDebugHandlers();
     }
@@ -139,9 +138,14 @@ public class ModNetworking {
 
                         switch (payload.operation()) {
                             case READ:
-                                // Для обычных текстовых файлов
-                                responseData = vfs.read(payload.path()).tojstring();
-                                responseType = responseData != null ? VfsResponseS2CPacket.ResponseType.STRING : VfsResponseS2CPacket.ResponseType.NIL;
+                                try {
+                                    String s = vfs.read(payload.path());
+                                    responseData = s != null ? s : "";
+                                    responseType = s != null ? VfsResponseS2CPacket.ResponseType.STRING : VfsResponseS2CPacket.ResponseType.NIL;
+                                } catch (java.io.IOException e) {
+                                    responseData = "";
+                                    responseType = VfsResponseS2CPacket.ResponseType.NIL;
+                                }
                                 break;
 
                             case EXISTS:
@@ -155,26 +159,47 @@ public class ModNetworking {
                                 break;
 
                             case WRITE:
-                                boolean wrote = vfs.write(payload.path(), payload.content());
-                                responseData = "";
-                                responseType = wrote ? VfsResponseS2CPacket.ResponseType.TRUE : VfsResponseS2CPacket.ResponseType.FALSE;
+                                try {
+                                    boolean wrote = vfs.write(payload.path(), payload.content());
+                                    responseData = "";
+                                    responseType = wrote ? VfsResponseS2CPacket.ResponseType.TRUE : VfsResponseS2CPacket.ResponseType.FALSE;
+                                } catch (java.io.IOException e) {
+                                    responseData = "";
+                                    responseType = VfsResponseS2CPacket.ResponseType.FALSE;
+                                }
                                 break;
 
                             case MAKEDIR:
-                                boolean madeDir = vfs.makeDir(payload.path());
-                                responseData = "";
-                                responseType = madeDir ? VfsResponseS2CPacket.ResponseType.TRUE : VfsResponseS2CPacket.ResponseType.FALSE;
+                                try {
+                                    boolean madeDir = vfs.makeDir(payload.path());
+                                    responseData = "";
+                                    responseType = madeDir ? VfsResponseS2CPacket.ResponseType.TRUE : VfsResponseS2CPacket.ResponseType.FALSE;
+                                } catch (java.io.IOException e) {
+                                    responseData = "";
+                                    responseType = VfsResponseS2CPacket.ResponseType.FALSE;
+                                }
                                 break;
 
                             case DELETE:
-                                boolean deleted = vfs.delete(payload.path());
-                                responseData = "";
-                                responseType = deleted ? VfsResponseS2CPacket.ResponseType.TRUE : VfsResponseS2CPacket.ResponseType.FALSE;
+                                try {
+                                    boolean deleted = vfs.delete(payload.path());
+                                    responseData = "";
+                                    responseType = deleted ? VfsResponseS2CPacket.ResponseType.TRUE : VfsResponseS2CPacket.ResponseType.FALSE;
+                                } catch (java.io.IOException e) {
+                                    responseData = "";
+                                    responseType = VfsResponseS2CPacket.ResponseType.FALSE;
+                                }
                                 break;
 
                             case LIST:
-                                responseData = vfs.list(payload.path());
-                                responseType = responseData != null ? VfsResponseS2CPacket.ResponseType.TABLE_JSON : VfsResponseS2CPacket.ResponseType.NIL;
+                                try {
+                                    java.util.List<String> list = vfs.list(payload.path());
+                                    responseData = list != null ? new com.google.gson.Gson().toJson(list) : "";
+                                    responseType = list != null ? VfsResponseS2CPacket.ResponseType.TABLE_JSON : VfsResponseS2CPacket.ResponseType.NIL;
+                                } catch (java.io.IOException e) {
+                                    responseData = "";
+                                    responseType = VfsResponseS2CPacket.ResponseType.NIL;
+                                }
                                 break;
 
                             default:
@@ -281,6 +306,22 @@ public class ModNetworking {
                 // 1. Получаем или создаем ВМ
                 VirtualMachine vm = VirtualMachineManager.getInstance().getOrCreate(player, stack);
 
+                if (!vm.isOn() || vm.getSystemRamUsage() == 0.0) {
+                    LoraCoreMod.LOGGER.info("Запуск ВМ {} (перезагрузка из-за пустой памяти).", vm.getTabletUuid());
+
+                    // Сбрасываем состояние, чтобы убрать halted флаги и прочее
+                    vm.shutdown();
+
+                    byte[] biosBytes = vm.getResourceLoader().load("os/bios.bin");
+                    if (biosBytes != null && biosBytes.length > 0) {
+                        // Передаем байты напрямую в start()
+                        vm.start(biosBytes);
+                    } else {
+                        player.sendMessage(Text.literal("Критическая ошибка: BIOS не найден или пуст.").formatted(Formatting.RED), true);
+                        return;
+                    }
+                }
+
                 // ИСПРАВЛЕНИЕ: Даем игроку понятную обратную связь
                 if (vm == null) {
                     player.sendMessage(Text.literal("Планшет неисправен: отсутствует накопитель! Попробуйте переложить его в инвентаре.").formatted(Formatting.RED), true);
@@ -290,9 +331,9 @@ public class ModNetworking {
                 // 2. Если ВМ выключена, запускаем ее с BIOS
                 if (!vm.isOn()) {
                     LoraCoreMod.LOGGER.info("Запуск выключенной ВМ {} по запросу игрока.", vm.getTabletUuid());
-                    String biosContent = vm.getResourceLoader().load("os/bios.lua");
-                    if (biosContent != null && !biosContent.isEmpty()) {
-                        vm.start(biosContent);
+                    byte[] biosBytes = vm.getResourceLoader().load("os/bios.bin");
+                    if (biosBytes != null && biosBytes.length > 0) {
+                        vm.start(biosBytes);
                     } else {
                         player.sendMessage(Text.literal("Критическая ошибка: BIOS не найден.").formatted(Formatting.RED), true);
                         return;
@@ -319,12 +360,14 @@ public class ModNetworking {
                         .mapToInt(ramStack -> Optional.ofNullable(ramStack.get(ModComponents.RAM_DATA)).map(RamData::sizeKb).orElse(0))
                         .sum();
 
-                // 4. ВСЕГДА отправляем пакет на открытие экрана
                 ServerPlayNetworking.send(player, new BootTabletS2CPacket(fsUuid, tabletUuid, totalRamKb));
-
-                // 5. Проверяем, не нужно ли сразу переключиться на Java-ядро
-                if (vm.getCurrentState() == VirtualMachine.State.JAVA_KERNEL) {
-                    ServerPlayNetworking.send(player, new SwitchToClientKernelS2CPacket("/boot/kernel.jar"));
+                ServerScreenState screenState = TabletScreenManager.getInstance().getScreen(tabletUuid);
+                if (screenState != null && screenState.getPixelBuffer() != null) {
+                    ServerPlayNetworking.send(player, new ScreenUpdateS2CPacket(
+                            tabletUuid,
+                            screenState.getPixelBuffer()
+                    ));
+                    LoraCoreMod.LOGGER.info("Отправлен полный кадр синхронизации экрана для планшета {}", tabletUuid);
                 }
             });
         });
@@ -615,28 +658,7 @@ public class ModNetworking {
             });
         });
     }
-    private static void registerLuaScriptHandlers() {
-        ServerPlayNetworking.registerGlobalReceiver(RunLuaScriptC2SPacket.ID, (payload, context) -> {
-            ServerPlayerEntity player = context.player();
-            MinecraftServer server = player.getServer();
-            if (server == null) return;
-
-            server.execute(() -> {
-                VirtualMachine vm = VirtualMachineManager.getInstance().get(payload.tabletUuid());
-                if (vm == null || !vm.isRunning()) return;
-
-                // Загружаем скрипт из VFS и запускаем его в серверной ВМ
-                vm.getResourceLoader().load(payload.scriptPath());
-
-                String scriptContent = vm.getResourceLoader().load(payload.scriptPath());
-                if (scriptContent != null) {
-                    vm.startNewLuaThread(99, scriptContent, null); // Используем временный ID потока
-                } else {
-                    LoraCoreMod.LOGGER.error("Java-ядро запросило запуск несуществующего Lua-скрипта: {}", payload.scriptPath());
-                }
-            });
-        });
-    }
+    
     private static void registerDeviceHandlers() {
         ServerPlayNetworking.registerGlobalReceiver(InvokeDeviceMethodC2SPacket.ID, (payload, context) -> {
             ServerPlayerEntity player = context.player();

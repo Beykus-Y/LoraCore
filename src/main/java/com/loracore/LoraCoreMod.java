@@ -201,7 +201,9 @@ public class LoraCoreMod implements ModInitializer {
 			if (vm == null || !vm.isOn()) return;
 
 			VirtualMachine.SystemMetrics metrics = vm.getMetricsForClient();
-			if (metrics == null) return; // Метрики еще не готовы
+			if (metrics == null) return;
+
+			long uptimeSeconds = (long) vm.getUptime();
 
 			ServerPlayNetworking.send(player, new SystemMetricsS2CPacket(
 					tabletUuid,
@@ -209,6 +211,7 @@ public class LoraCoreMod implements ModInitializer {
 					metrics.ramUsedKb(),
 					metrics.ramTotalKb(),
 					metrics.diskQueue(),
+					uptimeSeconds,
 					metrics.tabletUuidStr(),
 					metrics.fsUuidStr()
 			));

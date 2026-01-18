@@ -13,10 +13,3 @@ include("kernel", "ai-assistant", "terminal-app", "file-explorer-app", "device-t
 
 // Устанавливаем правильные имена проектов
 rootProject.name = 'loracore'
-project(':kernel').name = 'kernel'
-project(':ai-assistant').name = 'ai-assistant'
-project(':terminal-app').name = 'terminal-app'
-project(':file-explorer-app').name = 'file-explorer-app'
-project(':device-test-app').name = 'device-test-app'
-project(':disk-manager-app').name = 'disk-manager-app'
-

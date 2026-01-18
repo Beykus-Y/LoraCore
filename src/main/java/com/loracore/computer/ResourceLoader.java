@@ -12,5 +12,5 @@ public interface ResourceLoader {
      * @param path Путь к ресурсу (например, "os/bios.lua").
      * @return Содержимое файла в виде строки или null, если не найден.
      */
-    String load(String path);
+    byte[] load(String path);
 }

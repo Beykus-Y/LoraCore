@@ -108,13 +108,13 @@ public class LoraCoreClient implements ClientModInitializer {
             context.client().execute(() -> {
                 Screen currentScreen = MinecraftClient.getInstance().currentScreen;
                 if (currentScreen instanceof TabletScreen tabletScreen) {
-                    // Проверяем, что пакет предназначен для текущего открытого планшета
                     if (tabletScreen.getTabletUuid().equals(payload.tabletUuid())) {
                         tabletScreen.updateMetrics(
                             payload.cpuLoad(),
                             payload.ramUsedKb(),
                             payload.ramTotalKb(),
                             payload.diskQueue(),
+                            payload.uptimeSeconds(),
                             payload.tabletUuidStr(),
                             payload.fsUuidStr()
                         );

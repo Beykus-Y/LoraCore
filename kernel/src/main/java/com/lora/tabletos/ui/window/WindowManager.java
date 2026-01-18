@@ -101,7 +101,7 @@ public class WindowManager {
         if (path.endsWith(".jar")) {
             launchJarApp(path);
         } else if (path.endsWith(".lua")) {
-            launchLuaApp(path);
+            LOGGER.error("Lua-приложения больше не поддерживаются.");
         } else {
             LOGGER.error("Неподдерживаемый тип приложения: {}", path);
         }
@@ -242,8 +242,7 @@ public class WindowManager {
     // --- Приватные методы ---
 
     private void launchLuaApp(String path) {
-        LOGGER.warn("Запуск Lua-приложений в графическом режиме пока не реализован.");
-        api.runLuaScript(path);
+        LOGGER.warn("Запуск Lua-приложений недоступен: поддержка Lua удалена.");
     }
 
     private void launchJarApp(String path) {

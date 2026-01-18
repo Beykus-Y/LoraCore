@@ -36,12 +36,7 @@ public interface IApplicationApi {
      */
     int[] getScreenSize();
     
-    /**
-     * Запускает Lua-скрипт в изолированном окружении.
-     * @param path Путь к Lua-скрипту
-     * @return CompletableFuture с результатом выполнения
-     */
-    CompletableFuture<Boolean> runLuaScript(String path);
+    
 
     /**
      * Показывает всплывающее уведомление.

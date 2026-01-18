@@ -11,7 +11,6 @@ import net.minecraft.resource.ResourceType;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.WorldSavePath;
-import org.luaj.vm2.LuaValue;
 import java.util.Base64;
 import java.io.IOException;
 import java.nio.file.Path;
@@ -82,13 +81,17 @@ public class VirtualFileSystemManager {
                 return new VFSResponse(exists ? VfsResponseS2CPacket.ResponseType.TRUE : VfsResponseS2CPacket.ResponseType.FALSE, "");
 
             case READ:
-                LuaValue hddContent = hdd.read(path);
-                if (!hddContent.isnil()) {
-                    return new VFSResponse(VfsResponseS2CPacket.ResponseType.STRING, hddContent.tojstring());
-                }
-                LuaValue romContent = rom.read(path);
-                if (!romContent.isnil()) {
-                    return new VFSResponse(VfsResponseS2CPacket.ResponseType.STRING, romContent.tojstring());
+                try {
+                    String hddContent = hdd.read(path);
+                    if (hddContent != null) {
+                        return new VFSResponse(VfsResponseS2CPacket.ResponseType.STRING, hddContent);
+                    }
+                    String romContent = rom.read(path);
+                    if (romContent != null) {
+                        return new VFSResponse(VfsResponseS2CPacket.ResponseType.STRING, romContent);
+                    }
+                } catch (IOException e) {
+                    LoraCoreMod.LOGGER.error("VFS READ error: {}", e.getMessage());
                 }
                 return new VFSResponse(VfsResponseS2CPacket.ResponseType.NIL, "");
 
@@ -126,22 +129,35 @@ public class VirtualFileSystemManager {
                 return new VFSResponse(isDir ? VfsResponseS2CPacket.ResponseType.TRUE : VfsResponseS2CPacket.ResponseType.FALSE, "");
 
             case WRITE:
-                boolean wrote = hdd.write(path, content);
+                boolean wrote;
+                try {
+                    wrote = hdd.write(path, content);
+                } catch (IOException e) {
+                    wrote = false;
+                }
                 return new VFSResponse(wrote ? VfsResponseS2CPacket.ResponseType.TRUE : VfsResponseS2CPacket.ResponseType.FALSE, "");
 
             case MAKEDIR:
-                boolean madeDir = hdd.makeDir(path);
+                boolean madeDir;
+                try {
+                    madeDir = hdd.makeDir(path);
+                } catch (IOException e) {
+                    madeDir = false;
+                }
                 return new VFSResponse(madeDir ? VfsResponseS2CPacket.ResponseType.TRUE : VfsResponseS2CPacket.ResponseType.FALSE, "");
 
             case LIST:
-                String listJson = hdd.list(path);
-                if (listJson != null) {
-                    return new VFSResponse(VfsResponseS2CPacket.ResponseType.TABLE_JSON, listJson);
-                }
-                // Добавим поиск и в ROM, если на диске папка пуста или ее нет
-                String romListJson = rom.list(path);
-                if (romListJson != null) {
-                    return new VFSResponse(VfsResponseS2CPacket.ResponseType.TABLE_JSON, romListJson);
+                try {
+                    java.util.List<String> listHdd = hdd.list(path);
+                    if (listHdd != null) {
+                        return new VFSResponse(VfsResponseS2CPacket.ResponseType.TABLE_JSON, new com.google.gson.Gson().toJson(listHdd));
+                    }
+                    java.util.List<String> listRom = rom.list(path);
+                    if (listRom != null) {
+                        return new VFSResponse(VfsResponseS2CPacket.ResponseType.TABLE_JSON, new com.google.gson.Gson().toJson(listRom));
+                    }
+                } catch (IOException e) {
+                    LoraCoreMod.LOGGER.error("VFS LIST error: {}", e.getMessage());
                 }
                 return new VFSResponse(VfsResponseS2CPacket.ResponseType.NIL, "");
 

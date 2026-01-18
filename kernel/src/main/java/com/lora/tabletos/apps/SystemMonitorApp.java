@@ -69,6 +69,11 @@ public class SystemMonitorApp implements IApplication {
         
         // RAM Bar
         double ramPercent = ramTotalKb > 0 ? ramUsedKb / ramTotalKb : 0.0;
+        if (ramPercent < 0.0) {
+            ramPercent = 0.0;
+        } else if (ramPercent > 1.0) {
+            ramPercent = 1.0;
+        }
         g.drawString(String.format("RAM: %.0f KB / %.0f KB", ramUsedKb, ramTotalKb), barX, labelY - 25, 0xFFFFFFFF);
         drawProgressBar(g, barX, y, barWidth, barHeight, ramPercent, 0xFF0088FF);
         y += 60;

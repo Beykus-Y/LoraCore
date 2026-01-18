@@ -53,7 +53,7 @@ public class ModItems {
             ItemGroups.INGREDIENTS);
 
     public static final Item FIRMWARE_ROM = registerItem("firmware_rom",
-            new Item(new Item.Settings().component(ModComponents.FIRMWARE_DATA, new FirmwareData(new Identifier(LoraCoreMod.MOD_ID, "os/recovery.lua")))),
+            new Item(new Item.Settings().component(ModComponents.FIRMWARE_DATA, new FirmwareData(new Identifier(LoraCoreMod.MOD_ID, "os/bios.bin")))),
             ItemGroups.INGREDIENTS);
 
     // --- Готовое устройство ---

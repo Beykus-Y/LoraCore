@@ -41,10 +41,7 @@ public class ApplicationApiImpl implements IApplicationApi {
         return new int[]{960, 540};
     }
     
-    @Override
-    public CompletableFuture<Boolean> runLuaScript(String path) {
-        return kernelApi.runLuaScript(path);
-    }
+    
 
     // [НОВЫЙ МЕТОД]
     @Override

@@ -12,6 +12,12 @@ import java.util.Arrays;
  */
 public class GpuMmioDevice implements IMemoryMappedDevice, ITickable {
     
+    public enum GpuTier {
+        TIER1,
+        TIER2,
+        TIER3
+    }
+    
     // Разрешение экрана (High DPI)
     public static final int SCREEN_WIDTH = 960;
     public static final int SCREEN_HEIGHT = 540;
@@ -43,7 +49,8 @@ public class GpuMmioDevice implements IMemoryMappedDevice, ITickable {
     private int currentCmd = 0;
     private int rX, rY, rW, rH, rColor, rSrc, rDest; // Теневые регистры для исполнения
     private int cyclesRemaining = 0; // Сколько тактов осталось до завершения операции
-    
+    private int scanoutTimer = 0;
+    private static final int SCANOUT_INTERVAL = 2000;
     // Регистры MMIO (сырые данные)
     private final int[] mmioRegisters = new int[16];
     
@@ -52,11 +59,25 @@ public class GpuMmioDevice implements IMemoryMappedDevice, ITickable {
     
     // Ссылка на ServerScreenState для синхронизации
     private final ServerScreenState screenState;
+    private final GpuTier tier;
+    private final int pixelsPerCycle;
     
     public GpuMmioDevice(ServerScreenState screenState) {
+        this(screenState, GpuTier.TIER3);
+    }
+    
+    public GpuMmioDevice(ServerScreenState screenState, GpuTier tier) {
         this.screenState = screenState;
+        this.tier = tier;
         this.vram = new int[VRAM_SIZE];
         this.registersOffset = VRAM_SIZE_BYTES; // VRAM в байтах
+        if (tier == GpuTier.TIER1) {
+            this.pixelsPerCycle = 16;
+        } else if (tier == GpuTier.TIER2) {
+            this.pixelsPerCycle = 128;
+        } else {
+            this.pixelsPerCycle = VRAM_SIZE;
+        }
         
         // Инициализируем VRAM черным цветом
         Arrays.fill(vram, 0xFF000000); // RGBA: черный с полной непрозрачностью
@@ -106,33 +127,28 @@ public class GpuMmioDevice implements IMemoryMappedDevice, ITickable {
     
     @Override
     public void write(int offset, byte value) {
-        // 1. Запись в VRAM (Пиксели)
         if (offset < registersOffset) {
             int idx = offset / 4;
             int shift = (offset % 4) * 8;
             if (idx >= 0 && idx < vram.length) {
                 int mask = ~(0xFF << shift);
                 vram[idx] = (vram[idx] & mask) | ((value & 0xFF) << shift);
-                // Помечаем VRAM как измененный
                 vramDirty = true;
-                // Помечаем экран как dirty при изменении VRAM
-                screenState.markDirty();
+                // ВНИМАНИЕ: Здесь мы не вызываем syncToScreenState(), это слишком медленно.
+                // Синхронизация произойдет в методе tick().
             }
             return;
         }
-        
-        // 2. Запись в Регистры
+
         int localOffset = offset - registersOffset;
         int regIdx = localOffset / 4;
-        
+
         if (regIdx >= mmioRegisters.length) return;
-        
-        // Накапливаем байты в int регистре
+
         int shift = (offset % 4) * 8;
         int mask = ~(0xFF << shift);
         mmioRegisters[regIdx] = (mmioRegisters[regIdx] & mask) | ((value & 0xFF) << shift);
-        
-        // Триггер команды при записи в REG_CMD (когда записан последний байт)
+
         if (localOffset >= REG_CMD && localOffset < REG_CMD + 4 && (offset % 4 == 3)) {
             tryExecuteCommand();
         }
@@ -169,27 +185,23 @@ public class GpuMmioDevice implements IMemoryMappedDevice, ITickable {
             int idx = offset >> 2;
             if (idx >= 0 && idx < vram.length) {
                 vram[idx] = value;
-                // Помечаем VRAM как измененный
-                vramDirty = true;
-                // Помечаем экран как dirty
-                screenState.markDirty();
+                vramDirty = true; // Помечаем, что были изменения
             }
             return;
         }
-        
-        // Запись в регистры MMIO
+
         int localOffset = offset - registersOffset;
         int regIdx = localOffset >> 2;
-        
+
         if (regIdx >= 0 && regIdx < mmioRegisters.length) {
             mmioRegisters[regIdx] = value;
-            // Триггер команды при записи в REG_CMD
             if (localOffset == REG_CMD) {
                 tryExecuteCommand();
             }
         }
     }
-    
+
+
     private void tryExecuteCommand() {
         if (status != 0) {
             LoraCoreMod.LOGGER.warn("[GPU] WARN: Command dropped, GPU Busy!");
@@ -222,9 +234,8 @@ public class GpuMmioDevice implements IMemoryMappedDevice, ITickable {
                 return; // Неизвестная команда
         }
         
-        // Вычисляем, сколько тиков займет операция (упрощенная модель: 128 пикселей за такт)
         if (pixels > 0) {
-            cyclesRemaining = pixels / 128;
+            cyclesRemaining = pixels / pixelsPerCycle;
             if (cyclesRemaining < 1) cyclesRemaining = 1; // Минимум 1 такт
             
             status = 1; // BUSY
@@ -237,15 +248,25 @@ public class GpuMmioDevice implements IMemoryMappedDevice, ITickable {
     
     @Override
     public void tick(long cycles) {
+        // === ИСПРАВЛЕНИЕ: Периодическая синхронизация VRAM ===
+        // Это позволяет увидеть результат прямой записи в память (BIOS)
+        scanoutTimer += cycles;
+        if (scanoutTimer >= SCANOUT_INTERVAL) {
+            if (vramDirty) {
+                syncToScreenState();
+            }
+            scanoutTimer = 0;
+        }
+        // =====================================================
+
         if (status == 0) return;
-        
+
         cyclesRemaining -= cycles;
-        
+
         if (cyclesRemaining <= 0) {
-            // Работа завершена
             finishCommand();
-            status = 0; // READY
-            mmioRegisters[0] = 0; // Sync register array
+            status = 0;
+            mmioRegisters[0] = 0;
             cyclesRemaining = 0;
         }
     }
@@ -253,12 +274,12 @@ public class GpuMmioDevice implements IMemoryMappedDevice, ITickable {
     private void finishCommand() {
         switch (currentCmd) {
             case CMD_CLEAR:
-                Arrays.fill(vram, rColor);
+                Arrays.fill(vram, convertColor(rColor));
                 vramDirty = true; // Помечаем как измененный
                 break;
             
             case CMD_FILL_RECT:
-                fillRect(rX, rY, rW, rH, rColor);
+                fillRect(rX, rY, rW, rH, convertColor(rColor));
                 vramDirty = true; // Помечаем как измененный
                 break;
             
@@ -287,6 +308,30 @@ public class GpuMmioDevice implements IMemoryMappedDevice, ITickable {
         }
     }
     
+    private int convertColor(int color) {
+        if (tier == GpuTier.TIER3) {
+            return color;
+        }
+        int a = (color >> 24) & 0xFF;
+        int r = (color >> 16) & 0xFF;
+        int g = (color >> 8) & 0xFF;
+        int b = color & 0xFF;
+        if (tier == GpuTier.TIER1) {
+            int lum = (r + g + b) / 3;
+            int v = lum < 128 ? 0 : 255;
+            int rgb = (v << 16) | (v << 8) | v;
+            return (a << 24) | rgb;
+        }
+        int r3 = (r >> 5) & 0x07;
+        int g3 = (g >> 5) & 0x07;
+        int b2 = (b >> 6) & 0x03;
+        int rr = (r3 * 255) / 7;
+        int gg = (g3 * 255) / 7;
+        int bb = (b2 * 255) / 3;
+        int rgb = (rr << 16) | (gg << 8) | bb;
+        return (a << 24) | rgb;
+    }
+    
     // Флаг для отслеживания изменений VRAM
     private boolean vramDirty = true;
     private int[] lastVramSnapshot = null;
@@ -298,54 +343,33 @@ public class GpuMmioDevice implements IMemoryMappedDevice, ITickable {
     private void syncToScreenState() {
         byte[] pixelBuffer = screenState.getPixelBuffer();
         if (pixelBuffer == null) return;
-        
-        // Проверяем, изменился ли VRAM (оптимизация)
-        if (!vramDirty && lastVramSnapshot != null) {
-            // Быстрая проверка: сравниваем только первые и последние элементы
-            if (vram.length > 0 && lastVramSnapshot.length == vram.length) {
-                if (vram[0] == lastVramSnapshot[0] && 
-                    vram[vram.length - 1] == lastVramSnapshot[vram.length - 1]) {
-                    // Вероятно, ничего не изменилось, но для надежности делаем полную проверку
-                    boolean changed = false;
-                    for (int i = 0; i < Math.min(100, vram.length); i++) {
-                        if (vram[i] != lastVramSnapshot[i]) {
-                            changed = true;
-                            break;
-                        }
-                    }
-                    if (!changed) {
-                        return; // Ничего не изменилось, пропускаем синхронизацию
-                    }
-                }
+
+        // Преобразуем int[] VRAM (ARGB/RGBA) в byte[] (RGBA для OpenGL)
+        // Используем 480x270 для экономии трафика (даунскейл), или полный размер
+        // Сейчас передаем ПОЛНЫЙ буфер 960x540, так как ServerScreenState инициализирован на 480x270 по умолчанию.
+        // !!! ВАЖНО: ServerScreenState должен быть инициализирован с правильным размером или мы должны даунскейлить.
+        // VirtualMachineManager создает ScreenState с ServerFont.SCREEN_WIDTH (480).
+        // Поэтому здесь делаем простой даунскейлинг (берем каждый второй пиксель), чтобы влезть в пакет.
+
+        int targetW = 480;
+        int targetH = 270;
+
+        for (int y = 0; y < targetH; y++) {
+            for (int x = 0; x < targetW; x++) {
+                // Берем пиксель из VRAM (координаты * 2)
+                int vramPixel = vram[(y * 2) * SCREEN_WIDTH + (x * 2)];
+
+                int idx = (y * targetW + x) * 4;
+                pixelBuffer[idx] = (byte) ((vramPixel >> 16) & 0xFF);     // R
+                pixelBuffer[idx + 1] = (byte) ((vramPixel >> 8) & 0xFF);  // G
+                pixelBuffer[idx + 2] = (byte) (vramPixel & 0xFF);         // B
+                pixelBuffer[idx + 3] = (byte) ((vramPixel >> 24) & 0xFF); // A
             }
         }
-        
-        // Конвертируем int[] vram в byte[] pixelBuffer (RGBA)
-        // Оптимизация: используем прямой доступ к массиву без проверок в цикле
-        int maxPixels = Math.min(vram.length, pixelBuffer.length / 4);
-        for (int i = 0; i < maxPixels; i++) {
-            int pixel = vram[i];
-            int idx = i * 4;
-            pixelBuffer[idx] = (byte) ((pixel >> 16) & 0xFF);     // R
-            pixelBuffer[idx + 1] = (byte) ((pixel >> 8) & 0xFF);  // G
-            pixelBuffer[idx + 2] = (byte) (pixel & 0xFF);        // B
-            pixelBuffer[idx + 3] = (byte) ((pixel >> 24) & 0xFF); // A
-        }
-        
-        // Сохраняем снимок для следующей проверки
-        if (lastVramSnapshot == null || lastVramSnapshot.length != vram.length) {
-            lastVramSnapshot = new int[vram.length];
-        }
-        System.arraycopy(vram, 0, lastVramSnapshot, 0, vram.length);
-        
+
         vramDirty = false;
         screenState.markDirty();
     }
-    
-    /**
-     * Прямой доступ к VRAM (для отладки).
-     */
-    public int[] getVram() {
-        return vram;
-    }
+
+    public int[] getVram() { return vram; }
 }

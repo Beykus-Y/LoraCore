@@ -4,7 +4,6 @@ package com.loracore.computer;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import com.loracore.LoraCoreMod;
-import org.luaj.vm2.LuaValue;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -153,10 +152,10 @@ public class ImageVfs implements IFileSystem {
     }
 
     @Override
-    public String list(String path) {
+    public java.util.List<String> list(String path) {
         // ✅ ИСПРАВЛЕНИЕ: Если запрашиваем корень, возвращаем список разделов.
         if (path.equals("/")) {
-            return GSON.toJson(new ArrayList<>(partitions.keySet()));
+            return new ArrayList<>(partitions.keySet());
         }
 
         String resolvedPrefix = resolvePath(path);
@@ -166,32 +165,28 @@ public class ImageVfs implements IFileSystem {
             if(partitions.containsKey(potentialPartition)) {
                 resolvedPrefix = potentialPartition;
             } else {
-                return "[]"; // Неверный путь
+                return java.util.List.of(); // Неверный путь
             }
         }
 
         final String prefix = resolvedPrefix.endsWith("/") ? resolvedPrefix : resolvedPrefix + "/";
 
-        List<String> entries = fileContent.keySet().stream()
+        java.util.List<String> entries = fileContent.keySet().stream()
                 .filter(k -> k.startsWith(prefix))
                 .map(k -> k.substring(prefix.length()).split("/")[0]) // Получаем только следующую часть пути
                 .filter(s -> !s.isEmpty())
                 .distinct()
                 .collect(Collectors.toList());
 
-        return GSON.toJson(entries);
+        return entries;
     }
 
     // ----- Остальные методы (read, write, etc.) остаются без изменений -----
 
     @Override
-    public LuaValue read(String path) {
-        try {
-            byte[] bytes = readBytes(path);
-            return bytes != null ? LuaValue.valueOf(new String(bytes, StandardCharsets.UTF_8)) : LuaValue.NIL;
-        } catch (IOException e) {
-            return LuaValue.NIL;
-        }
+    public String read(String path) throws IOException {
+        byte[] bytes = readBytes(path);
+        return bytes != null ? new String(bytes, StandardCharsets.UTF_8) : null;
     }
 
     @Override

@@ -21,22 +21,22 @@ public interface IMemoryMappedDevice {
     void write(int offset, byte value);
 
     /**
-     * Чтение 32-битного целого числа (little-endian).
+     * Чтение 32-битного целого числа (LITTLE-ENDIAN).
      */
     default int readInt(int offset) {
-        return ((read(offset) & 0xFF) |
+        return (read(offset) & 0xFF) |
                 ((read(offset + 1) & 0xFF) << 8) |
                 ((read(offset + 2) & 0xFF) << 16) |
-                ((read(offset + 3) & 0xFF) << 24));
+                ((read(offset + 3) & 0xFF) << 24);
     }
 
     /**
-     * Запись 32-битного целого числа (little-endian).
+     * Запись 32-битного целого числа (LITTLE-ENDIAN).
      */
     default void writeInt(int offset, int value) {
-        write(offset, (byte)(value & 0xFF));
-        write(offset + 1, (byte)((value >> 8) & 0xFF));
-        write(offset + 2, (byte)((value >> 16) & 0xFF));
-        write(offset + 3, (byte)((value >> 24) & 0xFF));
+        write(offset,     (byte) (value & 0xFF));
+        write(offset + 1, (byte) ((value >>> 8) & 0xFF));
+        write(offset + 2, (byte) ((value >>> 16) & 0xFF));
+        write(offset + 3, (byte) ((value >>> 24) & 0xFF));
     }
 }

@@ -70,8 +70,6 @@ dependencies {
 	modImplementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.9.22"
 	include          "org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.9.22"
 
-	implementation 'org.luaj:luaj-jse:3.0' // Или более новая версия, если доступна
-	include 'org.luaj:luaj-jse:3.0' // Включаем в jar мода
 
 	implementation "org.apache.commons:commons-compress:1.26.2"
 	include "org.apache.commons:commons-compress:1.26.2"
@@ -88,6 +86,8 @@ dependencies {
 
 	implementation "org.lwjgl:lwjgl-stb:${project.lwjgl_version}"
 	implementation "org.lwjgl:lwjgl-stb:${project.lwjgl_version}:${project.lwjgl_natives}"
+
+	testImplementation 'junit:junit:4.13.2'
 }
 
 processResources {
@@ -148,19 +148,4 @@ publishing {
 		// The repositories here will be used for publishing your artifact, not for
 		// retrieving dependencies.
 	}
-}
-subprojects {
-    // Отключаем генерацию исходников Minecraft для подпроектов,
-    // чтобы они не пытались одновременно писать в один и тот же файл кэша
-    tasks.configureEach {
-        if (name == "genSources" || name == "genSourcesWithVineflower" || name == "genSourcesWithCfr") {
-            enabled = false
-        }
-
-        // Отключаем запуск клиента и сервера для подпроектов,
-        // так как они не являются самостоятельными модами
-        if (name == "runClient" || name == "runServer") {
-            enabled = false
-        }
-    }
 }

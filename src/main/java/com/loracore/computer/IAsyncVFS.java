@@ -1,18 +1,15 @@
-// Новый файл: src/main/java/com/loracore/computer/IAsyncVFS.java
 package com.loracore.computer;
 
-import org.luaj.vm2.LuaValue;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
-/**
- * Асинхронный интерфейс для VFS, который может быть реализован на клиенте.
- * Находится в общем коде, чтобы VirtualMachine могла с ним работать.
- */
 public interface IAsyncVFS {
-    CompletableFuture<LuaValue> existsAsync(String path);
-    CompletableFuture<LuaValue> readAsync(String path);
-    CompletableFuture<LuaValue> isDirectoryAsync(String path);
-    CompletableFuture<LuaValue> listAsync(String path);
-    CompletableFuture<LuaValue> makeDirAsync(String path);
-    CompletableFuture<LuaValue> writeAsync(String path, String content);
+    CompletableFuture<Boolean> existsAsync(String path);
+    CompletableFuture<String> readAsync(String path);
+    CompletableFuture<Boolean> isDirectoryAsync(String path);
+    CompletableFuture<List<String>> listAsync(String path);
+    CompletableFuture<Boolean> makeDirAsync(String path);
+    CompletableFuture<Boolean> writeAsync(String path, String content);
+    CompletableFuture<Boolean> deleteAsync(String path);
+    CompletableFuture<String> readBytesAsync(String path);
 }

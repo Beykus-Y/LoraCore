@@ -199,21 +199,17 @@ public class SystemBus {
      * Оптимизированное чтение int (little-endian).
      */
     public int readInt(int address) {
-        // Проверка границ
         if (address < 0 || address > MAX_ADDRESS - 3) {
             throw new HardwareInterruptException(String.format(
                     "Memory access violation: address 0x%06X out of bounds", address));
         }
 
         int seg = address >>> SEGMENT_SHIFT;
-        if (seg >= SEGMENT_COUNT) {
-            return 0;
-        }
+        if (seg >= SEGMENT_COUNT) return 0;
 
-        // Ищем устройство
         IMemoryMappedDevice[] segDevices = segments[seg];
         int segSize = segmentSizes[seg];
-        
+
         for (int i = 0; i < segSize; i++) {
             IMemoryMappedDevice device = segDevices[i];
             for (int j = 0; j < deviceCount; j++) {
@@ -222,15 +218,14 @@ public class SystemBus {
                     int offset = address - md.baseAddress;
                     int size = md.device.getSize();
 
-                    // Если int пересекает границу устройства - читаем побайтово
+                    // Если пересекает границу - читаем побайтово LITTLE ENDIAN
                     if (offset < 0 || offset + 3 >= size) {
-                        return ((readByte(address) & 0xFF) |
+                        return (readByte(address) & 0xFF) |
                                 ((readByte(address + 1) & 0xFF) << 8) |
                                 ((readByte(address + 2) & 0xFF) << 16) |
-                                ((readByte(address + 3) & 0xFF) << 24));
+                                ((readByte(address + 3) & 0xFF) << 24);
                     }
 
-                    // Иначе вызываем readInt самого устройства
                     return device.readInt(offset);
                 }
             }
@@ -242,21 +237,17 @@ public class SystemBus {
      * Оптимизированная запись int (little-endian).
      */
     public void writeInt(int address, int value) {
-        // Проверка границ
         if (address < 0 || address > MAX_ADDRESS - 3) {
             throw new HardwareInterruptException(String.format(
                     "Memory access violation: address 0x%06X out of bounds", address));
         }
 
         int seg = address >>> SEGMENT_SHIFT;
-        if (seg >= SEGMENT_COUNT) {
-            return;
-        }
+        if (seg >= SEGMENT_COUNT) return;
 
-        // Ищем устройство
         IMemoryMappedDevice[] segDevices = segments[seg];
         int segSize = segmentSizes[seg];
-        
+
         for (int i = 0; i < segSize; i++) {
             IMemoryMappedDevice device = segDevices[i];
             for (int j = 0; j < deviceCount; j++) {
@@ -265,12 +256,12 @@ public class SystemBus {
                     int offset = address - md.baseAddress;
                     int size = md.device.getSize();
 
-                    // Граничные условия
+                    // Если пересекает границу - пишем побайтово LITTLE ENDIAN
                     if (offset < 0 || offset + 3 >= size) {
-                        writeByte(address, (byte) (value & 0xFF));
-                        writeByte(address + 1, (byte) ((value >> 8) & 0xFF));
-                        writeByte(address + 2, (byte) ((value >> 16) & 0xFF));
-                        writeByte(address + 3, (byte) ((value >> 24) & 0xFF));
+                        writeByte(address,     (byte) (value & 0xFF));
+                        writeByte(address + 1, (byte) ((value >>> 8) & 0xFF));
+                        writeByte(address + 2, (byte) ((value >>> 16) & 0xFF));
+                        writeByte(address + 3, (byte) ((value >>> 24) & 0xFF));
                         return;
                     }
 

@@ -5,7 +5,6 @@ import com.google.gson.Gson;
 import com.loracore.LoraCoreMod;
 import net.minecraft.resource.ResourceManager;
 import net.minecraft.util.Identifier;
-import org.luaj.vm2.LuaValue;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -39,29 +38,18 @@ public class ResourceVFS implements IFileSystem {
     }
 
     @Override
-    public LuaValue read(String path) {
-        try {
-            byte[] bytes = readBytes(path);
-            if (bytes != null) {
-                return LuaValue.valueOf(new String(bytes, StandardCharsets.UTF_8));
-            }
-        } catch (IOException e) {
-            // Ошибка уже залогирована в readBytes
-        }
-        return LuaValue.NIL;
+    public String read(String path) throws IOException {
+        byte[] bytes = readBytes(path);
+        return bytes != null ? new String(bytes, StandardCharsets.UTF_8) : null;
     }
 
     @Override
-    public String list(String path) {
-        try {
-            return GSON.toJson(resourceManager.findResources(resourceRoot + path, p -> true)
-                    .keySet()
-                    .stream()
-                    .map(id -> id.getPath().substring(id.getPath().lastIndexOf('/') + 1))
-                    .collect(Collectors.toList()));
-        } catch(Exception e) {
-            return null;
-        }
+    public java.util.List<String> list(String path) throws IOException {
+        return resourceManager.findResources(resourceRoot + path, p -> true)
+                .keySet()
+                .stream()
+                .map(id -> id.getPath().substring(id.getPath().lastIndexOf('/') + 1))
+                .collect(Collectors.toList());
     }
 
     // --- НОВЫЕ МЕТОДЫ-ЗАГЛУШКИ ДЛЯ READ-ONLY СИСТЕМЫ ---

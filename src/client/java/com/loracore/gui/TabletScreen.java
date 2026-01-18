@@ -4,7 +4,6 @@ package com.loracore.gui;
 import com.loracore.LoraCoreClient;
 import com.loracore.LoraCoreMod;
 import com.loracore.computer.IRuntimeEnvironment;
-import com.loracore.computer.jkernel.JavaRuntime;
 import com.loracore.network.input.CharTypedC2SPacket;
 import com.loracore.network.input.KeyPressedC2SPacket;
 import com.loracore.network.input.MouseClickedC2SPacket;
@@ -61,9 +60,7 @@ public class TabletScreen extends Screen {
         this.screenTexture = new NativeImageBackedTexture(this.screenImage);
         this.client.getTextureManager().registerTexture(this.screenTextureId, this.screenTexture);
 
-        if (this.clientRuntime instanceof JavaRuntime javaRuntime) {
-            javaRuntime.reinitializeGraphics(this.screenImage);
-        }
+        // Клиентское Java-ядро удалено; рендеринг выполняется сервером через VRAM
     }
 
     public void onScreenUpdate(byte[] pixelBuffer) {
@@ -193,14 +190,7 @@ public class TabletScreen extends Screen {
     }
 
     public void switchToClientKernel(String kernelPath) {
-        if (clientRuntime != null) {
-            clientRuntime.shutdown();
-        }
-        LoraCoreClient.LOGGER.info("Переключение на клиентское ядро. Путь: {}", kernelPath);
-        com.loracore.computer.ClientVFS vfs = com.loracore.computer.ClientVFS.getInstance(this.fileSystemUuid);
-        boolean isOwner = true;
-        clientRuntime = new JavaRuntime(vfs, this.tabletUuid, this.screenImage, isOwner, this);
-        clientRuntime.boot(kernelPath);
+        LoraCoreClient.LOGGER.info("Запрос на переключение на клиентское ядро проигнорирован: режим Java-ядра удален");
     }
 
     @Override
@@ -242,17 +232,9 @@ public class TabletScreen extends Screen {
         }
     }
 
-    public void onDeviceResult(int requestId, boolean success, Object[] result) {
-        if (clientRuntime instanceof JavaRuntime javaRuntime) {
-            javaRuntime.getKernelManager().onDeviceResult(requestId, success, result);
-        }
-    }
+    public void onDeviceResult(int requestId, boolean success, Object[] result) { }
 
-    public void updateMetrics(double cpuLoad, double ramUsedKb, double ramTotalKb, int diskQueue, String tabletUuidStr, String fsUuidStr) {
-        if (clientRuntime instanceof JavaRuntime javaRuntime) {
-            javaRuntime.getKernelManager().updateMetrics(cpuLoad, ramUsedKb, ramTotalKb, diskQueue, tabletUuidStr, fsUuidStr);
-        }
-    }
+    public void updateMetrics(double cpuLoad, double ramUsedKb, double ramTotalKb, int diskQueue, long uptimeSeconds, String tabletUuidStr, String fsUuidStr) { }
 
     @Override public boolean shouldPause() { return false; }
 }

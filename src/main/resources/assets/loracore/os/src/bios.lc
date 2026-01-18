@@ -1,0 +1,160 @@
+const PNP_BASE   = 0xFFF000;
+const GPU_TYPE   = 2;
+const STRIDE     = 3840;
+const BG_COLOR   = 0xFF081030;
+const FG_COLOR   = 0xFFFFFFFF;
+
+const FONT_DATA  = 0x2000;
+const G_VRAM     = 0x0500;
+const G_ADDR_RES = 0x0504;
+
+fn main() {
+    init_fonts();
+
+    let pnp = PNP_BASE;
+    let count = mem[pnp + 4];
+    let current = pnp + 8;
+
+    let vram_base = 0;
+    let vram_size = 0;
+
+    while (count > 0) {
+        let type = mem[current];
+        if (type == GPU_TYPE) {
+            vram_base = mem[current + 4];
+            vram_size = mem[current + 8];
+            break;
+        }
+        current = current + 16;
+        count = count - 1;
+    }
+
+    if (vram_base == 0) {
+        halt;
+    }
+
+    mem[G_VRAM] = vram_base;
+
+    // Очистка экрана
+    let offset = 0;
+    while (offset < vram_size) {
+        let target = vram_base + offset;
+        mem[target] = BG_COLOR;
+        offset = offset + 4;
+    }
+
+    // Рендеринг букв (X, Y, Offset в таблице шрифтов)
+    // 7 строк по 4 байта = 28 байт на символ
+    plot_char(380, 240, 0);
+    plot_char(430, 240, 28);
+    plot_char(480, 240, 56);
+    plot_char(530, 240, 84);
+
+    halt;
+}
+
+fn plot_char(x, y, offset_f) {
+    let line_idx = 0;
+    while (line_idx < 7) {
+        let addr_in_font = FONT_DATA + offset_f;
+        let line_off = line_idx + line_idx;
+        line_off = line_off + line_off;
+
+        let pattern = mem[addr_in_font + line_off];
+
+        let bit_idx = 0;
+        while (bit_idx < 8) {
+            let draw = 0;
+            if (pattern > 127) {
+                draw = 1;
+                pattern = pattern - 128;
+            }
+            pattern = pattern + pattern;
+
+            if (draw == 1) {
+                let block_x = bit_idx + bit_idx;
+                block_x = block_x + block_x;
+                block_x = block_x + x;
+
+                let block_y = line_idx + line_idx;
+                block_y = block_y + block_y;
+                block_y = block_y + y;
+
+                draw_4x4(block_x, block_y);
+            }
+            bit_idx = bit_idx + 1;
+        }
+        line_idx = line_idx + 1;
+    }
+}
+
+fn draw_4x4(bx, by) {
+    let vbase = mem[G_VRAM];
+
+    let off_x = bx + bx;
+    off_x = off_x + off_x;
+
+    let off_y = 0;
+    let i = 0;
+    while (i < by) {
+        off_y = off_y + 3840;
+        i = i + 1;
+    }
+
+    let start_addr = vbase + off_y;
+    start_addr = start_addr + off_x;
+
+    let row = 0;
+    while (row < 4) {
+        // Каждая запись строго на отдельной строке
+        mem[start_addr] = FG_COLOR;
+        mem[start_addr + 4] = FG_COLOR;
+        mem[start_addr + 8] = FG_COLOR;
+        mem[start_addr + 12] = FG_COLOR;
+
+        start_addr = start_addr + 3840;
+        row = row + 1;
+    }
+}
+
+fn init_fonts() {
+    let b = FONT_DATA;
+    // Буква L
+    mem[b + 0] = 0x80;
+    mem[b + 4] = 0x80;
+    mem[b + 8] = 0x80;
+    mem[b + 12] = 0x80;
+    mem[b + 16] = 0x80;
+    mem[b + 20] = 0x80;
+    mem[b + 24] = 0xFC;
+
+    // Буква O
+    b = b + 28;
+    mem[b + 0] = 0x7C;
+    mem[b + 4] = 0x82;
+    mem[b + 8] = 0x82;
+    mem[b + 12] = 0x82;
+    mem[b + 16] = 0x82;
+    mem[b + 20] = 0x82;
+    mem[b + 24] = 0x7C;
+
+    // Буква R
+    b = b + 28;
+    mem[b + 0] = 0xFC;
+    mem[b + 4] = 0x82;
+    mem[b + 8] = 0x82;
+    mem[b + 12] = 0xFC;
+    mem[b + 16] = 0x90;
+    mem[b + 20] = 0x88;
+    mem[b + 24] = 0x84;
+
+    // Буква A
+    b = b + 28;
+    mem[b + 0] = 0x10;
+    mem[b + 4] = 0x28;
+    mem[b + 8] = 0x44;
+    mem[b + 12] = 0x44;
+    mem[b + 16] = 0x7C;
+    mem[b + 20] = 0x44;
+    mem[b + 24] = 0x44;
+}

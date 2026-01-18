@@ -27,6 +27,7 @@ public class VirtualCpu {
 
     private final SystemBus bus;
     private final GenericRam systemRam; // Прямая ссылка на RAM для performBitFlip
+    private final int cpuId;
 
     private static final int FLAG_ZERO = 1;
     private static final int FLAG_NEGATIVE = 2;
@@ -42,6 +43,15 @@ public class VirtualCpu {
         this.voltageMV = (int)(config.voltage * 1000);
         this.freqHz = (int)config.targetFreq;
         this.stabilityLimit = (int)config.stabilityLimit;
+        int derivedId = (int)(seed ^ (seed >>> 32));
+        if (derivedId == 0) {
+            derivedId = 1;
+        }
+        this.cpuId = derivedId;
+    }
+
+    public int getCpuId() {
+        return cpuId;
     }
 
     /**
@@ -159,8 +169,8 @@ public class VirtualCpu {
             case InstructionSet.OP_GET_CLOCK -> registers[rD] = freqHz;
 
             default ->{
-                LoraCoreMod.LOGGER.warn("[CPU FAULT] Unknown Opcode: 0x{:02X} at PC: 0x{:04X} (Instr: 0x{:08X})",
-                        opcode, currentPc, instr);
+                LoraCoreMod.LOGGER.warn(String.format("[CPU FAULT] Unknown Opcode: 0x%02X at PC: 0x%04X (Instr: 0x%08X)",
+                        opcode, currentPc, instr));
                 errorCount++;
             }
         }

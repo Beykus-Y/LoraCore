@@ -2,7 +2,6 @@ package com.loracore.computer;
 
 import com.google.gson.Gson;
 import com.loracore.LoraCoreMod;
-import org.luaj.vm2.LuaValue;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -60,16 +59,12 @@ public class WorldStorageVFS implements IFileSystem {
     }
 
     @Override
-    public LuaValue read(String path) {
-        try {
-            Path target = getValidatedPath(path);
-            if (!Files.exists(target) || Files.isDirectory(target)) {
-                return LuaValue.NIL;
-            }
-            return LuaValue.valueOf(Files.readString(target, StandardCharsets.UTF_8));
-        } catch (IOException e) {
-            return LuaValue.NIL;
+    public String read(String path) throws IOException {
+        Path target = getValidatedPath(path);
+        if (!Files.exists(target) || Files.isDirectory(target)) {
+            return null;
         }
+        return Files.readString(target, StandardCharsets.UTF_8);
     }
 
     @Override
@@ -109,12 +104,9 @@ public class WorldStorageVFS implements IFileSystem {
     }
 
     @Override
-    public String list(String path) {
+    public java.util.List<String> list(String path) throws IOException {
         try (Stream<Path> stream = Files.list(getValidatedPath(path))) {
-            List<String> fileNames = stream.map(p -> p.getFileName().toString()).collect(Collectors.toList());
-            return GSON.toJson(fileNames);
-        } catch (IOException e) {
-            return null;
+            return stream.map(p -> p.getFileName().toString()).collect(Collectors.toList());
         }
     }
 

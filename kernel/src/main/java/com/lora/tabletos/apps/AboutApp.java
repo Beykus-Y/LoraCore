@@ -11,7 +11,6 @@ import com.lora.tabletos.core.IApplicationApi;
 public class AboutApp implements IApplication {
     
     private IApplicationApi api;
-    private double uptime = 0.0;
     private String tabletUuid = "Loading...";
     private String fsUuid = "Loading...";
     
@@ -23,7 +22,6 @@ public class AboutApp implements IApplication {
     
     @Override
     public void onResume() {
-        // Обновляем uptime в onRender
     }
     
     @Override
@@ -55,7 +53,6 @@ public class AboutApp implements IApplication {
         this.tabletUuid = api.getTabletUuidStr();
         this.fsUuid = api.getFsUuidStr();
         
-        // Отображаем информацию
         g.drawString("Tablet UUID:", 40, infoY, 0xFFCCCCCC);
         g.drawString(this.tabletUuid, 200, infoY, 0xFFFFFFFF);
         
@@ -65,12 +62,11 @@ public class AboutApp implements IApplication {
         
         infoY += lineHeight + 20;
         
-        // Kernel uptime (используем метрики системы для получения uptime)
-        // Пока используем простой счетчик
-        uptime += delta;
-        int hours = (int)(uptime / 3600);
-        int minutes = (int)((uptime % 3600) / 60);
-        int seconds = (int)(uptime % 60);
+        double uptimeSeconds = api.getSystemMetrics().getOrDefault("uptime", 0.0);
+        long uptimeLong = (long) uptimeSeconds;
+        int hours = (int)(uptimeLong / 3600);
+        int minutes = (int)((uptimeLong % 3600) / 60);
+        int seconds = (int)(uptimeLong % 60);
         String uptimeStr = String.format("%02d:%02d:%02d", hours, minutes, seconds);
         
         g.drawString("Kernel Uptime:", 40, infoY, 0xFFCCCCCC);

@@ -1,18 +1,16 @@
 package com.loracore.computer;
 
-import org.luaj.vm2.LuaValue;
-
 import java.io.IOException;
+import java.util.List;
 
-// Общий интерфейс для всех наших виртуальных файловых систем
 public interface IFileSystem {
     boolean exists(String path);
     boolean isDirectory(String path);
-    LuaValue read(String path);
-    boolean write(String path, String content);
-    boolean makeDir(String path);
-    String list(String path);
-    boolean delete(String path);
+    String read(String path) throws IOException;
+    boolean write(String path, String content) throws IOException;
+    boolean makeDir(String path) throws IOException;
+    List<String> list(String path) throws IOException;
+    boolean delete(String path) throws IOException;
     byte[] readBytes(String path) throws IOException;
-    boolean writeBytes(String path, byte[] data);
+    boolean writeBytes(String path, byte[] data) throws IOException;
 }
