@@ -1,0 +1,44 @@
+import "sys/layout.lc";
+import "sys/memory_util.lc";
+
+fn vmm_init() {
+    let i = 0;
+    while (i < 1024) {
+        let offset = i * 4;
+        let addr = PAGE_DIR_ADDR + offset;
+        poke(addr, 0);
+        i = i + 1;
+    }
+    gpu_print(10, 56, "VMM: Table Zeroed", 0xFF00FF00);
+}
+
+fn vmm_map_page(v_addr, p_addr, flags) {
+    let idx = v_addr >> 12;
+    if (idx > 1023) { return 0; }
+
+    let p_base = p_addr & 0xFFFFF000;
+    let f = flags & 0xFFF;
+    let entry = p_base | f;
+
+    let offset = idx * 4;
+    let target = PAGE_DIR_ADDR + offset;
+    poke(target, entry);
+    return 1;
+}
+
+fn vmm_translate(v_addr) {
+    let idx = v_addr >> 12;
+    let offset = idx * 4;
+    let target = PAGE_DIR_ADDR + offset;
+    let entry = peek(target);
+
+    let present = entry & 1;
+    if (present == 0) {
+        return 0;
+    }
+
+    let p_base = entry & 0xFFFFF000;
+    let p_off = v_addr & 0xFFF;
+    let res = p_base + p_off;
+    return res;
+}

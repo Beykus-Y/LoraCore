@@ -20,6 +20,7 @@ public record SystemMetricsS2CPacket(
         double ramTotalKb,
         int diskQueue,
         long uptimeSeconds,
+        int currentPc,
         String tabletUuidStr,
         String fsUuidStr
 ) implements CustomPayload {
@@ -35,6 +36,7 @@ public record SystemMetricsS2CPacket(
                 buf.writeDouble(value.ramTotalKb());
                 buf.writeVarInt(value.diskQueue());
                 buf.writeVarLong(value.uptimeSeconds());
+                buf.writeVarInt(value.currentPc());
                 buf.writeString(value.tabletUuidStr());
                 buf.writeString(value.fsUuidStr());
             },
@@ -45,6 +47,7 @@ public record SystemMetricsS2CPacket(
                     buf.readDouble(),
                     buf.readVarInt(),
                     buf.readVarLong(),
+                    buf.readVarInt(),
                     buf.readString(),
                     buf.readString()
             )

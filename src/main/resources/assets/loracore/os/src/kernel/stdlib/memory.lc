@@ -1,0 +1,154 @@
+// === Memory Manager v2.0 ===
+// Features: Alignment, Coalescing, Magic Protection
+
+const HEAP_START = 0x100000;
+const HEAP_SIZE  = 0x100000;
+const NULL = 0;
+
+// Header Structure:
+// +0: Size (bytes)
+// +4: IsFree (1=Yes, 0=No)
+// +8: Next Pointer
+// +12: Magic Number (Canary)
+
+const OFF_SIZE  = 0;
+const OFF_FREE  = 4;
+const OFF_NEXT  = 8;
+const OFF_MAGIC = 12;
+
+const HEADER_SIZE = 16;
+const HEAP_MAGIC  = 0xCAFEBABE; // Магическое число для проверки целостности
+
+const VAR_HEAP_HEAD = 0x00F000; // Глобальный указатель на начало списка
+
+// --- Инициализация ---
+fn mm_init() {
+    let ptr = HEAP_START;
+
+    // Инициализируем первый большой свободный блок
+    mem[ptr + OFF_SIZE]  = HEAP_SIZE - HEADER_SIZE;
+    mem[ptr + OFF_FREE]  = 1;
+    mem[ptr + OFF_NEXT]  = NULL;
+    mem[ptr + OFF_MAGIC] = HEAP_MAGIC;
+
+    mem[VAR_HEAP_HEAD] = ptr;
+
+    gpu_print(10, 10, "MM: Heap Initialized", 0xFF00FF00);
+}
+
+// --- Выделение памяти ---
+fn malloc(size) {
+    if (size <= 0) { return NULL; }
+
+    // 1. Выравнивание (Alignment)
+    // Округляем size до ближайшего кратного 4
+    let rem = size % 4;
+    if (rem != 0) {
+        size = size + 4 - rem;
+    }
+
+    let curr = mem[VAR_HEAP_HEAD];
+
+    while (curr != NULL) {
+        let curr_size = mem[curr + OFF_SIZE];
+        let curr_free = mem[curr + OFF_FREE];
+
+        // Проверяем валидность заголовка (защита от переполнения буфера)
+        let magic = mem[curr + OFF_MAGIC];
+        if (magic != HEAP_MAGIC) {
+            gpu_print(10, 20, "MM PANIC: Heap corruption detected!", 0xFFFF0000);
+            halt;
+        }
+
+        if (curr_free == 1) {
+            if (curr_size >= size) {
+                // Подходящий блок найден
+
+                // Проверяем, нужно ли отрезать кусок (Split)
+                let space_needed = size + HEADER_SIZE + 4; // Данные + новый заголовок + мин. остаток
+
+                if (curr_size > space_needed) {
+                    // Разбиваем блок на два
+                    let new_block_ptr = curr + HEADER_SIZE + size;
+                    let new_block_size = curr_size - size - HEADER_SIZE;
+
+                    // Настраиваем новый свободный блок справа
+                    mem[new_block_ptr + OFF_SIZE]  = new_block_size;
+                    mem[new_block_ptr + OFF_FREE]  = 1;
+                    mem[new_block_ptr + OFF_NEXT]  = mem[curr + OFF_NEXT];
+                    mem[new_block_ptr + OFF_MAGIC] = HEAP_MAGIC;
+
+                    // Обновляем текущий блок
+                    mem[curr + OFF_SIZE] = size;
+                    mem[curr + OFF_NEXT] = new_block_ptr;
+                }
+
+                // Помечаем блок как занятый
+                mem[curr + OFF_FREE] = 0;
+
+                // Возвращаем указатель на данные
+                return curr + HEADER_SIZE;
+            }
+        }
+
+        curr = mem[curr + OFF_NEXT];
+    }
+
+    // Память закончилась
+    return NULL;
+}
+
+// --- Освобождение памяти ---
+fn free(ptr) {
+    if (ptr == NULL) { return; }
+
+    // Получаем адрес заголовка
+    let header_ptr = ptr - HEADER_SIZE;
+
+    // Проверяем канарейку (Magic Number)
+    let magic = mem[header_ptr + OFF_MAGIC];
+    if (magic != HEAP_MAGIC) {
+        gpu_print(10, 30, "MM ERROR: Invalid pointer in free()", 0xFFFF0000);
+        return;
+    }
+
+    // Помечаем как свободный
+    mem[header_ptr + OFF_FREE] = 1;
+
+    // --- Слияние (Coalescing) ---
+    // Пытаемся объединить этот блок со следующими, если они свободны
+
+    let next_block = mem[header_ptr + OFF_NEXT];
+
+    // Цикл нужен, чтобы склеить несколько пустых блоков подряд, если они есть
+    while (next_block != NULL) {
+        let next_magic = mem[next_block + OFF_MAGIC];
+        if (next_magic != HEAP_MAGIC) {
+             gpu_print(10, 40, "MM PANIC: Next block corrupted!", 0xFFFF0000);
+             halt;
+        }
+
+        let next_free = mem[next_block + OFF_FREE];
+
+        if (next_free == 1) {
+            // Следующий блок свободен -> СЛИВАЕМ
+            let my_size = mem[header_ptr + OFF_SIZE];
+            let next_size = mem[next_block + OFF_SIZE];
+
+            // Новый размер = мой размер + размер следующего + размер заголовка следующего
+            let new_size = my_size + next_size + HEADER_SIZE;
+
+            mem[header_ptr + OFF_SIZE] = new_size;
+
+            // Перекидываем указатель next через один блок
+            let next_next = mem[next_block + OFF_NEXT];
+            mem[header_ptr + OFF_NEXT] = next_next;
+
+            // Обновляем ссылку для следующей итерации цикла (вдруг следующий тоже свободен)
+            next_block = next_next;
+        } else {
+            // Следующий блок занят, слияние невозможно остановить
+            break;
+        }
+    }
+}

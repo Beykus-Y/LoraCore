@@ -2,6 +2,7 @@ package com.loracore.computer;
 
 import com.loracore.LoraCoreMod;
 
+import java.io.InputStream;
 import java.util.Arrays;
 
 /**
@@ -42,7 +43,12 @@ public class GpuMmioDevice implements IMemoryMappedDevice, ITickable {
     // Команды
     private static final int CMD_CLEAR     = 1;
     private static final int CMD_FILL_RECT = 2;
-    private static final int CMD_COPY_RECT = 3;
+    private static final int CMD_DRAW_CHAR = 3;
+
+
+
+    private final byte[] fontData = new byte[128 * 16]; // 128 символов * 16 байт
+    private static final int CHAR_HEIGHT = 16;
     
     // Внутреннее состояние GPU
     private int status = 0;       // 0 = Idle
@@ -81,9 +87,22 @@ public class GpuMmioDevice implements IMemoryMappedDevice, ITickable {
         
         // Инициализируем VRAM черным цветом
         Arrays.fill(vram, 0xFF000000); // RGBA: черный с полной непрозрачностью
-        
+        loadFont();
         // Синхронизируем с ServerScreenState
         syncToScreenState();
+    }
+
+    private void loadFont() {
+        try (InputStream is = getClass().getResourceAsStream("/assets/loracore/os/font.bin")) {
+            if (is != null) {
+                int read = is.read(fontData);
+                LoraCoreMod.LOGGER.info("GpuMmioDevice: Loaded hardware font ({} bytes)", read);
+            } else {
+                LoraCoreMod.LOGGER.warn("GpuMmioDevice: font.bin not found! Text rendering will fail.");
+            }
+        } catch (Exception e) {
+            LoraCoreMod.LOGGER.error("GpuMmioDevice: Failed to load font.bin", e);
+        }
     }
     
     @Override
@@ -169,8 +188,8 @@ public class GpuMmioDevice implements IMemoryMappedDevice, ITickable {
         int localOffset = offset - registersOffset;
         
         // --- Возвращаем параметры видеокарты ---
-        if (localOffset == REG_WIDTH) return SCREEN_WIDTH;
-        if (localOffset == REG_HEIGHT) return SCREEN_HEIGHT;
+        if (localOffset == REG_WIDTH) return 480;
+        if (localOffset == REG_HEIGHT) return 270;
         
         // REG_STATUS читается динамически
         if (localOffset == REG_STATUS) return status;
@@ -227,8 +246,8 @@ public class GpuMmioDevice implements IMemoryMappedDevice, ITickable {
                 if (rW <= 0 || rH <= 0) return;
                 pixels = rW * rH;
                 break;
-            case CMD_COPY_RECT:
-                pixels = rW * rH;
+            case CMD_DRAW_CHAR: // <--- Расчет стоимости для символа
+                pixels = 8 * CHAR_HEIGHT; // 8x16 пикселей
                 break;
             default:
                 return; // Неизвестная команда
@@ -244,6 +263,33 @@ public class GpuMmioDevice implements IMemoryMappedDevice, ITickable {
         
         LoraCoreMod.LOGGER.debug("[GPU] Executing CMD {} (X:{} Y:{} W:{} H:{} Color:0x{})",
                 currentCmd, rX, rY, rW, rH, String.format("%08X", rColor));
+    }
+
+    private void drawChar(int x, int y, int code, int color) {
+        if (code >= 128) return;
+        int fontOffset = code * CHAR_HEIGHT;
+
+        for (int row = 0; row < CHAR_HEIGHT; row++) {
+            // Умножаем координату Y на 2
+            int drawY = (y + row) * 2;
+            if (drawY >= SCREEN_HEIGHT - 1) break;
+
+            byte lineBits = fontData[fontOffset + row];
+
+            for (int col = 0; col < 8; col++) {
+                // Умножаем координату X на 2
+                int drawX = (x + col) * 2;
+                if (drawX >= SCREEN_WIDTH - 1) break;
+
+                if (((lineBits >> (7 - col)) & 1) != 0) {
+                    // Рисуем блок 2x2 пикселя в физическом буфере 960x540
+                    vram[drawY * SCREEN_WIDTH + drawX] = color;
+                    vram[drawY * SCREEN_WIDTH + (drawX + 1)] = color;
+                    vram[(drawY + 1) * SCREEN_WIDTH + drawX] = color;
+                    vram[(drawY + 1) * SCREEN_WIDTH + (drawX + 1)] = color;
+                }
+            }
+        }
     }
     
     @Override
@@ -282,20 +328,19 @@ public class GpuMmioDevice implements IMemoryMappedDevice, ITickable {
                 fillRect(rX, rY, rW, rH, convertColor(rColor));
                 vramDirty = true; // Помечаем как измененный
                 break;
-            
-            case CMD_COPY_RECT:
-                // TODO: Реализовать копирование прямоугольника
+
+            case CMD_DRAW_CHAR: // <--- Обработка новой команды
+                // rW используется как код символа (так же, как в Python регистр REG_ARG_2)
+                drawChar(rX, rY, rW & 0xFF, convertColor(rColor));
                 vramDirty = true;
                 break;
         }
-        
-        // Синхронизируем с ServerScreenState
         syncToScreenState();
     }
     
     private void fillRect(int x, int y, int w, int h, int color) {
-        int startX = Math.max(0, x);
-        int startY = Math.max(0, y);
+        int startX = Math.max(0, x * 2);
+        int startY = Math.max(0, y * 2);
         int endX = Math.min(SCREEN_WIDTH, x + w);
         int endY = Math.min(SCREEN_HEIGHT, y + h);
         

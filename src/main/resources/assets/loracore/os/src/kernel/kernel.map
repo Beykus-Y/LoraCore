@@ -1,0 +1,2133 @@
+0x2000 : JMP main
+0x2004 : LDI R0, 1024
+0x2008 : MOV R1, R0
+0x200C : LD R0, R1
+0x2010 : LDI R1, v_base_3
+0x2014 : ST R1, R0
+0x2018 : LUI R0, 7
+0x201C : ORI R0, 59648
+0x2020 : LDI R1, v_offset_4
+0x2024 : ST R1, R0
+0x2028 : LDI R2, v_base_3
+0x202C : LD R0, R2
+0x2030 : LDI R2, v_offset_4
+0x2034 : LD R1, R2
+0x2038 : ADD R0, R1
+0x203C : LDI R1, g_gpu_regs_ptr_1
+0x2040 : ST R1, R0
+0x2044 : RET
+0x2048 : LDI R12, arg_gpu_clear_color_2
+0x204C : ST R12, R0
+0x2050 : LDI R2, g_gpu_regs_ptr_1
+0x2054 : LD R0, R2
+0x2058 : LDI R1, v_regs_5
+0x205C : ST R1, R0
+0x2060 : LDI R2, arg_gpu_clear_color_2
+0x2064 : LD R0, R2
+0x2068 : PUSH R0
+0x206C : LDI R2, v_regs_5
+0x2070 : LD R0, R2
+0x2074 : LDI R1, 24
+0x2078 : ADD R0, R1
+0x207C : MOV R1, R0
+0x2080 : POP R0
+0x2084 : MOV R2, R0
+0x2088 : ST R1, R2
+0x208C : LDI R0, 1
+0x2090 : PUSH R0
+0x2094 : LDI R2, v_regs_5
+0x2098 : LD R0, R2
+0x209C : LDI R1, 4
+0x20A0 : ADD R0, R1
+0x20A4 : MOV R1, R0
+0x20A8 : POP R0
+0x20AC : MOV R2, R0
+0x20B0 : ST R1, R2
+0x20B4 : RET
+0x20B8 : LDI R12, arg_gpu_rect_x_3
+0x20BC : ST R12, R0
+0x20C0 : LDI R12, arg_gpu_rect_y_3
+0x20C4 : ST R12, R1
+0x20C8 : LDI R12, arg_gpu_rect_w_3
+0x20CC : ST R12, R2
+0x20D0 : LDI R12, arg_gpu_rect_h_3
+0x20D4 : ST R12, R3
+0x20D8 : LDI R12, arg_gpu_rect_color_3
+0x20DC : ST R12, R4
+0x20E0 : LDI R2, g_gpu_regs_ptr_1
+0x20E4 : LD R0, R2
+0x20E8 : LDI R1, v_regs_6
+0x20EC : ST R1, R0
+0x20F0 : LDI R2, arg_gpu_rect_x_3
+0x20F4 : LD R0, R2
+0x20F8 : PUSH R0
+0x20FC : LDI R2, v_regs_6
+0x2100 : LD R0, R2
+0x2104 : LDI R1, 8
+0x2108 : ADD R0, R1
+0x210C : MOV R1, R0
+0x2110 : POP R0
+0x2114 : MOV R2, R0
+0x2118 : ST R1, R2
+0x211C : LDI R2, arg_gpu_rect_y_3
+0x2120 : LD R0, R2
+0x2124 : PUSH R0
+0x2128 : LDI R2, v_regs_6
+0x212C : LD R0, R2
+0x2130 : LDI R1, 12
+0x2134 : ADD R0, R1
+0x2138 : MOV R1, R0
+0x213C : POP R0
+0x2140 : MOV R2, R0
+0x2144 : ST R1, R2
+0x2148 : LDI R2, arg_gpu_rect_w_3
+0x214C : LD R0, R2
+0x2150 : PUSH R0
+0x2154 : LDI R2, v_regs_6
+0x2158 : LD R0, R2
+0x215C : LDI R1, 16
+0x2160 : ADD R0, R1
+0x2164 : MOV R1, R0
+0x2168 : POP R0
+0x216C : MOV R2, R0
+0x2170 : ST R1, R2
+0x2174 : LDI R2, arg_gpu_rect_h_3
+0x2178 : LD R0, R2
+0x217C : PUSH R0
+0x2180 : LDI R2, v_regs_6
+0x2184 : LD R0, R2
+0x2188 : LDI R1, 20
+0x218C : ADD R0, R1
+0x2190 : MOV R1, R0
+0x2194 : POP R0
+0x2198 : MOV R2, R0
+0x219C : ST R1, R2
+0x21A0 : LDI R2, arg_gpu_rect_color_3
+0x21A4 : LD R0, R2
+0x21A8 : PUSH R0
+0x21AC : LDI R2, v_regs_6
+0x21B0 : LD R0, R2
+0x21B4 : LDI R1, 24
+0x21B8 : ADD R0, R1
+0x21BC : MOV R1, R0
+0x21C0 : POP R0
+0x21C4 : MOV R2, R0
+0x21C8 : ST R1, R2
+0x21CC : LDI R0, 2
+0x21D0 : PUSH R0
+0x21D4 : LDI R2, v_regs_6
+0x21D8 : LD R0, R2
+0x21DC : LDI R1, 4
+0x21E0 : ADD R0, R1
+0x21E4 : MOV R1, R0
+0x21E8 : POP R0
+0x21EC : MOV R2, R0
+0x21F0 : ST R1, R2
+0x21F4 : RET
+0x21F8 : LDI R12, arg_gpu_char_x_4
+0x21FC : ST R12, R0
+0x2200 : LDI R12, arg_gpu_char_y_4
+0x2204 : ST R12, R1
+0x2208 : LDI R12, arg_gpu_char_code_4
+0x220C : ST R12, R2
+0x2210 : LDI R12, arg_gpu_char_color_4
+0x2214 : ST R12, R3
+0x2218 : LDI R2, g_gpu_regs_ptr_1
+0x221C : LD R0, R2
+0x2220 : LDI R1, v_regs_7
+0x2224 : ST R1, R0
+0x2228 : LDI R2, arg_gpu_char_x_4
+0x222C : LD R0, R2
+0x2230 : PUSH R0
+0x2234 : LDI R2, v_regs_7
+0x2238 : LD R0, R2
+0x223C : LDI R1, 8
+0x2240 : ADD R0, R1
+0x2244 : MOV R1, R0
+0x2248 : POP R0
+0x224C : MOV R2, R0
+0x2250 : ST R1, R2
+0x2254 : LDI R2, arg_gpu_char_y_4
+0x2258 : LD R0, R2
+0x225C : PUSH R0
+0x2260 : LDI R2, v_regs_7
+0x2264 : LD R0, R2
+0x2268 : LDI R1, 12
+0x226C : ADD R0, R1
+0x2270 : MOV R1, R0
+0x2274 : POP R0
+0x2278 : MOV R2, R0
+0x227C : ST R1, R2
+0x2280 : LDI R2, arg_gpu_char_code_4
+0x2284 : LD R0, R2
+0x2288 : PUSH R0
+0x228C : LDI R2, v_regs_7
+0x2290 : LD R0, R2
+0x2294 : LDI R1, 16
+0x2298 : ADD R0, R1
+0x229C : MOV R1, R0
+0x22A0 : POP R0
+0x22A4 : MOV R2, R0
+0x22A8 : ST R1, R2
+0x22AC : LDI R2, arg_gpu_char_color_4
+0x22B0 : LD R0, R2
+0x22B4 : PUSH R0
+0x22B8 : LDI R2, v_regs_7
+0x22BC : LD R0, R2
+0x22C0 : LDI R1, 24
+0x22C4 : ADD R0, R1
+0x22C8 : MOV R1, R0
+0x22CC : POP R0
+0x22D0 : MOV R2, R0
+0x22D4 : ST R1, R2
+0x22D8 : LDI R0, 3
+0x22DC : PUSH R0
+0x22E0 : LDI R2, v_regs_7
+0x22E4 : LD R0, R2
+0x22E8 : LDI R1, 4
+0x22EC : ADD R0, R1
+0x22F0 : MOV R1, R0
+0x22F4 : POP R0
+0x22F8 : MOV R2, R0
+0x22FC : ST R1, R2
+0x2300 : RET
+0x2304 : LDI R12, arg_gpu_print_x_5
+0x2308 : ST R12, R0
+0x230C : LDI R12, arg_gpu_print_y_5
+0x2310 : ST R12, R1
+0x2314 : LDI R12, arg_gpu_print_str_ptr_5
+0x2318 : ST R12, R2
+0x231C : LDI R12, arg_gpu_print_color_5
+0x2320 : ST R12, R3
+0x2324 : LDI R2, arg_gpu_print_str_ptr_5
+0x2328 : LD R0, R2
+0x232C : LDI R1, v_ptr_8
+0x2330 : ST R1, R0
+0x2334 : LDI R2, arg_gpu_print_x_5
+0x2338 : LD R0, R2
+0x233C : LDI R1, v_cx_9
+0x2340 : ST R1, R0
+0x2344 : LDI R0, 1
+0x2348 : CMPI R0, 0
+0x234C : JZ endwhile_7
+0x2350 : LDI R2, v_ptr_8
+0x2354 : LD R0, R2
+0x2358 : MOV R1, R0
+0x235C : LD R0, R1
+0x2360 : LDI R1, v_char_10
+0x2364 : ST R1, R0
+0x2368 : LDI R2, v_char_10
+0x236C : LD R0, R2
+0x2370 : PUSH R0
+0x2374 : LDI R0, 0
+0x2378 : MOV R1, R0
+0x237C : POP R0
+0x2380 : CMP R0, R1
+0x2384 : JNZ else_8
+0x2388 : JMP endwhile_7
+0x238C : JMP endif_9
+0x2390 : LDI R2, v_cx_9
+0x2394 : LD R0, R2
+0x2398 : PUSH R0
+0x239C : LDI R2, arg_gpu_print_y_5
+0x23A0 : LD R0, R2
+0x23A4 : PUSH R0
+0x23A8 : LDI R2, v_char_10
+0x23AC : LD R0, R2
+0x23B0 : PUSH R0
+0x23B4 : LDI R2, arg_gpu_print_color_5
+0x23B8 : LD R0, R2
+0x23BC : PUSH R0
+0x23C0 : POP R3
+0x23C4 : POP R2
+0x23C8 : POP R1
+0x23CC : POP R0
+0x23D0 : CALL gpu_char
+0x23D4 : LDI R2, v_cx_9
+0x23D8 : LD R0, R2
+0x23DC : LDI R1, 8
+0x23E0 : ADD R0, R1
+0x23E4 : LDI R1, v_cx_9
+0x23E8 : ST R1, R0
+0x23EC : LDI R2, v_ptr_8
+0x23F0 : LD R0, R2
+0x23F4 : LDI R1, 4
+0x23F8 : ADD R0, R1
+0x23FC : LDI R1, v_ptr_8
+0x2400 : ST R1, R0
+0x2404 : JMP while_6
+0x2408 : RET
+0x240C : LDI R12, arg_gpu_print_hex_x_10
+0x2410 : ST R12, R0
+0x2414 : LDI R12, arg_gpu_print_hex_y_10
+0x2418 : ST R12, R1
+0x241C : LDI R12, arg_gpu_print_hex_val_10
+0x2420 : ST R12, R2
+0x2424 : LDI R12, arg_gpu_print_hex_color_10
+0x2428 : ST R12, R3
+0x242C : LDI R0, 28
+0x2430 : LDI R1, v_i_11
+0x2434 : ST R1, R0
+0x2438 : LDI R2, arg_gpu_print_hex_x_10
+0x243C : LD R0, R2
+0x2440 : LDI R1, v_cx_12
+0x2444 : ST R1, R0
+0x2448 : LDI R2, v_cx_12
+0x244C : LD R0, R2
+0x2450 : PUSH R0
+0x2454 : LDI R2, arg_gpu_print_hex_y_10
+0x2458 : LD R0, R2
+0x245C : PUSH R0
+0x2460 : LDI R0, 48
+0x2464 : PUSH R0
+0x2468 : LDI R2, arg_gpu_print_hex_color_10
+0x246C : LD R0, R2
+0x2470 : PUSH R0
+0x2474 : POP R3
+0x2478 : POP R2
+0x247C : POP R1
+0x2480 : POP R0
+0x2484 : CALL gpu_char
+0x2488 : LDI R2, v_cx_12
+0x248C : LD R0, R2
+0x2490 : LDI R1, 8
+0x2494 : ADD R0, R1
+0x2498 : LDI R1, v_cx_12
+0x249C : ST R1, R0
+0x24A0 : LDI R2, v_cx_12
+0x24A4 : LD R0, R2
+0x24A8 : PUSH R0
+0x24AC : LDI R2, arg_gpu_print_hex_y_10
+0x24B0 : LD R0, R2
+0x24B4 : PUSH R0
+0x24B8 : LDI R0, 120
+0x24BC : PUSH R0
+0x24C0 : LDI R2, arg_gpu_print_hex_color_10
+0x24C4 : LD R0, R2
+0x24C8 : PUSH R0
+0x24CC : POP R3
+0x24D0 : POP R2
+0x24D4 : POP R1
+0x24D8 : POP R0
+0x24DC : CALL gpu_char
+0x24E0 : LDI R2, v_cx_12
+0x24E4 : LD R0, R2
+0x24E8 : LDI R1, 8
+0x24EC : ADD R0, R1
+0x24F0 : LDI R1, v_cx_12
+0x24F4 : ST R1, R0
+0x24F8 : LDI R2, v_i_11
+0x24FC : LD R0, R2
+0x2500 : PUSH R0
+0x2504 : LDI R0, 0
+0x2508 : MOV R1, R0
+0x250C : POP R0
+0x2510 : CMP R0, R1
+0x2514 : JL endwhile_12
+0x2518 : LDI R2, arg_gpu_print_hex_val_10
+0x251C : LD R0, R2
+0x2520 : LDI R2, v_i_11
+0x2524 : LD R1, R2
+0x2528 : SHR R0, R1
+0x252C : LDI R1, 15
+0x2530 : AND R0, R1
+0x2534 : LDI R1, v_digit_13
+0x2538 : ST R1, R0
+0x253C : LDI R0, 0
+0x2540 : LDI R1, v_char_14
+0x2544 : ST R1, R0
+0x2548 : LDI R2, v_digit_13
+0x254C : LD R0, R2
+0x2550 : PUSH R0
+0x2554 : LDI R0, 10
+0x2558 : MOV R1, R0
+0x255C : POP R0
+0x2560 : CMP R0, R1
+0x2564 : JG else_13
+0x2568 : JZ else_13
+0x256C : LDI R0, 48
+0x2570 : LDI R2, v_digit_13
+0x2574 : LD R1, R2
+0x2578 : ADD R0, R1
+0x257C : LDI R1, v_char_14
+0x2580 : ST R1, R0
+0x2584 : JMP endif_14
+0x2588 : LDI R0, 55
+0x258C : LDI R2, v_digit_13
+0x2590 : LD R1, R2
+0x2594 : ADD R0, R1
+0x2598 : LDI R1, v_char_14
+0x259C : ST R1, R0
+0x25A0 : LDI R2, v_cx_12
+0x25A4 : LD R0, R2
+0x25A8 : PUSH R0
+0x25AC : LDI R2, arg_gpu_print_hex_y_10
+0x25B0 : LD R0, R2
+0x25B4 : PUSH R0
+0x25B8 : LDI R2, v_char_14
+0x25BC : LD R0, R2
+0x25C0 : PUSH R0
+0x25C4 : LDI R2, arg_gpu_print_hex_color_10
+0x25C8 : LD R0, R2
+0x25CC : PUSH R0
+0x25D0 : POP R3
+0x25D4 : POP R2
+0x25D8 : POP R1
+0x25DC : POP R0
+0x25E0 : CALL gpu_char
+0x25E4 : LDI R2, v_cx_12
+0x25E8 : LD R0, R2
+0x25EC : LDI R1, 8
+0x25F0 : ADD R0, R1
+0x25F4 : LDI R1, v_cx_12
+0x25F8 : ST R1, R0
+0x25FC : LDI R2, v_i_11
+0x2600 : LD R0, R2
+0x2604 : LDI R1, 4
+0x2608 : SUB R0, R1
+0x260C : LDI R1, v_i_11
+0x2610 : ST R1, R0
+0x2614 : JMP while_11
+0x2618 : RET
+0x261C : LUI R0, 49
+0x2620 : LDI R1, 0
+0x2624 : ADD R0, R1
+0x2628 : MOV R1, R0
+0x262C : LD R0, R1
+0x2630 : LDI R1, v_count_15
+0x2634 : ST R1, R0
+0x2638 : LDI R2, v_count_15
+0x263C : LD R0, R2
+0x2640 : PUSH R0
+0x2644 : LDI R0, 0
+0x2648 : MOV R1, R0
+0x264C : POP R0
+0x2650 : CMP R0, R1
+0x2654 : JL else_16
+0x2658 : JZ else_16
+0x265C : LUI R0, 49
+0x2660 : LDI R1, 4
+0x2664 : ADD R0, R1
+0x2668 : MOV R1, R0
+0x266C : LD R0, R1
+0x2670 : LDI R1, v_key_16
+0x2674 : ST R1, R0
+0x2678 : LDI R2, v_key_16
+0x267C : LD R0, R2
+0x2680 : JMP exit_poll_keyboard_15
+0x2684 : JMP endif_17
+0x2688 : LDI R0, 0
+0x268C : JMP exit_poll_keyboard_15
+0x2690 : RET
+0x2694 : LDI R0, 28668
+0x2698 : PUSH R0
+0x269C : POP R0
+0x26A0 : CALL set_stack_pointer
+0x26A4 : LDI R0, 10
+0x26A8 : PUSH R0
+0x26AC : LDI R0, 30
+0x26B0 : PUSH R0
+0x26B4 : LDI R0, str_1
+0x26B8 : PUSH R0
+0x26BC : LUI R0, 65280
+0x26C0 : ORI R0, 65280
+0x26C4 : PUSH R0
+0x26C8 : POP R3
+0x26CC : POP R2
+0x26D0 : POP R1
+0x26D4 : POP R0
+0x26D8 : CALL gpu_print
+0x26DC : RET
+0x26E0 : LDI R12, arg_set_stack_pointer_addr_19
+0x26E4 : ST R12, R0
+0x26E8 : RET
+0x26EC : LDI R12, arg_poke_addr_20
+0x26F0 : ST R12, R0
+0x26F4 : LDI R12, arg_poke_value_20
+0x26F8 : ST R12, R1
+0x26FC : LDI R2, arg_poke_value_20
+0x2700 : LD R0, R2
+0x2704 : PUSH R0
+0x2708 : LDI R2, arg_poke_addr_20
+0x270C : LD R0, R2
+0x2710 : MOV R1, R0
+0x2714 : POP R0
+0x2718 : MOV R2, R0
+0x271C : ST R1, R2
+0x2720 : RET
+0x2724 : LDI R12, arg_peek_addr_21
+0x2728 : ST R12, R0
+0x272C : LDI R2, arg_peek_addr_21
+0x2730 : LD R0, R2
+0x2734 : MOV R1, R0
+0x2738 : LD R0, R1
+0x273C : LDI R1, v_val_17
+0x2740 : ST R1, R0
+0x2744 : LDI R2, v_val_17
+0x2748 : LD R0, R2
+0x274C : JMP exit_peek_21
+0x2750 : RET
+0x2754 : LDI R0, 0
+0x2758 : LDI R1, v_i_18
+0x275C : ST R1, R0
+0x2760 : LDI R2, v_i_18
+0x2764 : LD R0, R2
+0x2768 : PUSH R0
+0x276C : LDI R0, 128
+0x2770 : MOV R1, R0
+0x2774 : POP R0
+0x2778 : CMP R0, R1
+0x277C : JG endwhile_24
+0x2780 : JZ endwhile_24
+0x2784 : LDI R0, 16384
+0x2788 : PUSH R0
+0x278C : LDI R2, v_i_18
+0x2790 : LD R0, R2
+0x2794 : LDI R1, 4
+0x2798 : MUL R0, R1
+0x279C : MOV R1, R0
+0x27A0 : POP R0
+0x27A4 : ADD R0, R1
+0x27A8 : PUSH R0
+0x27AC : LDI R0, 0
+0x27B0 : PUSH R0
+0x27B4 : POP R1
+0x27B8 : POP R0
+0x27BC : CALL poke
+0x27C0 : LDI R2, v_i_18
+0x27C4 : LD R0, R2
+0x27C8 : LDI R1, 1
+0x27CC : ADD R0, R1
+0x27D0 : LDI R1, v_i_18
+0x27D4 : ST R1, R0
+0x27D8 : JMP while_23
+0x27DC : LDI R0, 0
+0x27E0 : PUSH R0
+0x27E4 : LDI R0, 8
+0x27E8 : PUSH R0
+0x27EC : POP R1
+0x27F0 : POP R0
+0x27F4 : CALL pmm_mark_region_used
+0x27F8 : LDI R0, 10
+0x27FC : PUSH R0
+0x2800 : LDI R0, 48
+0x2804 : PUSH R0
+0x2808 : LDI R0, str_2
+0x280C : PUSH R0
+0x2810 : LUI R0, 65280
+0x2814 : ORI R0, 65280
+0x2818 : PUSH R0
+0x281C : POP R3
+0x2820 : POP R2
+0x2824 : POP R1
+0x2828 : POP R0
+0x282C : CALL gpu_print
+0x2830 : RET
+0x2834 : LDI R12, arg_pmm_mark_region_used_start_25
+0x2838 : ST R12, R0
+0x283C : LDI R12, arg_pmm_mark_region_used_count_25
+0x2840 : ST R12, R1
+0x2844 : LDI R0, 0
+0x2848 : LDI R1, v_j_19
+0x284C : ST R1, R0
+0x2850 : LDI R2, v_j_19
+0x2854 : LD R0, R2
+0x2858 : PUSH R0
+0x285C : LDI R2, arg_pmm_mark_region_used_count_25
+0x2860 : LD R0, R2
+0x2864 : MOV R1, R0
+0x2868 : POP R0
+0x286C : CMP R0, R1
+0x2870 : JG endwhile_27
+0x2874 : JZ endwhile_27
+0x2878 : LDI R2, arg_pmm_mark_region_used_start_25
+0x287C : LD R0, R2
+0x2880 : LDI R2, v_j_19
+0x2884 : LD R1, R2
+0x2888 : ADD R0, R1
+0x288C : PUSH R0
+0x2890 : POP R0
+0x2894 : CALL pmm_set_bit
+0x2898 : LDI R2, v_j_19
+0x289C : LD R0, R2
+0x28A0 : LDI R1, 1
+0x28A4 : ADD R0, R1
+0x28A8 : LDI R1, v_j_19
+0x28AC : ST R1, R0
+0x28B0 : JMP while_26
+0x28B4 : RET
+0x28B8 : LDI R12, arg_pmm_set_bit_page_idx_28
+0x28BC : ST R12, R0
+0x28C0 : LDI R2, arg_pmm_set_bit_page_idx_28
+0x28C4 : LD R0, R2
+0x28C8 : LDI R1, 5
+0x28CC : SHR R0, R1
+0x28D0 : LDI R1, v_word_idx_20
+0x28D4 : ST R1, R0
+0x28D8 : LDI R2, arg_pmm_set_bit_page_idx_28
+0x28DC : LD R0, R2
+0x28E0 : LDI R1, 31
+0x28E4 : AND R0, R1
+0x28E8 : LDI R1, v_bit_off_21
+0x28EC : ST R1, R0
+0x28F0 : LDI R0, 16384
+0x28F4 : PUSH R0
+0x28F8 : LDI R2, v_word_idx_20
+0x28FC : LD R0, R2
+0x2900 : LDI R1, 4
+0x2904 : MUL R0, R1
+0x2908 : MOV R1, R0
+0x290C : POP R0
+0x2910 : ADD R0, R1
+0x2914 : LDI R1, v_addr_22
+0x2918 : ST R1, R0
+0x291C : LDI R2, v_addr_22
+0x2920 : LD R0, R2
+0x2924 : PUSH R0
+0x2928 : POP R0
+0x292C : CALL peek
+0x2930 : LDI R1, v_val_23
+0x2934 : ST R1, R0
+0x2938 : LDI R0, 1
+0x293C : LDI R2, v_bit_off_21
+0x2940 : LD R1, R2
+0x2944 : SHL R0, R1
+0x2948 : LDI R1, v_mask_24
+0x294C : ST R1, R0
+0x2950 : LDI R2, v_addr_22
+0x2954 : LD R0, R2
+0x2958 : PUSH R0
+0x295C : LDI R2, v_val_23
+0x2960 : LD R0, R2
+0x2964 : LDI R2, v_mask_24
+0x2968 : LD R1, R2
+0x296C : OR R0, R1
+0x2970 : PUSH R0
+0x2974 : POP R1
+0x2978 : POP R0
+0x297C : CALL poke
+0x2980 : RET
+0x2984 : LDI R12, arg_pmm_test_bit_page_idx_29
+0x2988 : ST R12, R0
+0x298C : LDI R2, arg_pmm_test_bit_page_idx_29
+0x2990 : LD R0, R2
+0x2994 : LDI R1, 5
+0x2998 : SHR R0, R1
+0x299C : LDI R1, v_word_idx_25
+0x29A0 : ST R1, R0
+0x29A4 : LDI R2, arg_pmm_test_bit_page_idx_29
+0x29A8 : LD R0, R2
+0x29AC : LDI R1, 31
+0x29B0 : AND R0, R1
+0x29B4 : LDI R1, v_bit_off_26
+0x29B8 : ST R1, R0
+0x29BC : LDI R0, 16384
+0x29C0 : PUSH R0
+0x29C4 : LDI R2, v_word_idx_25
+0x29C8 : LD R0, R2
+0x29CC : LDI R1, 4
+0x29D0 : MUL R0, R1
+0x29D4 : MOV R1, R0
+0x29D8 : POP R0
+0x29DC : ADD R0, R1
+0x29E0 : LDI R1, v_addr_27
+0x29E4 : ST R1, R0
+0x29E8 : LDI R2, v_addr_27
+0x29EC : LD R0, R2
+0x29F0 : PUSH R0
+0x29F4 : POP R0
+0x29F8 : CALL peek
+0x29FC : LDI R1, v_val_28
+0x2A00 : ST R1, R0
+0x2A04 : LDI R0, 1
+0x2A08 : LDI R2, v_bit_off_26
+0x2A0C : LD R1, R2
+0x2A10 : SHL R0, R1
+0x2A14 : LDI R1, v_mask_29
+0x2A18 : ST R1, R0
+0x2A1C : LDI R2, v_val_28
+0x2A20 : LD R0, R2
+0x2A24 : LDI R2, v_mask_29
+0x2A28 : LD R1, R2
+0x2A2C : AND R0, R1
+0x2A30 : PUSH R0
+0x2A34 : LDI R0, 0
+0x2A38 : MOV R1, R0
+0x2A3C : POP R0
+0x2A40 : CMP R0, R1
+0x2A44 : JZ else_30
+0x2A48 : LDI R0, 1
+0x2A4C : JMP exit_pmm_test_bit_29
+0x2A50 : JMP endif_31
+0x2A54 : LDI R0, 0
+0x2A58 : JMP exit_pmm_test_bit_29
+0x2A5C : RET
+0x2A60 : LDI R0, 8
+0x2A64 : LDI R1, v_k_30
+0x2A68 : ST R1, R0
+0x2A6C : LDI R2, v_k_30
+0x2A70 : LD R0, R2
+0x2A74 : PUSH R0
+0x2A78 : LDI R0, 4096
+0x2A7C : MOV R1, R0
+0x2A80 : POP R0
+0x2A84 : CMP R0, R1
+0x2A88 : JG endwhile_34
+0x2A8C : JZ endwhile_34
+0x2A90 : LDI R2, v_k_30
+0x2A94 : LD R0, R2
+0x2A98 : PUSH R0
+0x2A9C : POP R0
+0x2AA0 : CALL pmm_test_bit
+0x2AA4 : PUSH R0
+0x2AA8 : LDI R0, 0
+0x2AAC : MOV R1, R0
+0x2AB0 : POP R0
+0x2AB4 : CMP R0, R1
+0x2AB8 : JNZ else_35
+0x2ABC : LDI R2, v_k_30
+0x2AC0 : LD R0, R2
+0x2AC4 : PUSH R0
+0x2AC8 : POP R0
+0x2ACC : CALL pmm_set_bit
+0x2AD0 : LDI R2, v_k_30
+0x2AD4 : LD R0, R2
+0x2AD8 : LDI R1, 12
+0x2ADC : SHL R0, R1
+0x2AE0 : JMP exit_pmm_alloc_page_32
+0x2AE4 : JMP endif_36
+0x2AE8 : LDI R2, v_k_30
+0x2AEC : LD R0, R2
+0x2AF0 : LDI R1, 1
+0x2AF4 : ADD R0, R1
+0x2AF8 : LDI R1, v_k_30
+0x2AFC : ST R1, R0
+0x2B00 : JMP while_33
+0x2B04 : LDI R0, -1
+0x2B08 : JMP exit_pmm_alloc_page_32
+0x2B0C : RET
+0x2B10 : LDI R0, 0
+0x2B14 : LDI R1, v_i_31
+0x2B18 : ST R1, R0
+0x2B1C : LDI R2, v_i_31
+0x2B20 : LD R0, R2
+0x2B24 : PUSH R0
+0x2B28 : LDI R0, 1024
+0x2B2C : MOV R1, R0
+0x2B30 : POP R0
+0x2B34 : CMP R0, R1
+0x2B38 : JG endwhile_39
+0x2B3C : JZ endwhile_39
+0x2B40 : LDI R2, v_i_31
+0x2B44 : LD R0, R2
+0x2B48 : LDI R1, 4
+0x2B4C : MUL R0, R1
+0x2B50 : LDI R1, v_offset_32
+0x2B54 : ST R1, R0
+0x2B58 : LDI R0, 20480
+0x2B5C : LDI R2, v_offset_32
+0x2B60 : LD R1, R2
+0x2B64 : ADD R0, R1
+0x2B68 : LDI R1, v_addr_33
+0x2B6C : ST R1, R0
+0x2B70 : LDI R2, v_addr_33
+0x2B74 : LD R0, R2
+0x2B78 : PUSH R0
+0x2B7C : LDI R0, 0
+0x2B80 : PUSH R0
+0x2B84 : POP R1
+0x2B88 : POP R0
+0x2B8C : CALL poke
+0x2B90 : LDI R2, v_i_31
+0x2B94 : LD R0, R2
+0x2B98 : LDI R1, 1
+0x2B9C : ADD R0, R1
+0x2BA0 : LDI R1, v_i_31
+0x2BA4 : ST R1, R0
+0x2BA8 : JMP while_38
+0x2BAC : LDI R0, 10
+0x2BB0 : PUSH R0
+0x2BB4 : LDI R0, 56
+0x2BB8 : PUSH R0
+0x2BBC : LDI R0, str_3
+0x2BC0 : PUSH R0
+0x2BC4 : LUI R0, 65280
+0x2BC8 : ORI R0, 65280
+0x2BCC : PUSH R0
+0x2BD0 : POP R3
+0x2BD4 : POP R2
+0x2BD8 : POP R1
+0x2BDC : POP R0
+0x2BE0 : CALL gpu_print
+0x2BE4 : RET
+0x2BE8 : LDI R12, arg_vmm_map_page_v_addr_40
+0x2BEC : ST R12, R0
+0x2BF0 : LDI R12, arg_vmm_map_page_p_addr_40
+0x2BF4 : ST R12, R1
+0x2BF8 : LDI R12, arg_vmm_map_page_flags_40
+0x2BFC : ST R12, R2
+0x2C00 : LDI R2, arg_vmm_map_page_v_addr_40
+0x2C04 : LD R0, R2
+0x2C08 : LDI R1, 12
+0x2C0C : SHR R0, R1
+0x2C10 : LDI R1, v_idx_34
+0x2C14 : ST R1, R0
+0x2C18 : LDI R2, v_idx_34
+0x2C1C : LD R0, R2
+0x2C20 : PUSH R0
+0x2C24 : LDI R0, 1023
+0x2C28 : MOV R1, R0
+0x2C2C : POP R0
+0x2C30 : CMP R0, R1
+0x2C34 : JL else_41
+0x2C38 : JZ else_41
+0x2C3C : LDI R0, 0
+0x2C40 : JMP exit_vmm_map_page_40
+0x2C44 : JMP endif_42
+0x2C48 : LDI R2, arg_vmm_map_page_p_addr_40
+0x2C4C : LD R0, R2
+0x2C50 : LDI R1, -4096
+0x2C54 : AND R0, R1
+0x2C58 : LDI R1, v_p_base_35
+0x2C5C : ST R1, R0
+0x2C60 : LDI R2, arg_vmm_map_page_flags_40
+0x2C64 : LD R0, R2
+0x2C68 : LDI R1, 4095
+0x2C6C : AND R0, R1
+0x2C70 : LDI R1, v_f_36
+0x2C74 : ST R1, R0
+0x2C78 : LDI R2, v_p_base_35
+0x2C7C : LD R0, R2
+0x2C80 : LDI R2, v_f_36
+0x2C84 : LD R1, R2
+0x2C88 : OR R0, R1
+0x2C8C : LDI R1, v_entry_37
+0x2C90 : ST R1, R0
+0x2C94 : LDI R2, v_idx_34
+0x2C98 : LD R0, R2
+0x2C9C : LDI R1, 4
+0x2CA0 : MUL R0, R1
+0x2CA4 : LDI R1, v_offset_38
+0x2CA8 : ST R1, R0
+0x2CAC : LDI R0, 20480
+0x2CB0 : LDI R2, v_offset_38
+0x2CB4 : LD R1, R2
+0x2CB8 : ADD R0, R1
+0x2CBC : LDI R1, v_target_39
+0x2CC0 : ST R1, R0
+0x2CC4 : LDI R2, v_target_39
+0x2CC8 : LD R0, R2
+0x2CCC : PUSH R0
+0x2CD0 : LDI R2, v_entry_37
+0x2CD4 : LD R0, R2
+0x2CD8 : PUSH R0
+0x2CDC : POP R1
+0x2CE0 : POP R0
+0x2CE4 : CALL poke
+0x2CE8 : LDI R0, 1
+0x2CEC : JMP exit_vmm_map_page_40
+0x2CF0 : RET
+0x2CF4 : LDI R12, arg_vmm_translate_v_addr_43
+0x2CF8 : ST R12, R0
+0x2CFC : LDI R2, arg_vmm_translate_v_addr_43
+0x2D00 : LD R0, R2
+0x2D04 : LDI R1, 12
+0x2D08 : SHR R0, R1
+0x2D0C : LDI R1, v_idx_40
+0x2D10 : ST R1, R0
+0x2D14 : LDI R2, v_idx_40
+0x2D18 : LD R0, R2
+0x2D1C : LDI R1, 4
+0x2D20 : MUL R0, R1
+0x2D24 : LDI R1, v_offset_41
+0x2D28 : ST R1, R0
+0x2D2C : LDI R0, 20480
+0x2D30 : LDI R2, v_offset_41
+0x2D34 : LD R1, R2
+0x2D38 : ADD R0, R1
+0x2D3C : LDI R1, v_target_42
+0x2D40 : ST R1, R0
+0x2D44 : LDI R2, v_target_42
+0x2D48 : LD R0, R2
+0x2D4C : PUSH R0
+0x2D50 : POP R0
+0x2D54 : CALL peek
+0x2D58 : LDI R1, v_entry_43
+0x2D5C : ST R1, R0
+0x2D60 : LDI R2, v_entry_43
+0x2D64 : LD R0, R2
+0x2D68 : LDI R1, 1
+0x2D6C : AND R0, R1
+0x2D70 : LDI R1, v_present_44
+0x2D74 : ST R1, R0
+0x2D78 : LDI R2, v_present_44
+0x2D7C : LD R0, R2
+0x2D80 : PUSH R0
+0x2D84 : LDI R0, 0
+0x2D88 : MOV R1, R0
+0x2D8C : POP R0
+0x2D90 : CMP R0, R1
+0x2D94 : JNZ else_44
+0x2D98 : LDI R0, 0
+0x2D9C : JMP exit_vmm_translate_43
+0x2DA0 : JMP endif_45
+0x2DA4 : LDI R2, v_entry_43
+0x2DA8 : LD R0, R2
+0x2DAC : LDI R1, -4096
+0x2DB0 : AND R0, R1
+0x2DB4 : LDI R1, v_p_base_45
+0x2DB8 : ST R1, R0
+0x2DBC : LDI R2, arg_vmm_translate_v_addr_43
+0x2DC0 : LD R0, R2
+0x2DC4 : LDI R1, 4095
+0x2DC8 : AND R0, R1
+0x2DCC : LDI R1, v_p_off_46
+0x2DD0 : ST R1, R0
+0x2DD4 : LDI R2, v_p_base_45
+0x2DD8 : LD R0, R2
+0x2DDC : LDI R2, v_p_off_46
+0x2DE0 : LD R1, R2
+0x2DE4 : ADD R0, R1
+0x2DE8 : LDI R1, v_res_47
+0x2DEC : ST R1, R0
+0x2DF0 : LDI R2, v_res_47
+0x2DF4 : LD R0, R2
+0x2DF8 : JMP exit_vmm_translate_43
+0x2DFC : RET
+0x2E00 : LUI R0, 16
+0x2E04 : LDI R1, v_ptr_48
+0x2E08 : ST R1, R0
+0x2E0C : LUI R0, 16
+0x2E10 : LDI R1, 16
+0x2E14 : SUB R0, R1
+0x2E18 : PUSH R0
+0x2E1C : LDI R2, v_ptr_48
+0x2E20 : LD R0, R2
+0x2E24 : LDI R1, 0
+0x2E28 : ADD R0, R1
+0x2E2C : MOV R1, R0
+0x2E30 : POP R0
+0x2E34 : MOV R2, R0
+0x2E38 : ST R1, R2
+0x2E3C : LDI R0, 1
+0x2E40 : PUSH R0
+0x2E44 : LDI R2, v_ptr_48
+0x2E48 : LD R0, R2
+0x2E4C : LDI R1, 4
+0x2E50 : ADD R0, R1
+0x2E54 : MOV R1, R0
+0x2E58 : POP R0
+0x2E5C : MOV R2, R0
+0x2E60 : ST R1, R2
+0x2E64 : LDI R0, 0
+0x2E68 : PUSH R0
+0x2E6C : LDI R2, v_ptr_48
+0x2E70 : LD R0, R2
+0x2E74 : LDI R1, 8
+0x2E78 : ADD R0, R1
+0x2E7C : MOV R1, R0
+0x2E80 : POP R0
+0x2E84 : MOV R2, R0
+0x2E88 : ST R1, R2
+0x2E8C : LUI R0, 51966
+0x2E90 : ORI R0, 47806
+0x2E94 : PUSH R0
+0x2E98 : LDI R2, v_ptr_48
+0x2E9C : LD R0, R2
+0x2EA0 : LDI R1, 12
+0x2EA4 : ADD R0, R1
+0x2EA8 : MOV R1, R0
+0x2EAC : POP R0
+0x2EB0 : MOV R2, R0
+0x2EB4 : ST R1, R2
+0x2EB8 : LDI R2, v_ptr_48
+0x2EBC : LD R0, R2
+0x2EC0 : PUSH R0
+0x2EC4 : LDI R0, 61440
+0x2EC8 : MOV R1, R0
+0x2ECC : POP R0
+0x2ED0 : MOV R2, R0
+0x2ED4 : ST R1, R2
+0x2ED8 : LDI R0, 10
+0x2EDC : PUSH R0
+0x2EE0 : LDI R0, 10
+0x2EE4 : PUSH R0
+0x2EE8 : LDI R0, str_4
+0x2EEC : PUSH R0
+0x2EF0 : LUI R0, 65280
+0x2EF4 : ORI R0, 65280
+0x2EF8 : PUSH R0
+0x2EFC : POP R3
+0x2F00 : POP R2
+0x2F04 : POP R1
+0x2F08 : POP R0
+0x2F0C : CALL gpu_print
+0x2F10 : RET
+0x2F14 : LDI R12, arg_malloc_size_47
+0x2F18 : ST R12, R0
+0x2F1C : LDI R2, arg_malloc_size_47
+0x2F20 : LD R0, R2
+0x2F24 : PUSH R0
+0x2F28 : LDI R0, 0
+0x2F2C : MOV R1, R0
+0x2F30 : POP R0
+0x2F34 : CMP R0, R1
+0x2F38 : JG else_48
+0x2F3C : LDI R0, 0
+0x2F40 : JMP exit_malloc_47
+0x2F44 : JMP endif_49
+0x2F48 : LDI R2, arg_malloc_size_47
+0x2F4C : LD R0, R2
+0x2F50 : LDI R1, 4
+0x2F54 : MOD R0, R1
+0x2F58 : LDI R1, v_rem_49
+0x2F5C : ST R1, R0
+0x2F60 : LDI R2, v_rem_49
+0x2F64 : LD R0, R2
+0x2F68 : PUSH R0
+0x2F6C : LDI R0, 0
+0x2F70 : MOV R1, R0
+0x2F74 : POP R0
+0x2F78 : CMP R0, R1
+0x2F7C : JZ else_50
+0x2F80 : LDI R2, arg_malloc_size_47
+0x2F84 : LD R0, R2
+0x2F88 : LDI R1, 4
+0x2F8C : ADD R0, R1
+0x2F90 : LDI R1, arg_malloc_size_47
+0x2F94 : ST R1, R0
+0x2F98 : JMP endif_51
+0x2F9C : LDI R0, 61440
+0x2FA0 : MOV R1, R0
+0x2FA4 : LD R0, R1
+0x2FA8 : LDI R1, v_curr_50
+0x2FAC : ST R1, R0
+0x2FB0 : LDI R2, v_curr_50
+0x2FB4 : LD R0, R2
+0x2FB8 : PUSH R0
+0x2FBC : LDI R0, 0
+0x2FC0 : MOV R1, R0
+0x2FC4 : POP R0
+0x2FC8 : CMP R0, R1
+0x2FCC : JZ endwhile_53
+0x2FD0 : LDI R2, v_curr_50
+0x2FD4 : LD R0, R2
+0x2FD8 : LDI R1, 0
+0x2FDC : ADD R0, R1
+0x2FE0 : MOV R1, R0
+0x2FE4 : LD R0, R1
+0x2FE8 : LDI R1, v_curr_size_51
+0x2FEC : ST R1, R0
+0x2FF0 : LDI R2, v_curr_50
+0x2FF4 : LD R0, R2
+0x2FF8 : LDI R1, 4
+0x2FFC : ADD R0, R1
+0x3000 : MOV R1, R0
+0x3004 : LD R0, R1
+0x3008 : LDI R1, v_curr_free_52
+0x300C : ST R1, R0
+0x3010 : LDI R2, v_curr_50
+0x3014 : LD R0, R2
+0x3018 : LDI R1, 12
+0x301C : ADD R0, R1
+0x3020 : MOV R1, R0
+0x3024 : LD R0, R1
+0x3028 : LDI R1, v_magic_53
+0x302C : ST R1, R0
+0x3030 : LDI R2, v_magic_53
+0x3034 : LD R0, R2
+0x3038 : PUSH R0
+0x303C : LUI R0, 51966
+0x3040 : ORI R0, 47806
+0x3044 : MOV R1, R0
+0x3048 : POP R0
+0x304C : CMP R0, R1
+0x3050 : JZ else_54
+0x3054 : LDI R0, 10
+0x3058 : PUSH R0
+0x305C : LDI R0, 20
+0x3060 : PUSH R0
+0x3064 : LDI R0, str_5
+0x3068 : PUSH R0
+0x306C : LUI R0, 65535
+0x3070 : PUSH R0
+0x3074 : POP R3
+0x3078 : POP R2
+0x307C : POP R1
+0x3080 : POP R0
+0x3084 : CALL gpu_print
+0x3088 : HLT
+0x308C : JMP endif_55
+0x3090 : LDI R2, v_curr_free_52
+0x3094 : LD R0, R2
+0x3098 : PUSH R0
+0x309C : LDI R0, 1
+0x30A0 : MOV R1, R0
+0x30A4 : POP R0
+0x30A8 : CMP R0, R1
+0x30AC : JNZ else_56
+0x30B0 : LDI R2, v_curr_size_51
+0x30B4 : LD R0, R2
+0x30B8 : PUSH R0
+0x30BC : LDI R2, arg_malloc_size_47
+0x30C0 : LD R0, R2
+0x30C4 : MOV R1, R0
+0x30C8 : POP R0
+0x30CC : CMP R0, R1
+0x30D0 : JL else_58
+0x30D4 : LDI R2, arg_malloc_size_47
+0x30D8 : LD R0, R2
+0x30DC : LDI R1, 16
+0x30E0 : ADD R0, R1
+0x30E4 : LDI R1, v_space_needed_54
+0x30E8 : ST R1, R0
+0x30EC : LDI R2, v_curr_size_51
+0x30F0 : LD R0, R2
+0x30F4 : PUSH R0
+0x30F8 : LDI R2, v_space_needed_54
+0x30FC : LD R0, R2
+0x3100 : MOV R1, R0
+0x3104 : POP R0
+0x3108 : CMP R0, R1
+0x310C : JL else_60
+0x3110 : JZ else_60
+0x3114 : LDI R2, v_curr_50
+0x3118 : LD R0, R2
+0x311C : LDI R1, 16
+0x3120 : ADD R0, R1
+0x3124 : LDI R1, v_new_block_ptr_55
+0x3128 : ST R1, R0
+0x312C : LDI R2, v_curr_size_51
+0x3130 : LD R0, R2
+0x3134 : LDI R2, arg_malloc_size_47
+0x3138 : LD R1, R2
+0x313C : SUB R0, R1
+0x3140 : LDI R1, v_new_block_size_56
+0x3144 : ST R1, R0
+0x3148 : LDI R2, v_new_block_size_56
+0x314C : LD R0, R2
+0x3150 : PUSH R0
+0x3154 : LDI R2, v_new_block_ptr_55
+0x3158 : LD R0, R2
+0x315C : LDI R1, 0
+0x3160 : ADD R0, R1
+0x3164 : MOV R1, R0
+0x3168 : POP R0
+0x316C : MOV R2, R0
+0x3170 : ST R1, R2
+0x3174 : LDI R0, 1
+0x3178 : PUSH R0
+0x317C : LDI R2, v_new_block_ptr_55
+0x3180 : LD R0, R2
+0x3184 : LDI R1, 4
+0x3188 : ADD R0, R1
+0x318C : MOV R1, R0
+0x3190 : POP R0
+0x3194 : MOV R2, R0
+0x3198 : ST R1, R2
+0x319C : LDI R2, v_curr_50
+0x31A0 : LD R0, R2
+0x31A4 : LDI R1, 8
+0x31A8 : ADD R0, R1
+0x31AC : MOV R1, R0
+0x31B0 : LD R0, R1
+0x31B4 : PUSH R0
+0x31B8 : LDI R2, v_new_block_ptr_55
+0x31BC : LD R0, R2
+0x31C0 : LDI R1, 8
+0x31C4 : ADD R0, R1
+0x31C8 : MOV R1, R0
+0x31CC : POP R0
+0x31D0 : MOV R2, R0
+0x31D4 : ST R1, R2
+0x31D8 : LUI R0, 51966
+0x31DC : ORI R0, 47806
+0x31E0 : PUSH R0
+0x31E4 : LDI R2, v_new_block_ptr_55
+0x31E8 : LD R0, R2
+0x31EC : LDI R1, 12
+0x31F0 : ADD R0, R1
+0x31F4 : MOV R1, R0
+0x31F8 : POP R0
+0x31FC : MOV R2, R0
+0x3200 : ST R1, R2
+0x3204 : LDI R2, arg_malloc_size_47
+0x3208 : LD R0, R2
+0x320C : PUSH R0
+0x3210 : LDI R2, v_curr_50
+0x3214 : LD R0, R2
+0x3218 : LDI R1, 0
+0x321C : ADD R0, R1
+0x3220 : MOV R1, R0
+0x3224 : POP R0
+0x3228 : MOV R2, R0
+0x322C : ST R1, R2
+0x3230 : LDI R2, v_new_block_ptr_55
+0x3234 : LD R0, R2
+0x3238 : PUSH R0
+0x323C : LDI R2, v_curr_50
+0x3240 : LD R0, R2
+0x3244 : LDI R1, 8
+0x3248 : ADD R0, R1
+0x324C : MOV R1, R0
+0x3250 : POP R0
+0x3254 : MOV R2, R0
+0x3258 : ST R1, R2
+0x325C : JMP endif_61
+0x3260 : LDI R0, 0
+0x3264 : PUSH R0
+0x3268 : LDI R2, v_curr_50
+0x326C : LD R0, R2
+0x3270 : LDI R1, 4
+0x3274 : ADD R0, R1
+0x3278 : MOV R1, R0
+0x327C : POP R0
+0x3280 : MOV R2, R0
+0x3284 : ST R1, R2
+0x3288 : LDI R2, v_curr_50
+0x328C : LD R0, R2
+0x3290 : LDI R1, 16
+0x3294 : ADD R0, R1
+0x3298 : JMP exit_malloc_47
+0x329C : JMP endif_59
+0x32A0 : JMP endif_57
+0x32A4 : LDI R2, v_curr_50
+0x32A8 : LD R0, R2
+0x32AC : LDI R1, 8
+0x32B0 : ADD R0, R1
+0x32B4 : MOV R1, R0
+0x32B8 : LD R0, R1
+0x32BC : LDI R1, v_curr_50
+0x32C0 : ST R1, R0
+0x32C4 : JMP while_52
+0x32C8 : LDI R0, 0
+0x32CC : JMP exit_malloc_47
+0x32D0 : RET
+0x32D4 : LDI R12, arg_free_ptr_62
+0x32D8 : ST R12, R0
+0x32DC : LDI R2, arg_free_ptr_62
+0x32E0 : LD R0, R2
+0x32E4 : PUSH R0
+0x32E8 : LDI R0, 0
+0x32EC : MOV R1, R0
+0x32F0 : POP R0
+0x32F4 : CMP R0, R1
+0x32F8 : JNZ else_63
+0x32FC : JMP exit_free_62
+0x3300 : JMP endif_64
+0x3304 : LDI R2, arg_free_ptr_62
+0x3308 : LD R0, R2
+0x330C : LDI R1, 16
+0x3310 : SUB R0, R1
+0x3314 : LDI R1, v_header_ptr_57
+0x3318 : ST R1, R0
+0x331C : LDI R2, v_header_ptr_57
+0x3320 : LD R0, R2
+0x3324 : LDI R1, 12
+0x3328 : ADD R0, R1
+0x332C : MOV R1, R0
+0x3330 : LD R0, R1
+0x3334 : LDI R1, v_magic_58
+0x3338 : ST R1, R0
+0x333C : LDI R2, v_magic_58
+0x3340 : LD R0, R2
+0x3344 : PUSH R0
+0x3348 : LUI R0, 51966
+0x334C : ORI R0, 47806
+0x3350 : MOV R1, R0
+0x3354 : POP R0
+0x3358 : CMP R0, R1
+0x335C : JZ else_65
+0x3360 : LDI R0, 10
+0x3364 : PUSH R0
+0x3368 : LDI R0, 30
+0x336C : PUSH R0
+0x3370 : LDI R0, str_6
+0x3374 : PUSH R0
+0x3378 : LUI R0, 65535
+0x337C : PUSH R0
+0x3380 : POP R3
+0x3384 : POP R2
+0x3388 : POP R1
+0x338C : POP R0
+0x3390 : CALL gpu_print
+0x3394 : JMP exit_free_62
+0x3398 : JMP endif_66
+0x339C : LDI R0, 1
+0x33A0 : PUSH R0
+0x33A4 : LDI R2, v_header_ptr_57
+0x33A8 : LD R0, R2
+0x33AC : LDI R1, 4
+0x33B0 : ADD R0, R1
+0x33B4 : MOV R1, R0
+0x33B8 : POP R0
+0x33BC : MOV R2, R0
+0x33C0 : ST R1, R2
+0x33C4 : LDI R2, v_header_ptr_57
+0x33C8 : LD R0, R2
+0x33CC : LDI R1, 8
+0x33D0 : ADD R0, R1
+0x33D4 : MOV R1, R0
+0x33D8 : LD R0, R1
+0x33DC : LDI R1, v_next_block_59
+0x33E0 : ST R1, R0
+0x33E4 : LDI R2, v_next_block_59
+0x33E8 : LD R0, R2
+0x33EC : PUSH R0
+0x33F0 : LDI R0, 0
+0x33F4 : MOV R1, R0
+0x33F8 : POP R0
+0x33FC : CMP R0, R1
+0x3400 : JZ endwhile_68
+0x3404 : LDI R2, v_next_block_59
+0x3408 : LD R0, R2
+0x340C : LDI R1, 12
+0x3410 : ADD R0, R1
+0x3414 : MOV R1, R0
+0x3418 : LD R0, R1
+0x341C : LDI R1, v_next_magic_60
+0x3420 : ST R1, R0
+0x3424 : LDI R2, v_next_magic_60
+0x3428 : LD R0, R2
+0x342C : PUSH R0
+0x3430 : LUI R0, 51966
+0x3434 : ORI R0, 47806
+0x3438 : MOV R1, R0
+0x343C : POP R0
+0x3440 : CMP R0, R1
+0x3444 : JZ else_69
+0x3448 : LDI R0, 10
+0x344C : PUSH R0
+0x3450 : LDI R0, 40
+0x3454 : PUSH R0
+0x3458 : LDI R0, str_7
+0x345C : PUSH R0
+0x3460 : LUI R0, 65535
+0x3464 : PUSH R0
+0x3468 : POP R3
+0x346C : POP R2
+0x3470 : POP R1
+0x3474 : POP R0
+0x3478 : CALL gpu_print
+0x347C : HLT
+0x3480 : JMP endif_70
+0x3484 : LDI R2, v_next_block_59
+0x3488 : LD R0, R2
+0x348C : LDI R1, 4
+0x3490 : ADD R0, R1
+0x3494 : MOV R1, R0
+0x3498 : LD R0, R1
+0x349C : LDI R1, v_next_free_61
+0x34A0 : ST R1, R0
+0x34A4 : LDI R2, v_next_free_61
+0x34A8 : LD R0, R2
+0x34AC : PUSH R0
+0x34B0 : LDI R0, 1
+0x34B4 : MOV R1, R0
+0x34B8 : POP R0
+0x34BC : CMP R0, R1
+0x34C0 : JNZ else_71
+0x34C4 : LDI R2, v_header_ptr_57
+0x34C8 : LD R0, R2
+0x34CC : LDI R1, 0
+0x34D0 : ADD R0, R1
+0x34D4 : MOV R1, R0
+0x34D8 : LD R0, R1
+0x34DC : LDI R1, v_my_size_62
+0x34E0 : ST R1, R0
+0x34E4 : LDI R2, v_next_block_59
+0x34E8 : LD R0, R2
+0x34EC : LDI R1, 0
+0x34F0 : ADD R0, R1
+0x34F4 : MOV R1, R0
+0x34F8 : LD R0, R1
+0x34FC : LDI R1, v_next_size_63
+0x3500 : ST R1, R0
+0x3504 : LDI R2, v_my_size_62
+0x3508 : LD R0, R2
+0x350C : LDI R2, v_next_size_63
+0x3510 : LD R1, R2
+0x3514 : ADD R0, R1
+0x3518 : LDI R1, v_new_size_64
+0x351C : ST R1, R0
+0x3520 : LDI R2, v_new_size_64
+0x3524 : LD R0, R2
+0x3528 : PUSH R0
+0x352C : LDI R2, v_header_ptr_57
+0x3530 : LD R0, R2
+0x3534 : LDI R1, 0
+0x3538 : ADD R0, R1
+0x353C : MOV R1, R0
+0x3540 : POP R0
+0x3544 : MOV R2, R0
+0x3548 : ST R1, R2
+0x354C : LDI R2, v_next_block_59
+0x3550 : LD R0, R2
+0x3554 : LDI R1, 8
+0x3558 : ADD R0, R1
+0x355C : MOV R1, R0
+0x3560 : LD R0, R1
+0x3564 : LDI R1, v_next_next_65
+0x3568 : ST R1, R0
+0x356C : LDI R2, v_next_next_65
+0x3570 : LD R0, R2
+0x3574 : PUSH R0
+0x3578 : LDI R2, v_header_ptr_57
+0x357C : LD R0, R2
+0x3580 : LDI R1, 8
+0x3584 : ADD R0, R1
+0x3588 : MOV R1, R0
+0x358C : POP R0
+0x3590 : MOV R2, R0
+0x3594 : ST R1, R2
+0x3598 : LDI R2, v_next_next_65
+0x359C : LD R0, R2
+0x35A0 : LDI R1, v_next_block_59
+0x35A4 : ST R1, R0
+0x35A8 : JMP endif_72
+0x35AC : JMP endwhile_68
+0x35B0 : JMP while_67
+0x35B4 : RET
+0x35B8 : CALL init_gpu_driver
+0x35BC : LUI R0, 65312
+0x35C0 : ORI R0, 8224
+0x35C4 : PUSH R0
+0x35C8 : POP R0
+0x35CC : CALL gpu_clear
+0x35D0 : LDI R0, 0
+0x35D4 : PUSH R0
+0x35D8 : LDI R0, 0
+0x35DC : PUSH R0
+0x35E0 : LDI R0, 480
+0x35E4 : PUSH R0
+0x35E8 : LDI R0, 16
+0x35EC : PUSH R0
+0x35F0 : LUI R0, 65280
+0x35F4 : ORI R0, 128
+0x35F8 : PUSH R0
+0x35FC : POP R4
+0x3600 : POP R3
+0x3604 : POP R2
+0x3608 : POP R1
+0x360C : POP R0
+0x3610 : CALL gpu_rect
+0x3614 : LDI R0, 8
+0x3618 : PUSH R0
+0x361C : LDI R0, 0
+0x3620 : PUSH R0
+0x3624 : LDI R0, str_8
+0x3628 : PUSH R0
+0x362C : LUI R0, 65535
+0x3630 : ORI R0, 65535
+0x3634 : PUSH R0
+0x3638 : POP R3
+0x363C : POP R2
+0x3640 : POP R1
+0x3644 : POP R0
+0x3648 : CALL gpu_print
+0x364C : CALL stack_init
+0x3650 : LDI R0, 10
+0x3654 : PUSH R0
+0x3658 : LDI R0, 20
+0x365C : PUSH R0
+0x3660 : LDI R0, str_9
+0x3664 : PUSH R0
+0x3668 : LUI R0, 65484
+0x366C : ORI R0, 52428
+0x3670 : PUSH R0
+0x3674 : POP R3
+0x3678 : POP R2
+0x367C : POP R1
+0x3680 : POP R0
+0x3684 : CALL gpu_print
+0x3688 : LDI R0, 100
+0x368C : PUSH R0
+0x3690 : LDI R0, 20
+0x3694 : PUSH R0
+0x3698 : LDI R0, 28668
+0x369C : PUSH R0
+0x36A0 : LDI R0, -1
+0x36A4 : PUSH R0
+0x36A8 : POP R3
+0x36AC : POP R2
+0x36B0 : POP R1
+0x36B4 : POP R0
+0x36B8 : CALL gpu_print_hex
+0x36BC : CALL pmm_init
+0x36C0 : CALL vmm_init
+0x36C4 : LDI R0, 10
+0x36C8 : PUSH R0
+0x36CC : LDI R0, 64
+0x36D0 : PUSH R0
+0x36D4 : LDI R0, str_10
+0x36D8 : PUSH R0
+0x36DC : LUI R0, 65484
+0x36E0 : ORI R0, 52428
+0x36E4 : PUSH R0
+0x36E8 : POP R3
+0x36EC : POP R2
+0x36F0 : POP R1
+0x36F4 : POP R0
+0x36F8 : CALL gpu_print
+0x36FC : LDI R0, 120
+0x3700 : PUSH R0
+0x3704 : LDI R0, 64
+0x3708 : PUSH R0
+0x370C : LDI R0, 20480
+0x3710 : PUSH R0
+0x3714 : LDI R0, -1
+0x3718 : PUSH R0
+0x371C : POP R3
+0x3720 : POP R2
+0x3724 : POP R1
+0x3728 : POP R0
+0x372C : CALL gpu_print_hex
+0x3730 : CALL mm_init
+0x3734 : LDI R0, 10
+0x3738 : PUSH R0
+0x373C : LDI R0, 80
+0x3740 : PUSH R0
+0x3744 : LDI R0, str_11
+0x3748 : PUSH R0
+0x374C : LUI R0, 65280
+0x3750 : ORI R0, 65280
+0x3754 : PUSH R0
+0x3758 : POP R3
+0x375C : POP R2
+0x3760 : POP R1
+0x3764 : POP R0
+0x3768 : CALL gpu_print
+0x376C : CALL pmm_alloc_page
+0x3770 : LDI R1, v_p1_66
+0x3774 : ST R1, R0
+0x3778 : LDI R2, v_p1_66
+0x377C : LD R0, R2
+0x3780 : PUSH R0
+0x3784 : LDI R0, -1
+0x3788 : MOV R1, R0
+0x378C : POP R0
+0x3790 : CMP R0, R1
+0x3794 : JZ else_74
+0x3798 : LDI R0, 10
+0x379C : PUSH R0
+0x37A0 : LDI R0, 100
+0x37A4 : PUSH R0
+0x37A8 : LDI R0, str_12
+0x37AC : PUSH R0
+0x37B0 : LUI R0, 65472
+0x37B4 : ORI R0, 49344
+0x37B8 : PUSH R0
+0x37BC : POP R3
+0x37C0 : POP R2
+0x37C4 : POP R1
+0x37C8 : POP R0
+0x37CC : CALL gpu_print
+0x37D0 : LDI R0, 140
+0x37D4 : PUSH R0
+0x37D8 : LDI R0, 100
+0x37DC : PUSH R0
+0x37E0 : LDI R2, v_p1_66
+0x37E4 : LD R0, R2
+0x37E8 : PUSH R0
+0x37EC : LDI R0, -256
+0x37F0 : PUSH R0
+0x37F4 : POP R3
+0x37F8 : POP R2
+0x37FC : POP R1
+0x3800 : POP R0
+0x3804 : CALL gpu_print_hex
+0x3808 : LUI R0, 128
+0x380C : PUSH R0
+0x3810 : LDI R2, v_p1_66
+0x3814 : LD R0, R2
+0x3818 : PUSH R0
+0x381C : LDI R0, 7
+0x3820 : PUSH R0
+0x3824 : POP R2
+0x3828 : POP R1
+0x382C : POP R0
+0x3830 : CALL vmm_map_page
+0x3834 : LUI R0, 128
+0x3838 : PUSH R0
+0x383C : POP R0
+0x3840 : CALL vmm_translate
+0x3844 : LDI R1, v_virt_67
+0x3848 : ST R1, R0
+0x384C : LDI R2, v_virt_67
+0x3850 : LD R0, R2
+0x3854 : PUSH R0
+0x3858 : LDI R2, v_p1_66
+0x385C : LD R0, R2
+0x3860 : MOV R1, R0
+0x3864 : POP R0
+0x3868 : CMP R0, R1
+0x386C : JNZ else_76
+0x3870 : LDI R0, 10
+0x3874 : PUSH R0
+0x3878 : LDI R0, 116
+0x387C : PUSH R0
+0x3880 : LDI R0, str_13
+0x3884 : PUSH R0
+0x3888 : LUI R0, 65280
+0x388C : ORI R0, 65280
+0x3890 : PUSH R0
+0x3894 : POP R3
+0x3898 : POP R2
+0x389C : POP R1
+0x38A0 : POP R0
+0x38A4 : CALL gpu_print
+0x38A8 : JMP endif_77
+0x38AC : LDI R0, 10
+0x38B0 : PUSH R0
+0x38B4 : LDI R0, 116
+0x38B8 : PUSH R0
+0x38BC : LDI R0, str_14
+0x38C0 : PUSH R0
+0x38C4 : LUI R0, 65535
+0x38C8 : PUSH R0
+0x38CC : POP R3
+0x38D0 : POP R2
+0x38D4 : POP R1
+0x38D8 : POP R0
+0x38DC : CALL gpu_print
+0x38E0 : JMP endif_75
+0x38E4 : LDI R0, 10
+0x38E8 : PUSH R0
+0x38EC : LDI R0, 100
+0x38F0 : PUSH R0
+0x38F4 : LDI R0, str_15
+0x38F8 : PUSH R0
+0x38FC : LUI R0, 65535
+0x3900 : PUSH R0
+0x3904 : POP R3
+0x3908 : POP R2
+0x390C : POP R1
+0x3910 : POP R0
+0x3914 : CALL gpu_print
+0x3918 : LDI R0, 10
+0x391C : PUSH R0
+0x3920 : LDI R0, 140
+0x3924 : PUSH R0
+0x3928 : LDI R0, str_16
+0x392C : PUSH R0
+0x3930 : LUI R0, 65365
+0x3934 : ORI R0, 65365
+0x3938 : PUSH R0
+0x393C : POP R3
+0x3940 : POP R2
+0x3944 : POP R1
+0x3948 : POP R0
+0x394C : CALL gpu_print
+0x3950 : LDI R0, 156
+0x3954 : LDI R1, v_cursor_y_68
+0x3958 : ST R1, R0
+0x395C : LDI R0, 10
+0x3960 : LDI R1, g_term_cursor_x_2
+0x3964 : ST R1, R0
+0x3968 : LDI R0, 1
+0x396C : PUSH R0
+0x3970 : LDI R0, 1
+0x3974 : MOV R1, R0
+0x3978 : POP R0
+0x397C : CMP R0, R1
+0x3980 : JNZ endwhile_79
+0x3984 : CALL poll_keyboard
+0x3988 : LDI R1, v_key_69
+0x398C : ST R1, R0
+0x3990 : LDI R2, v_key_69
+0x3994 : LD R0, R2
+0x3998 : PUSH R0
+0x399C : LDI R0, 0
+0x39A0 : MOV R1, R0
+0x39A4 : POP R0
+0x39A8 : CMP R0, R1
+0x39AC : JZ else_80
+0x39B0 : LDI R2, g_term_cursor_x_2
+0x39B4 : LD R0, R2
+0x39B8 : PUSH R0
+0x39BC : LDI R2, v_cursor_y_68
+0x39C0 : LD R0, R2
+0x39C4 : PUSH R0
+0x39C8 : LDI R2, v_key_69
+0x39CC : LD R0, R2
+0x39D0 : PUSH R0
+0x39D4 : LUI R0, 65535
+0x39D8 : ORI R0, 65535
+0x39DC : PUSH R0
+0x39E0 : POP R3
+0x39E4 : POP R2
+0x39E8 : POP R1
+0x39EC : POP R0
+0x39F0 : CALL gpu_char
+0x39F4 : LDI R2, g_term_cursor_x_2
+0x39F8 : LD R0, R2
+0x39FC : LDI R1, 8
+0x3A00 : ADD R0, R1
+0x3A04 : LDI R1, g_term_cursor_x_2
+0x3A08 : ST R1, R0
+0x3A0C : LDI R2, g_term_cursor_x_2
+0x3A10 : LD R0, R2
+0x3A14 : PUSH R0
+0x3A18 : LDI R0, 470
+0x3A1C : MOV R1, R0
+0x3A20 : POP R0
+0x3A24 : CMP R0, R1
+0x3A28 : JL else_82
+0x3A2C : JZ else_82
+0x3A30 : LDI R0, 10
+0x3A34 : LDI R1, g_term_cursor_x_2
+0x3A38 : ST R1, R0
+0x3A3C : LDI R2, v_cursor_y_68
+0x3A40 : LD R0, R2
+0x3A44 : LDI R1, 16
+0x3A48 : ADD R0, R1
+0x3A4C : LDI R1, v_cursor_y_68
+0x3A50 : ST R1, R0
+0x3A54 : JMP endif_83
+0x3A58 : JMP endif_81
+0x3A5C : WAIT 10
+0x3A60 : JMP while_78
+0x3A64 : RET
+0x3A68 : .data 0
+0x3A6C : .data 10
+0x3A70 : .data 0
+0x3A74 : .data 0
+0x3A78 : .data 0
+0x3A7C : .data 0
+0x3A80 : .data 0
+0x3A84 : .data 0
+0x3A88 : .data 0
+0x3A8C : .data 0
+0x3A90 : .data 0
+0x3A94 : .data 0
+0x3A98 : .data 0
+0x3A9C : .data 0
+0x3AA0 : .data 0
+0x3AA4 : .data 0
+0x3AA8 : .data 0
+0x3AAC : .data 0
+0x3AB0 : .data 0
+0x3AB4 : .data 0
+0x3AB8 : .data 0
+0x3ABC : .data 0
+0x3AC0 : .data 0
+0x3AC4 : .data 0
+0x3AC8 : .data 0
+0x3ACC : .data 0
+0x3AD0 : .data 0
+0x3AD4 : .data 0
+0x3AD8 : .data 0
+0x3ADC : .data 0
+0x3AE0 : .data 0
+0x3AE4 : .data 0
+0x3AE8 : .data 0
+0x3AEC : .data 0
+0x3AF0 : .data 83
+0x3AF4 : .data 116
+0x3AF8 : .data 97
+0x3AFC : .data 99
+0x3B00 : .data 107
+0x3B04 : .data 58
+0x3B08 : .data 32
+0x3B0C : .data 73
+0x3B10 : .data 110
+0x3B14 : .data 105
+0x3B18 : .data 116
+0x3B1C : .data 105
+0x3B20 : .data 97
+0x3B24 : .data 108
+0x3B28 : .data 105
+0x3B2C : .data 122
+0x3B30 : .data 101
+0x3B34 : .data 100
+0x3B38 : .data 32
+0x3B3C : .data 97
+0x3B40 : .data 116
+0x3B44 : .data 32
+0x3B48 : .data 48
+0x3B4C : .data 120
+0x3B50 : .data 48
+0x3B54 : .data 49
+0x3B58 : .data 70
+0x3B5C : .data 70
+0x3B60 : .data 70
+0x3B64 : .data 67
+0x3B68 : .data 0
+0x3B6C : .data 0
+0x3B70 : .data 0
+0x3B74 : .data 0
+0x3B78 : .data 0
+0x3B7C : .data 0
+0x3B80 : .data 0
+0x3B84 : .data 80
+0x3B88 : .data 77
+0x3B8C : .data 77
+0x3B90 : .data 58
+0x3B94 : .data 32
+0x3B98 : .data 66
+0x3B9C : .data 105
+0x3BA0 : .data 116
+0x3BA4 : .data 109
+0x3BA8 : .data 97
+0x3BAC : .data 112
+0x3BB0 : .data 32
+0x3BB4 : .data 70
+0x3BB8 : .data 105
+0x3BBC : .data 120
+0x3BC0 : .data 101
+0x3BC4 : .data 100
+0x3BC8 : .data 0
+0x3BCC : .data 0
+0x3BD0 : .data 0
+0x3BD4 : .data 0
+0x3BD8 : .data 0
+0x3BDC : .data 0
+0x3BE0 : .data 0
+0x3BE4 : .data 0
+0x3BE8 : .data 0
+0x3BEC : .data 0
+0x3BF0 : .data 0
+0x3BF4 : .data 0
+0x3BF8 : .data 0
+0x3BFC : .data 0
+0x3C00 : .data 0
+0x3C04 : .data 0
+0x3C08 : .data 0
+0x3C0C : .data 0
+0x3C10 : .data 0
+0x3C14 : .data 0
+0x3C18 : .data 86
+0x3C1C : .data 77
+0x3C20 : .data 77
+0x3C24 : .data 58
+0x3C28 : .data 32
+0x3C2C : .data 84
+0x3C30 : .data 97
+0x3C34 : .data 98
+0x3C38 : .data 108
+0x3C3C : .data 101
+0x3C40 : .data 32
+0x3C44 : .data 90
+0x3C48 : .data 101
+0x3C4C : .data 114
+0x3C50 : .data 111
+0x3C54 : .data 101
+0x3C58 : .data 100
+0x3C5C : .data 0
+0x3C60 : .data 0
+0x3C64 : .data 0
+0x3C68 : .data 0
+0x3C6C : .data 0
+0x3C70 : .data 0
+0x3C74 : .data 0
+0x3C78 : .data 0
+0x3C7C : .data 0
+0x3C80 : .data 0
+0x3C84 : .data 0
+0x3C88 : .data 0
+0x3C8C : .data 0
+0x3C90 : .data 0
+0x3C94 : .data 0
+0x3C98 : .data 0
+0x3C9C : .data 0
+0x3CA0 : .data 0
+0x3CA4 : .data 0
+0x3CA8 : .data 0
+0x3CAC : .data 77
+0x3CB0 : .data 77
+0x3CB4 : .data 58
+0x3CB8 : .data 32
+0x3CBC : .data 72
+0x3CC0 : .data 101
+0x3CC4 : .data 97
+0x3CC8 : .data 112
+0x3CCC : .data 32
+0x3CD0 : .data 73
+0x3CD4 : .data 110
+0x3CD8 : .data 105
+0x3CDC : .data 116
+0x3CE0 : .data 105
+0x3CE4 : .data 97
+0x3CE8 : .data 108
+0x3CEC : .data 105
+0x3CF0 : .data 122
+0x3CF4 : .data 101
+0x3CF8 : .data 100
+0x3CFC : .data 0
+0x3D00 : .data 0
+0x3D04 : .data 0
+0x3D08 : .data 0
+0x3D0C : .data 0
+0x3D10 : .data 0
+0x3D14 : .data 0
+0x3D18 : .data 77
+0x3D1C : .data 77
+0x3D20 : .data 32
+0x3D24 : .data 80
+0x3D28 : .data 65
+0x3D2C : .data 78
+0x3D30 : .data 73
+0x3D34 : .data 67
+0x3D38 : .data 58
+0x3D3C : .data 32
+0x3D40 : .data 72
+0x3D44 : .data 101
+0x3D48 : .data 97
+0x3D4C : .data 112
+0x3D50 : .data 32
+0x3D54 : .data 99
+0x3D58 : .data 111
+0x3D5C : .data 114
+0x3D60 : .data 114
+0x3D64 : .data 117
+0x3D68 : .data 112
+0x3D6C : .data 116
+0x3D70 : .data 105
+0x3D74 : .data 111
+0x3D78 : .data 110
+0x3D7C : .data 32
+0x3D80 : .data 100
+0x3D84 : .data 101
+0x3D88 : .data 116
+0x3D8C : .data 101
+0x3D90 : .data 99
+0x3D94 : .data 116
+0x3D98 : .data 101
+0x3D9C : .data 100
+0x3DA0 : .data 33
+0x3DA4 : .data 0
+0x3DA8 : .data 0
+0x3DAC : .data 0
+0x3DB0 : .data 0
+0x3DB4 : .data 0
+0x3DB8 : .data 0
+0x3DBC : .data 0
+0x3DC0 : .data 77
+0x3DC4 : .data 77
+0x3DC8 : .data 32
+0x3DCC : .data 69
+0x3DD0 : .data 82
+0x3DD4 : .data 82
+0x3DD8 : .data 79
+0x3DDC : .data 82
+0x3DE0 : .data 58
+0x3DE4 : .data 32
+0x3DE8 : .data 73
+0x3DEC : .data 110
+0x3DF0 : .data 118
+0x3DF4 : .data 97
+0x3DF8 : .data 108
+0x3DFC : .data 105
+0x3E00 : .data 100
+0x3E04 : .data 32
+0x3E08 : .data 112
+0x3E0C : .data 111
+0x3E10 : .data 105
+0x3E14 : .data 110
+0x3E18 : .data 116
+0x3E1C : .data 101
+0x3E20 : .data 114
+0x3E24 : .data 32
+0x3E28 : .data 105
+0x3E2C : .data 110
+0x3E30 : .data 32
+0x3E34 : .data 102
+0x3E38 : .data 114
+0x3E3C : .data 101
+0x3E40 : .data 101
+0x3E44 : .data 40
+0x3E48 : .data 41
+0x3E4C : .data 0
+0x3E50 : .data 0
+0x3E54 : .data 0
+0x3E58 : .data 77
+0x3E5C : .data 77
+0x3E60 : .data 32
+0x3E64 : .data 80
+0x3E68 : .data 65
+0x3E6C : .data 78
+0x3E70 : .data 73
+0x3E74 : .data 67
+0x3E78 : .data 58
+0x3E7C : .data 32
+0x3E80 : .data 78
+0x3E84 : .data 101
+0x3E88 : .data 120
+0x3E8C : .data 116
+0x3E90 : .data 32
+0x3E94 : .data 98
+0x3E98 : .data 108
+0x3E9C : .data 111
+0x3EA0 : .data 99
+0x3EA4 : .data 107
+0x3EA8 : .data 32
+0x3EAC : .data 99
+0x3EB0 : .data 111
+0x3EB4 : .data 114
+0x3EB8 : .data 114
+0x3EBC : .data 117
+0x3EC0 : .data 112
+0x3EC4 : .data 116
+0x3EC8 : .data 101
+0x3ECC : .data 100
+0x3ED0 : .data 33
+0x3ED4 : .data 0
+0x3ED8 : .data 0
+0x3EDC : .data 0
+0x3EE0 : .data 0
+0x3EE4 : .data 0
+0x3EE8 : .data 0
+0x3EEC : .data 76
+0x3EF0 : .data 111
+0x3EF4 : .data 114
+0x3EF8 : .data 97
+0x3EFC : .data 79
+0x3F00 : .data 83
+0x3F04 : .data 32
+0x3F08 : .data 118
+0x3F0C : .data 52
+0x3F10 : .data 46
+0x3F14 : .data 52
+0x3F18 : .data 32
+0x3F1C : .data 91
+0x3F20 : .data 77
+0x3F24 : .data 77
+0x3F28 : .data 85
+0x3F2C : .data 32
+0x3F30 : .data 68
+0x3F34 : .data 101
+0x3F38 : .data 98
+0x3F3C : .data 117
+0x3F40 : .data 103
+0x3F44 : .data 32
+0x3F48 : .data 77
+0x3F4C : .data 111
+0x3F50 : .data 100
+0x3F54 : .data 101
+0x3F58 : .data 93
+0x3F5C : .data 0
+0x3F60 : .data 83
+0x3F64 : .data 116
+0x3F68 : .data 97
+0x3F6C : .data 99
+0x3F70 : .data 107
+0x3F74 : .data 32
+0x3F78 : .data 116
+0x3F7C : .data 111
+0x3F80 : .data 112
+0x3F84 : .data 58
+0x3F88 : .data 0
+0x3F8C : .data 80
+0x3F90 : .data 97
+0x3F94 : .data 103
+0x3F98 : .data 101
+0x3F9C : .data 84
+0x3FA0 : .data 97
+0x3FA4 : .data 98
+0x3FA8 : .data 108
+0x3FAC : .data 101
+0x3FB0 : .data 32
+0x3FB4 : .data 97
+0x3FB8 : .data 116
+0x3FBC : .data 58
+0x3FC0 : .data 0
+0x3FC4 : .data 72
+0x3FC8 : .data 101
+0x3FCC : .data 97
+0x3FD0 : .data 112
+0x3FD4 : .data 58
+0x3FD8 : .data 32
+0x3FDC : .data 82
+0x3FE0 : .data 101
+0x3FE4 : .data 97
+0x3FE8 : .data 100
+0x3FEC : .data 121
+0x3FF0 : .data 0
+0x3FF4 : .data 0
+0x3FF8 : .data 65
+0x3FFC : .data 108
+0x4000 : .data 108
+0x4004 : .data 111
+0x4008 : .data 99
+0x400C : .data 97
+0x4010 : .data 116
+0x4014 : .data 101
+0x4018 : .data 100
+0x401C : .data 32
+0x4020 : .data 80
+0x4024 : .data 97
+0x4028 : .data 103
+0x402C : .data 101
+0x4030 : .data 58
+0x4034 : .data 0
+0x4038 : .data 0
+0x403C : .data 86
+0x4040 : .data 77
+0x4044 : .data 77
+0x4048 : .data 32
+0x404C : .data 84
+0x4050 : .data 101
+0x4054 : .data 115
+0x4058 : .data 116
+0x405C : .data 58
+0x4060 : .data 32
+0x4064 : .data 80
+0x4068 : .data 65
+0x406C : .data 83
+0x4070 : .data 83
+0x4074 : .data 0
+0x4078 : .data 86
+0x407C : .data 77
+0x4080 : .data 77
+0x4084 : .data 32
+0x4088 : .data 84
+0x408C : .data 101
+0x4090 : .data 115
+0x4094 : .data 116
+0x4098 : .data 58
+0x409C : .data 32
+0x40A0 : .data 70
+0x40A4 : .data 65
+0x40A8 : .data 73
+0x40AC : .data 76
+0x40B0 : .data 0
+0x40B4 : .data 65
+0x40B8 : .data 108
+0x40BC : .data 108
+0x40C0 : .data 111
+0x40C4 : .data 99
+0x40C8 : .data 97
+0x40CC : .data 116
+0x40D0 : .data 101
+0x40D4 : .data 100
+0x40D8 : .data 32
+0x40DC : .data 80
+0x40E0 : .data 97
+0x40E4 : .data 103
+0x40E8 : .data 101
+0x40EC : .data 58
+0x40F0 : .data 32
+0x40F4 : .data 70
+0x40F8 : .data 65
+0x40FC : .data 73
+0x4100 : .data 76
+0x4104 : .data 69
+0x4108 : .data 68
+0x410C : .data 0
+0x4110 : .data 83
+0x4114 : .data 89
+0x4118 : .data 83
+0x411C : .data 84
+0x4120 : .data 69
+0x4124 : .data 77
+0x4128 : .data 32
+0x412C : .data 82
+0x4130 : .data 85
+0x4134 : .data 78
+0x4138 : .data 78
+0x413C : .data 73
+0x4140 : .data 78
+0x4144 : .data 71
+0x4148 : .data 0
+0x414C : .data 0
+0x4150 : .data 0

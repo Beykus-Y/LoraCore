@@ -1,0 +1,15 @@
+import "consts.lc";
+
+// Возвращает код клавиши или 0, если ничего не нажато
+fn poll_keyboard() {
+    // Читаем количество символов в буфере
+    let count = mem[ADDR_KEYB + KEYB_REG_CNT];
+
+    if (count > 0) {
+        // Читаем сам символ (это удалит его из буфера контроллера)
+        let key = mem[ADDR_KEYB + KEYB_REG_VAL];
+        return key;
+    }
+
+    return 0;
+}

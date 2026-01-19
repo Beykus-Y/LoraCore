@@ -1,0 +1,552 @@
+0x0000 : JMP main
+0x0004 : CALL find_hardware
+0x0008 : LDI R2, g_gpu_addr_1
+0x000C : LD R0, R2
+0x0010 : PUSH R0
+0x0014 : LDI R0, 0
+0x0018 : MOV R1, R0
+0x001C : POP R0
+0x0020 : CMP R0, R1
+0x0024 : JNZ else_2
+0x0028 : HLT
+0x002C : JMP endif_3
+0x0030 : LDI R0, -16777080
+0x0034 : PUSH R0
+0x0038 : POP R0
+0x003C : CALL gpu_clear
+0x0040 : LDI R2, g_disk_addr_2
+0x0044 : LD R0, R2
+0x0048 : PUSH R0
+0x004C : LDI R0, 0
+0x0050 : MOV R1, R0
+0x0054 : POP R0
+0x0058 : CMP R0, R1
+0x005C : JNZ else_4
+0x0060 : LDI R0, -5636096
+0x0064 : PUSH R0
+0x0068 : POP R0
+0x006C : CALL gpu_clear
+0x0070 : HLT
+0x0074 : JMP endif_5
+0x0078 : LDI R0, -16742400
+0x007C : PUSH R0
+0x0080 : POP R0
+0x0084 : CALL gpu_clear
+0x0088 : LDI R0, 100
+0x008C : PUSH R0
+0x0090 : LDI R0, 200
+0x0094 : PUSH R0
+0x0098 : LDI R0, 280
+0x009C : PUSH R0
+0x00A0 : LDI R0, 20
+0x00A4 : PUSH R0
+0x00A8 : LDI R0, -1
+0x00AC : PUSH R0
+0x00B0 : POP R4
+0x00B4 : POP R3
+0x00B8 : POP R2
+0x00BC : POP R1
+0x00C0 : POP R0
+0x00C4 : CALL gpu_fill
+0x00C8 : LDI R0, 0
+0x00CC : PUSH R0
+0x00D0 : LDI R0, 8192
+0x00D4 : PUSH R0
+0x00D8 : LDI R0, 4
+0x00DC : PUSH R0
+0x00E0 : POP R2
+0x00E4 : POP R1
+0x00E8 : POP R0
+0x00EC : CALL disk_read
+0x00F0 : LDI R1, v_success_3
+0x00F4 : ST R1, R0
+0x00F8 : LDI R2, v_success_3
+0x00FC : LD R0, R2
+0x0100 : PUSH R0
+0x0104 : LDI R0, 0
+0x0108 : MOV R1, R0
+0x010C : POP R0
+0x0110 : CMP R0, R1
+0x0114 : JNZ else_6
+0x0118 : LDI R0, -5636096
+0x011C : PUSH R0
+0x0120 : POP R0
+0x0124 : CALL gpu_clear
+0x0128 : HLT
+0x012C : JMP endif_7
+0x0130 : LDI R0, 220
+0x0134 : PUSH R0
+0x0138 : LDI R0, 115
+0x013C : PUSH R0
+0x0140 : LDI R0, 40
+0x0144 : PUSH R0
+0x0148 : LDI R0, 40
+0x014C : PUSH R0
+0x0150 : LDI R0, -256
+0x0154 : PUSH R0
+0x0158 : POP R4
+0x015C : POP R3
+0x0160 : POP R2
+0x0164 : POP R1
+0x0168 : POP R0
+0x016C : CALL gpu_fill
+0x0170 : CALL setup_boot_jump
+0x0174 : CALL 4096
+0x0178 : HLT
+0x017C : RET
+0x0180 : LUI R0, 255
+0x0184 : ORI R0, 61440
+0x0188 : LDI R1, 8
+0x018C : ADD R0, R1
+0x0190 : LDI R1, v_ptr_4
+0x0194 : ST R1, R0
+0x0198 : LUI R0, 255
+0x019C : ORI R0, 61440
+0x01A0 : LDI R1, 4
+0x01A4 : ADD R0, R1
+0x01A8 : LDI R1, v_count_addr_5
+0x01AC : ST R1, R0
+0x01B0 : LDI R2, v_count_addr_5
+0x01B4 : LD R0, R2
+0x01B8 : MOV R1, R0
+0x01BC : LD R0, R1
+0x01C0 : LDI R1, v_dev_count_6
+0x01C4 : ST R1, R0
+0x01C8 : LDI R0, 0
+0x01CC : LDI R1, v_i_7
+0x01D0 : ST R1, R0
+0x01D4 : LDI R2, v_i_7
+0x01D8 : LD R0, R2
+0x01DC : PUSH R0
+0x01E0 : LDI R2, v_dev_count_6
+0x01E4 : LD R0, R2
+0x01E8 : MOV R1, R0
+0x01EC : POP R0
+0x01F0 : CMP R0, R1
+0x01F4 : JG endwhile_10
+0x01F8 : JZ endwhile_10
+0x01FC : LDI R2, v_ptr_4
+0x0200 : LD R0, R2
+0x0204 : MOV R1, R0
+0x0208 : LD R0, R1
+0x020C : LDI R1, v_type_8
+0x0210 : ST R1, R0
+0x0214 : LDI R2, v_ptr_4
+0x0218 : LD R0, R2
+0x021C : LDI R1, 4
+0x0220 : ADD R0, R1
+0x0224 : MOV R1, R0
+0x0228 : LD R0, R1
+0x022C : LDI R1, v_base_9
+0x0230 : ST R1, R0
+0x0234 : LDI R2, v_type_8
+0x0238 : LD R0, R2
+0x023C : PUSH R0
+0x0240 : LDI R0, 2
+0x0244 : MOV R1, R0
+0x0248 : POP R0
+0x024C : CMP R0, R1
+0x0250 : JNZ else_11
+0x0254 : LDI R2, v_base_9
+0x0258 : LD R0, R2
+0x025C : LDI R1, g_gpu_addr_1
+0x0260 : ST R1, R0
+0x0264 : JMP endif_12
+0x0268 : LDI R2, v_type_8
+0x026C : LD R0, R2
+0x0270 : PUSH R0
+0x0274 : LDI R0, 3
+0x0278 : MOV R1, R0
+0x027C : POP R0
+0x0280 : CMP R0, R1
+0x0284 : JNZ else_13
+0x0288 : LDI R2, v_base_9
+0x028C : LD R0, R2
+0x0290 : LDI R1, g_disk_addr_2
+0x0294 : ST R1, R0
+0x0298 : JMP endif_14
+0x029C : LDI R2, v_ptr_4
+0x02A0 : LD R0, R2
+0x02A4 : LDI R1, 16
+0x02A8 : ADD R0, R1
+0x02AC : LDI R1, v_ptr_4
+0x02B0 : ST R1, R0
+0x02B4 : LDI R2, v_i_7
+0x02B8 : LD R0, R2
+0x02BC : LDI R1, 1
+0x02C0 : ADD R0, R1
+0x02C4 : LDI R1, v_i_7
+0x02C8 : ST R1, R0
+0x02CC : JMP while_9
+0x02D0 : RET
+0x02D4 : LDI R12, arg_gpu_clear_color_15
+0x02D8 : ST R12, R0
+0x02DC : LDI R2, g_gpu_addr_1
+0x02E0 : LD R0, R2
+0x02E4 : PUSH R0
+0x02E8 : LDI R0, 0
+0x02EC : MOV R1, R0
+0x02F0 : POP R0
+0x02F4 : CMP R0, R1
+0x02F8 : JNZ else_16
+0x02FC : JMP endif_17
+0x0300 : LDI R2, g_gpu_addr_1
+0x0304 : LD R0, R2
+0x0308 : LUI R1, 31
+0x030C : ORI R1, 41984
+0x0310 : ADD R0, R1
+0x0314 : LDI R1, v_status_reg_10
+0x0318 : ST R1, R0
+0x031C : LDI R0, 1
+0x0320 : LDI R1, v_busy_11
+0x0324 : ST R1, R0
+0x0328 : LDI R2, v_busy_11
+0x032C : LD R0, R2
+0x0330 : PUSH R0
+0x0334 : LDI R0, 1
+0x0338 : MOV R1, R0
+0x033C : POP R0
+0x0340 : CMP R0, R1
+0x0344 : JNZ endwhile_19
+0x0348 : LDI R2, v_status_reg_10
+0x034C : LD R0, R2
+0x0350 : MOV R1, R0
+0x0354 : LD R0, R1
+0x0358 : LDI R1, v_busy_11
+0x035C : ST R1, R0
+0x0360 : JMP while_18
+0x0364 : LDI R2, g_gpu_addr_1
+0x0368 : LD R0, R2
+0x036C : LUI R1, 31
+0x0370 : ORI R1, 42008
+0x0374 : ADD R0, R1
+0x0378 : LDI R1, v_reg_color_12
+0x037C : ST R1, R0
+0x0380 : LDI R2, g_gpu_addr_1
+0x0384 : LD R0, R2
+0x0388 : LUI R1, 31
+0x038C : ORI R1, 41988
+0x0390 : ADD R0, R1
+0x0394 : LDI R1, v_reg_cmd_13
+0x0398 : ST R1, R0
+0x039C : LDI R2, arg_gpu_clear_color_15
+0x03A0 : LD R0, R2
+0x03A4 : PUSH R0
+0x03A8 : LDI R2, v_reg_color_12
+0x03AC : LD R0, R2
+0x03B0 : MOV R1, R0
+0x03B4 : POP R0
+0x03B8 : MOV R2, R0
+0x03BC : ST R1, R2
+0x03C0 : LDI R0, 1
+0x03C4 : PUSH R0
+0x03C8 : LDI R2, v_reg_cmd_13
+0x03CC : LD R0, R2
+0x03D0 : MOV R1, R0
+0x03D4 : POP R0
+0x03D8 : MOV R2, R0
+0x03DC : ST R1, R2
+0x03E0 : RET
+0x03E4 : LDI R12, arg_gpu_fill_x_20
+0x03E8 : ST R12, R0
+0x03EC : LDI R12, arg_gpu_fill_y_20
+0x03F0 : ST R12, R1
+0x03F4 : LDI R12, arg_gpu_fill_w_20
+0x03F8 : ST R12, R2
+0x03FC : LDI R12, arg_gpu_fill_h_20
+0x0400 : ST R12, R3
+0x0404 : LDI R12, arg_gpu_fill_color_20
+0x0408 : ST R12, R4
+0x040C : LDI R2, g_gpu_addr_1
+0x0410 : LD R0, R2
+0x0414 : PUSH R0
+0x0418 : LDI R0, 0
+0x041C : MOV R1, R0
+0x0420 : POP R0
+0x0424 : CMP R0, R1
+0x0428 : JNZ else_21
+0x042C : JMP endif_22
+0x0430 : LDI R2, g_gpu_addr_1
+0x0434 : LD R0, R2
+0x0438 : LUI R1, 31
+0x043C : ORI R1, 41984
+0x0440 : ADD R0, R1
+0x0444 : LDI R1, v_status_reg_14
+0x0448 : ST R1, R0
+0x044C : LDI R0, 1
+0x0450 : LDI R1, v_busy_15
+0x0454 : ST R1, R0
+0x0458 : LDI R2, v_busy_15
+0x045C : LD R0, R2
+0x0460 : PUSH R0
+0x0464 : LDI R0, 1
+0x0468 : MOV R1, R0
+0x046C : POP R0
+0x0470 : CMP R0, R1
+0x0474 : JNZ endwhile_24
+0x0478 : LDI R2, v_status_reg_14
+0x047C : LD R0, R2
+0x0480 : MOV R1, R0
+0x0484 : LD R0, R1
+0x0488 : LDI R1, v_busy_15
+0x048C : ST R1, R0
+0x0490 : JMP while_23
+0x0494 : LDI R2, g_gpu_addr_1
+0x0498 : LD R0, R2
+0x049C : LDI R1, v_base_16
+0x04A0 : ST R1, R0
+0x04A4 : LDI R2, arg_gpu_fill_x_20
+0x04A8 : LD R0, R2
+0x04AC : PUSH R0
+0x04B0 : LDI R2, v_base_16
+0x04B4 : LD R0, R2
+0x04B8 : LUI R1, 31
+0x04BC : ORI R1, 41992
+0x04C0 : ADD R0, R1
+0x04C4 : MOV R1, R0
+0x04C8 : POP R0
+0x04CC : MOV R2, R0
+0x04D0 : ST R1, R2
+0x04D4 : LDI R2, arg_gpu_fill_y_20
+0x04D8 : LD R0, R2
+0x04DC : PUSH R0
+0x04E0 : LDI R2, v_base_16
+0x04E4 : LD R0, R2
+0x04E8 : LUI R1, 31
+0x04EC : ORI R1, 41996
+0x04F0 : ADD R0, R1
+0x04F4 : MOV R1, R0
+0x04F8 : POP R0
+0x04FC : MOV R2, R0
+0x0500 : ST R1, R2
+0x0504 : LDI R2, arg_gpu_fill_w_20
+0x0508 : LD R0, R2
+0x050C : PUSH R0
+0x0510 : LDI R2, v_base_16
+0x0514 : LD R0, R2
+0x0518 : LUI R1, 31
+0x051C : ORI R1, 42000
+0x0520 : ADD R0, R1
+0x0524 : MOV R1, R0
+0x0528 : POP R0
+0x052C : MOV R2, R0
+0x0530 : ST R1, R2
+0x0534 : LDI R2, arg_gpu_fill_h_20
+0x0538 : LD R0, R2
+0x053C : PUSH R0
+0x0540 : LDI R2, v_base_16
+0x0544 : LD R0, R2
+0x0548 : LUI R1, 31
+0x054C : ORI R1, 42004
+0x0550 : ADD R0, R1
+0x0554 : MOV R1, R0
+0x0558 : POP R0
+0x055C : MOV R2, R0
+0x0560 : ST R1, R2
+0x0564 : LDI R2, arg_gpu_fill_color_20
+0x0568 : LD R0, R2
+0x056C : PUSH R0
+0x0570 : LDI R2, v_base_16
+0x0574 : LD R0, R2
+0x0578 : LUI R1, 31
+0x057C : ORI R1, 42008
+0x0580 : ADD R0, R1
+0x0584 : MOV R1, R0
+0x0588 : POP R0
+0x058C : MOV R2, R0
+0x0590 : ST R1, R2
+0x0594 : LDI R0, 2
+0x0598 : PUSH R0
+0x059C : LDI R2, v_base_16
+0x05A0 : LD R0, R2
+0x05A4 : LUI R1, 31
+0x05A8 : ORI R1, 41988
+0x05AC : ADD R0, R1
+0x05B0 : MOV R1, R0
+0x05B4 : POP R0
+0x05B8 : MOV R2, R0
+0x05BC : ST R1, R2
+0x05C0 : RET
+0x05C4 : LDI R12, arg_disk_read_sector_25
+0x05C8 : ST R12, R0
+0x05CC : LDI R12, arg_disk_read_ram_addr_25
+0x05D0 : ST R12, R1
+0x05D4 : LDI R12, arg_disk_read_count_25
+0x05D8 : ST R12, R2
+0x05DC : LDI R2, g_disk_addr_2
+0x05E0 : LD R0, R2
+0x05E4 : PUSH R0
+0x05E8 : LDI R0, 0
+0x05EC : MOV R1, R0
+0x05F0 : POP R0
+0x05F4 : CMP R0, R1
+0x05F8 : JNZ else_26
+0x05FC : LDI R0, 0
+0x0600 : JMP exit_disk_read_25
+0x0604 : JMP endif_27
+0x0608 : LDI R2, g_disk_addr_2
+0x060C : LD R0, R2
+0x0610 : LDI R1, 0
+0x0614 : ADD R0, R1
+0x0618 : LDI R1, v_status_reg_17
+0x061C : ST R1, R0
+0x0620 : LDI R0, 1
+0x0624 : LDI R1, v_busy_18
+0x0628 : ST R1, R0
+0x062C : LDI R2, v_busy_18
+0x0630 : LD R0, R2
+0x0634 : PUSH R0
+0x0638 : LDI R0, 1
+0x063C : MOV R1, R0
+0x0640 : POP R0
+0x0644 : CMP R0, R1
+0x0648 : JNZ endwhile_29
+0x064C : LDI R2, v_status_reg_17
+0x0650 : LD R0, R2
+0x0654 : MOV R1, R0
+0x0658 : LD R0, R1
+0x065C : LDI R1, v_busy_18
+0x0660 : ST R1, R0
+0x0664 : JMP while_28
+0x0668 : LDI R2, g_disk_addr_2
+0x066C : LD R0, R2
+0x0670 : LDI R1, v_base_19
+0x0674 : ST R1, R0
+0x0678 : LDI R2, arg_disk_read_sector_25
+0x067C : LD R0, R2
+0x0680 : PUSH R0
+0x0684 : LDI R2, v_base_19
+0x0688 : LD R0, R2
+0x068C : LDI R1, 8
+0x0690 : ADD R0, R1
+0x0694 : MOV R1, R0
+0x0698 : POP R0
+0x069C : MOV R2, R0
+0x06A0 : ST R1, R2
+0x06A4 : LDI R2, arg_disk_read_count_25
+0x06A8 : LD R0, R2
+0x06AC : PUSH R0
+0x06B0 : LDI R2, v_base_19
+0x06B4 : LD R0, R2
+0x06B8 : LDI R1, 12
+0x06BC : ADD R0, R1
+0x06C0 : MOV R1, R0
+0x06C4 : POP R0
+0x06C8 : MOV R2, R0
+0x06CC : ST R1, R2
+0x06D0 : LDI R2, arg_disk_read_ram_addr_25
+0x06D4 : LD R0, R2
+0x06D8 : PUSH R0
+0x06DC : LDI R2, v_base_19
+0x06E0 : LD R0, R2
+0x06E4 : LDI R1, 16
+0x06E8 : ADD R0, R1
+0x06EC : MOV R1, R0
+0x06F0 : POP R0
+0x06F4 : MOV R2, R0
+0x06F8 : ST R1, R2
+0x06FC : LDI R0, 1
+0x0700 : PUSH R0
+0x0704 : LDI R2, v_base_19
+0x0708 : LD R0, R2
+0x070C : LDI R1, 0
+0x0710 : ADD R0, R1
+0x0714 : MOV R1, R0
+0x0718 : POP R0
+0x071C : MOV R2, R0
+0x0720 : ST R1, R2
+0x0724 : LDI R0, 1
+0x0728 : LDI R1, v_busy_18
+0x072C : ST R1, R0
+0x0730 : LDI R2, v_busy_18
+0x0734 : LD R0, R2
+0x0738 : PUSH R0
+0x073C : LDI R0, 1
+0x0740 : MOV R1, R0
+0x0744 : POP R0
+0x0748 : CMP R0, R1
+0x074C : JNZ endwhile_31
+0x0750 : LDI R2, v_status_reg_17
+0x0754 : LD R0, R2
+0x0758 : MOV R1, R0
+0x075C : LD R0, R1
+0x0760 : LDI R1, v_busy_18
+0x0764 : ST R1, R0
+0x0768 : JMP while_30
+0x076C : LDI R2, v_base_19
+0x0770 : LD R0, R2
+0x0774 : LDI R1, 4
+0x0778 : ADD R0, R1
+0x077C : MOV R1, R0
+0x0780 : LD R0, R1
+0x0784 : LDI R1, v_err_20
+0x0788 : ST R1, R0
+0x078C : LDI R2, v_err_20
+0x0790 : LD R0, R2
+0x0794 : PUSH R0
+0x0798 : LDI R0, 0
+0x079C : MOV R1, R0
+0x07A0 : POP R0
+0x07A4 : CMP R0, R1
+0x07A8 : JZ else_32
+0x07AC : LDI R0, 0
+0x07B0 : JMP exit_disk_read_25
+0x07B4 : JMP endif_33
+0x07B8 : LDI R0, 1
+0x07BC : JMP exit_disk_read_25
+0x07C0 : RET
+0x07C4 : LDI R0, 49
+0x07C8 : LDI R1, v_jmp_opcode_21
+0x07CC : ST R1, R0
+0x07D0 : LUI R0, 12544
+0x07D4 : LDI R1, 8192
+0x07D8 : OR R0, R1
+0x07DC : LDI R1, v_instr_22
+0x07E0 : ST R1, R0
+0x07E4 : LDI R2, v_instr_22
+0x07E8 : LD R0, R2
+0x07EC : PUSH R0
+0x07F0 : LDI R0, 4096
+0x07F4 : MOV R1, R0
+0x07F8 : POP R0
+0x07FC : MOV R2, R0
+0x0800 : ST R1, R2
+0x0804 : LUI R0, 17408
+0x0808 : PUSH R0
+0x080C : LDI R0, 4100
+0x0810 : MOV R1, R0
+0x0814 : POP R0
+0x0818 : MOV R2, R0
+0x081C : ST R1, R2
+0x0820 : RET
+0x0824 : .data 0
+0x0828 : .data 0
+0x082C : .data 0
+0x0830 : .data 0
+0x0834 : .data 0
+0x0838 : .data 0
+0x083C : .data 0
+0x0840 : .data 0
+0x0844 : .data 0
+0x0848 : .data 0
+0x084C : .data 0
+0x0850 : .data 0
+0x0854 : .data 0
+0x0858 : .data 0
+0x085C : .data 0
+0x0860 : .data 0
+0x0864 : .data 0
+0x0868 : .data 0
+0x086C : .data 0
+0x0870 : .data 0
+0x0874 : .data 0
+0x0878 : .data 0
+0x087C : .data 0
+0x0880 : .data 0
+0x0884 : .data 0
+0x0888 : .data 0
+0x088C : .data 0
+0x0890 : .data 0
+0x0894 : .data 0
+0x0898 : .data 0
+0x089C : .data 0

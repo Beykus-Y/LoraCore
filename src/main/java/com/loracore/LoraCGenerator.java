@@ -6,23 +6,34 @@ import java.nio.file.*;
 
 public class LoraCGenerator {
     public static void main(String[] args) throws Exception {
-        String path = "src/main/resources/assets/loracore/os/src/";
+        // Путь к папке с исходниками
+        String srcDir = "src/main/resources/assets/loracore/os/src/kernel";
 
-        // 1. Читаем LoraC
-        String loraCCode = Files.readString(Paths.get(path + "bios.lc"));
+        System.out.println("Compiling Kernel from: " + srcDir);
 
-        // 2. Компилируем в ASM
+        // 1. Компилируем (используем новую перегрузку с поддержкой импортов)
         LoraCompiler compiler = new LoraCompiler();
-        String asmCode = compiler.compile(loraCCode);
-        Files.writeString(Paths.get(path + "bios_gen.asm"), asmCode);
+        // Передаем папку и имя входного файла
+        String asmCode = compiler.compile(srcDir, "kernel.lc");
 
-        // 3. Собираем в BIN
+        // Сохраняем ASM для отладки
+        Files.writeString(Paths.get(srcDir + "/kernel.asm"), asmCode);
+
+        // 2. Ассемблируем в BIN
         TextAssembler assembler = new TextAssembler();
-        byte[] binary = assembler.compile(asmCode);
+        // Base Address = 0x2000 (куда Bootloader грузит ядро)
+        byte[] binary = assembler.compile(asmCode, 0x2000);
 
-        // 4. Сохраняем как BiosN.bin
-        Files.write(Paths.get("src/main/resources/assets/loracore/os/BiosN.bin"), binary);
+        // 3. Сохраняем map-файл
+        StringBuilder mapFile = new StringBuilder();
+        for (String entry : assembler.getDebugMap()) {
+            mapFile.append(entry).append("\n");
+        }
+        Files.writeString(Paths.get(srcDir + "/kernel.map"), mapFile.toString());
 
-        System.out.println("BiosN.bin успешно создан из bios.lc!");
+        // 4. Сохраняем готовый бинарник
+        Files.write(Paths.get("src/main/resources/assets/loracore/os/kernel.bin"), binary);
+
+        System.out.println("SUCCESS! kernel.bin generated (" + binary.length + " bytes)");
     }
 }

@@ -146,7 +146,7 @@ public class VirtualMachineManager {
         ServerScreenState screenState = TabletScreenManager.getInstance().getOrCreateScreen(stack);
 
         // Логика определения Tier GPU
-        GpuMmioDevice.GpuTier gpuTier = GpuMmioDevice.GpuTier.TIER1;
+        GpuMmioDevice.GpuTier gpuTier = GpuMmioDevice.GpuTier.TIER3;
         if (mobo.gpu().isPresent()) {
             // Здесь можно добавить логику чтения тира из GpuData
             gpuTier = GpuMmioDevice.GpuTier.TIER3; // Пока ставим Tier 3 по умолчанию, если карта есть

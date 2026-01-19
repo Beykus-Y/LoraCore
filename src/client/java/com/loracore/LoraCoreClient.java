@@ -115,6 +115,7 @@ public class LoraCoreClient implements ClientModInitializer {
                             payload.ramTotalKb(),
                             payload.diskQueue(),
                             payload.uptimeSeconds(),
+                            payload.currentPc(),
                             payload.tabletUuidStr(),
                             payload.fsUuidStr()
                         );

@@ -15,6 +15,7 @@ import java.util.*;
 public class TextAssembler {
 
     private static final Map<String, Integer> OPCODES = new HashMap<>();
+    private final List<String> debugMap = new ArrayList<>();
 
     static {
         // Автоматическое заполнение карты опкодов через рефлексию из InstructionSet
@@ -47,18 +48,22 @@ public class TextAssembler {
     private int currentAddress = 0;
 
     private record PendingPatch(int instructionAddress, String labelName) {}
-
     public byte[] compile(String source) throws IOException {
+        return compile(source, 0);
+    }
+    public byte[] compile(String source, int baseAddress) throws IOException {
         symbolTable.clear();
         pendingPatches.clear();
         buffer.reset();
-        currentAddress = 0; // Считаем, что код начинается с 0 (или boot offset)
+        debugMap.clear();
+        currentAddress = baseAddress;  // Считаем, что код начинается с 0 (или boot offset)
 
         String[] lines = source.split("\n");
 
         // --- ПРОХОД 1: Генерация кода и сбор меток ---
         for (String line : lines) {
-            line = line.trim();
+            String originalLine = line.trim(); // Сохраняем для дебага до очистки
+            line = originalLine;
 
             // Удаляем комментарии
             int commentIndex = line.indexOf(';');
@@ -73,6 +78,10 @@ public class TextAssembler {
 
             if (line.isEmpty()) continue;
 
+            if (line.startsWith("const ")) {
+                parseConstant(line);
+                continue;
+            }
             // Обработка меток (например "start:")
             if (line.contains(":")) {
                 int colonIdx = line.indexOf(':');
@@ -90,7 +99,7 @@ public class TextAssembler {
                 // Если после метки ничего нет (пусто), переходим к следующей строке
                 if (line.isEmpty()) continue;
             }
-
+            debugMap.add(String.format("0x%04X : %s", currentAddress, line));
             // Обработка директив
             if (line.startsWith(".")) {
                 parseDirective(line);
@@ -114,7 +123,7 @@ public class TextAssembler {
             }
 
             int value = symbolTable.get(patch.labelName);
-            int offset = patch.instructionAddress;
+            int offset = patch.instructionAddress - baseAddress;
 
             // Инструкция: [Op:8][Rd:4][Rs:4][Imm:16]
             // Imm занимает последние 2 байта (offset + 2, offset + 3)
@@ -128,6 +137,25 @@ public class TextAssembler {
         }
 
         return binary;
+    }
+    public List<String> getDebugMap() {
+        return debugMap;
+    }
+    private void parseConstant(String line) {
+        // const NAME = VALUE
+        String content = line.substring(6).trim(); // убираем "const "
+        String[] parts = content.split("=");
+        if (parts.length != 2) {
+            throw new IllegalArgumentException("Invalid constant format: " + line);
+        }
+        String name = parts[0].trim();
+        String valueStr = parts[1].trim();
+        try {
+            int value = parseNumber(valueStr);
+            symbolTable.put(name, value);
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("Invalid constant value for " + name + ": " + valueStr);
+        }
     }
 
     private void parseDirective(String line) throws IOException {
@@ -179,23 +207,25 @@ public class TextAssembler {
         if (!argsRaw.isEmpty()) {
             String[] args = splitArgs(argsRaw);
 
-            // Логика разбора аргументов в зависимости от мнемоники
-            // Обобщенный подход: R, R | R, Imm | Imm | R
-
-            // 1. Инструкции с двумя регистрами (ADD R1, R2)
-            if (isRegReg(mnemonic)) {
-                if (args.length > 0) rD = parseRegister(args[0]);
-                if (args.length > 1) rS = parseRegister(args[1]);
-            }
-            // 2. Инструкции с регистром и числом (LDI R1, 100)
-            else if (isRegImm(mnemonic)) {
+            if (isRegImm(mnemonic) || isRegReg(mnemonic)) {
                 if (args.length > 0) rD = parseRegister(args[0]);
                 if (args.length > 1) {
+                    // Сначала пробуем распарсить как регистр
                     try {
-                        imm = parseNumber(args[1]);
-                    } catch (NumberFormatException e) {
-                        hasPatch = true;
-                        patchLabel = args[1];
+                        rS = parseRegister(args[1]);
+                        // Если это удалось, значит используем Reg-Reg версию.
+                        // Для команд типа ADDI/ANDI мы превращаем их в базовые ADD/AND
+                        if (mnemonic.endsWith("i")) {
+                            opcode = OPCODES.get(mnemonic.substring(0, mnemonic.length() - 1));
+                        }
+                    } catch (Exception e) {
+                        // Если не регистр, значит это число или метка (Immediate)
+                        try {
+                            imm = parseNumber(args[1]);
+                        } catch (NumberFormatException nfe) {
+                            hasPatch = true;
+                            patchLabel = args[1];
+                        }
                     }
                 }
             }
@@ -254,14 +284,16 @@ public class TextAssembler {
     private boolean isRegReg(String m) {
         return m.equals("mov") || m.equals("add") || m.equals("sub") || m.equals("mul") ||
                 m.equals("div") || m.equals("mod") || m.equals("and") || m.equals("or") ||
-                m.equals("xor") || m.equals("cmp") || m.equals("not") || m.equals("set_volt");
+                m.equals("xor") || m.equals("cmp") || m.equals("not") || m.equals("shl") ||
+                m.equals("shr") || m.equals("addi") || m.equals("subi") || m.equals("andi") ||
+                m.equals("ori");
     }
     private boolean isRegImm(String m) {
         return m.equals("ldi") || m.equals("lui") || m.equals("addi") || m.equals("subi") ||
                 m.equals("cmpi") || m.equals("shl") || m.equals("shr") || m.equals("andi") || m.equals("ori");
     }
     private boolean isSingleReg(String m) {
-        return m.equals("push") || m.equals("pop") || m.equals("get_temp") || m.equals("get_clock") || m.equals("inc") || m.equals("dec");
+        return m.equals("push") || m.equals("pop") || m.equals("get_temp") || m.equals("get_clock") || m.equals("inc") || m.equals("dec")|| m.equals("jmpr");
     }
     private boolean isJump(String m) {
         return m.equals("jmp") || m.equals("jz") || m.equals("jnz") || m.equals("jg") ||

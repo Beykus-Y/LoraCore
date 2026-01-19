@@ -1,7 +1,8 @@
 package com.loracore.computer;
 
 import com.loracore.LoraCoreMod;
-import com.loracore.lang.Compiler;
+import com.loracore.lang.LoraCompiler;
+import com.loracore.lang.TextAssembler;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.server.network.ServerPlayerEntity;
 import java.util.LinkedList;
@@ -86,9 +87,24 @@ public class VirtualMachine {
     }
 
     public void start(String sourceCode) {
-        Compiler compiler = new Compiler();
-        byte[] programBytes = compiler.compile(sourceCode);
-        start(programBytes);
+        try {
+            // 1. Компилируем LoraC -> ASM (String)
+            LoraCompiler compiler = new LoraCompiler();
+            String asmCode = compiler.compile(sourceCode);
+
+            LoraCoreMod.LOGGER.debug("[VM] Compiled ASM:\n{}", asmCode);
+
+            // 2. Ассемблируем ASM -> Machine Code (byte[])
+            TextAssembler assembler = new TextAssembler();
+            byte[] programBytes = assembler.compile(asmCode);
+
+            // 3. Загружаем бинарник
+            start(programBytes);
+
+        } catch (Exception e) {
+            LoraCoreMod.LOGGER.error("[VM] Compilation failed", e);
+            setCrashState("Compilation Error: " + e.getMessage());
+        }
     }
     public void start(byte[] programBytes) {
         if (programBytes == null) {
@@ -106,7 +122,7 @@ public class VirtualMachine {
         for (int i = 0; i < maxLen; i++) {
             systemRam.write(i, programBytes[i]);
         }
-        virtualCpu.pc = 0;
+        virtualCpu.reset();
         this.isOn = true;
         this.crashMessage = null;
         this.cycleBudget = 50000;
@@ -296,20 +312,18 @@ public class VirtualMachine {
      * @return SystemMetrics с текущими метриками или null, если метрики еще не готовы
      */
     public synchronized SystemMetrics getMetricsForClient() {
-        // Метрики обновляются каждые 20 тиков в tick(), поэтому просто возвращаем их
-        // Проверяем, что метрики были обновлены хотя бы раз
         if (ticksInPeriod == 0 && cpuLoad == 0.0 && ramUsedKb == 0.0) {
-            // Метрики еще не были обновлены, возвращаем null
             return null;
         }
-        
+
         return new SystemMetrics(
-            cpuLoad,
-            ramUsedKb,
-            ramTotalKb,
-            diskQueue,
-            tabletUuid.toString(),
-            fsUuid.toString()
+                cpuLoad,
+                ramUsedKb,
+                ramTotalKb,
+                diskQueue,
+                virtualCpu.pc, // <--- БЕРЕМ ТЕКУЩИЙ PC ИЗ CPU
+                tabletUuid.toString(),
+                fsUuid.toString()
         );
     }
     
@@ -317,12 +331,13 @@ public class VirtualMachine {
      * Record для передачи метрик на клиент.
      */
     public record SystemMetrics(
-        double cpuLoad,
-        double ramUsedKb,
-        double ramTotalKb,
-        int diskQueue,
-        String tabletUuidStr,
-        String fsUuidStr
+            double cpuLoad,
+            double ramUsedKb,
+            double ramTotalKb,
+            int diskQueue,
+            int currentPc, // <--- НОВОЕ ПОЛЕ
+            String tabletUuidStr,
+            String fsUuidStr
     ) {}
 
     /**
@@ -391,7 +406,7 @@ public class VirtualMachine {
      * @param nbt Данные для загрузки.
      */
     public void readFromNbt(NbtCompound nbt) {
-        this.isOn = nbt.getBoolean("isOn");
+        this.isOn = false;
     }
 
     public void pushEvent(String type, int keyCode) {}

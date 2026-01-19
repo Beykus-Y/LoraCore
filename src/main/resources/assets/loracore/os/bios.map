@@ -1,0 +1,47 @@
+0x0000 : ldi sp, 0x0FFC
+0x0004 : lui r1, 0x00FF
+0x0008 : ori r1, 0xF000
+0x000C : addi r1, 8
+0x0010 : ldi r2, 16
+0x0014 : ld r3, r1
+0x0018 : cmpi r3, 2
+0x001C : jz found_gpu
+0x0020 : addi r1, 16
+0x0024 : subi r2, 1
+0x0028 : jnz scan_loop
+0x002C : hlt
+0x0030 : addi r1, 4
+0x0034 : ld r4, r1
+0x0038 : addi r1, 4
+0x003C : ld r5, r1
+0x0040 : add r4, r5
+0x0044 : subi r4, 64
+0x0048 : lui r7, 0xFFFF
+0x004C : ori r7, 0xFFFF
+0x0050 : addi r4, 24
+0x0054 : st r4, r7
+0x0058 : subi r4, 24
+0x005C : ldi r1, hello_str
+0x0060 : ldi r2, 10
+0x0064 : ldi r3, 10
+0x0068 : ld r5, r1
+0x006C : cmpi r5, 0
+0x0070 : jz finish
+0x0074 : addi r4, 8
+0x0078 : st r4, r2
+0x007C : subi r4, 8
+0x0080 : addi r4, 12
+0x0084 : st r4, r3
+0x0088 : subi r4, 12
+0x008C : addi r4, 16
+0x0090 : st r4, r5
+0x0094 : subi r4, 16
+0x0098 : ldi r6, 3
+0x009C : addi r4, 4
+0x00A0 : st r4, r6
+0x00A4 : subi r4, 4
+0x00A8 : addi r1, 4
+0x00AC : addi r2, 8
+0x00B0 : jmp print_loop
+0x00B4 : hlt
+0x00B8 : .data 72, 101, 108, 108, 111, 32, 87, 111, 114, 108, 100, 33, 0

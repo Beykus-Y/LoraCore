@@ -1,158 +1,212 @@
-; ============================================
-; LoraCore PnP BIOS v4.1 (Stable High-DPI)
-; ============================================
+; =================================================================
+; LoraCore PROFESSIONAL BIOS v2.0
+; Architect: D. Ritchie / L. Torvalds
+; =================================================================
 
-start:
-    ldi sp, 0x0FFC
+; --- System Constants ---
+const STACK_TOP     = 0x0FFC    ; Вершина стека (в конце первых 4КБ)
+const PNP_ROM_ADDR  = 0xFFF000  ; Адрес PnP таблицы
+const BOOT_LOAD_ADDR = 0x1000   ; Куда грузим Bootloader
 
-    ; --- 1. Поиск GPU ---
-    lui r1, 0x00FF
-    ori r1, 0xF000
-    ld r3, r1           ; Проверка Magic
-    addi r1, 4
-    ld r3, r1           ; r3 = Кол-во устройств
-    addi r1, 4          ; r1 указывает на первое устройство
+; --- BIOS Variables (Zero Page Protocol) ---
+; Эти адреса — стандарт. Загрузчик и Ядро читают их, чтобы узнать о железе.
+const VAR_GPU_ADDR  = 0x0400    ; Базовый адрес GPU
+const VAR_DISK_ADDR = 0x0404    ; Базовый адрес Disk Controller
 
-find_gpu:
-    cmpi r3, 0
-    jz die
-    ld r4, r1           ; r4 = Тип устройства
-    cmpi r4, 2          ; 2 = GPU
-    jz gpu_found
-    addi r1, 16
-    subi r3, 1
-    jmp find_gpu
+; --- Device Types ---
+const TYPE_GPU      = 2
+const TYPE_STORAGE  = 3
 
-gpu_found:
-    addi r1, 4
-    ld r5, r1           ; r5 = VRAM Base
-    addi r1, 4
-    ld r8, r1           ; r8 = VRAM Size (в байтах)
+; --- Entry Point ---
+_start:
+    ldi SP, STACK_TOP           ; 1. Инициализация стека
 
-    ; --- 2. Очистка экрана ---
-    lui r7, 0xFF08
-    ori r7, 0x1030      ; Цвет фона
-    ldi r6, 0
-cls_loop:
-    cmp r6, r8
-    jz draw_logo
-    mov r9, r5
-    add r9, r6
-    st r9, r7
-    addi r6, 4
-    jmp cls_loop
+    ; 2. Очистка переменных BIOS (Safety first)
+    ldi R0, 0
+    ldi R1, VAR_GPU_ADDR
+    st R1, R0
+    ldi R1, VAR_DISK_ADDR
+    st R1, R0
 
-draw_logo:
-    lui r7, 0xFFFF
-    ori r7, 0xFFFF      ; Белый цвет для букв
+    ; 3. Сканирование шины (PnP Discovery)
+    call pnp_scan
 
-    ldi r11, 380        ; X
-    ldi r12, 240        ; Y
+    ; 4. Проверка критического оборудования (POST)
+    call post_check_gpu         ; Если нет GPU -> Halt
+    call init_video             ; Инициализация видео (Blue Screen of Life)
 
-    ; Рисуем L-O-R-A
-    ldi r13, font_l
-    call plot_char
-    addi r11, 50        ; Шаг между буквами
+    call post_check_disk        ; Если нет Диска -> Orange Screen -> Halt
 
-    ldi r13, font_o
-    call plot_char
-    addi r11, 50
+    ; 5. Загрузка Bootloader (LBA 0 -> RAM 0x1000)
+    call load_boot_sector
 
-    ldi r13, font_r
-    call plot_char
-    addi r11, 50
+    ; 6. Передача управления
+    jmp BOOT_LOAD_ADDR
 
-    ldi r13, font_a
-    call plot_char
+; =================================================================
+; Routine: pnp_scan
+; Ищет устройства и заполняет таблицу VAR_*
+; =================================================================
+pnp_scan:
+    lui R1, 0x00FF
+    ori R1, 0xF000              ; R1 = 0xFFF000
 
-    jmp die
+    ; Пропускаем Header (Magic + Count)
+    addi R1, 8
 
-; ============================================
-; Подпрограмма отрисовки (Scale 4x4)
-; r11=X, r12=Y, r13=Ptr
-; Свободные регистры: r0-r4, r6, r9, r10, r14
-; ============================================
-plot_char:
-    ldi r14, 0          ; Номер строки данных (0-6)
-p_line:
-    cmpi r14, 7
-    jz p_end
+    ldi R10, 16                 ; Лимит цикла (макс 16 устройств, чтобы не зависнуть)
 
-    ; Загрузка 4-байтового слова данных строки
-    mov r10, r13
-    mov r4, r14
-    ldi r0, 4
-    mul r4, r0          ; Офсет = строка * 4
-    add r10, r4
-    ld r2, r10          ; r2 = битовая маска строки
+scan_loop:
+    cmpi R10, 0
+    jz scan_ret                 ; Выход, если слоты кончились
 
-    ldi r3, 0           ; Счётчик битов (0-7)
-p_bit:
-    cmpi r3, 8
-    jz p_next_line
+    ld R2, R1                   ; R2 = Device Type
 
-    mov r4, r2
-    andi r4, 0x80       ; Проверяем самый левый бит
-    cmpi r4, 0x80
-    jnz p_skip_pixel    ; Если бит 0, пропускаем блок 4x4
+    ; Проверяем GPU
+    cmpi R2, TYPE_GPU
+    jz register_gpu
 
-    ; --- Рисуем блок 4x4 пикселя ---
-    ldi r1, 0          ; локальный y (0-3)
-y_q:
-    cmpi r1, 4
-    jz p_skip_pixel
-    ldi r0, 0          ; локальный x (0-3)
-x_q:
-    cmpi r0, 4
-    jz y_q_n
+    ; Проверяем Disk
+    cmpi R2, TYPE_STORAGE
+    jz register_disk
 
-    ; Адрес = Base + ((Y + line*4 + ly)*960 + (X + bit*4 + lx)) * 4
-    ; 1. Считаем Y координату
-    mov r9, r14
-    ldi r4, 4
-    mul r9, r4          ; line * 4
-    add r9, r12         ; + Y
-    add r9, r1          ; + local_y
-    ldi r4, 960
-    mul r9, r4          ; Y_total * 960
+    ; Проверяем конец списка (Type 0 = обычно конец или пусто)
+    cmpi R2, 0
+    jz scan_ret
 
-    ; 2. Считаем X координату
-    mov r6, r3
-    ldi r4, 4
-    mul r6, r4          ; bit * 4
-    add r6, r11         ; + X
-    add r6, r0          ; + local_x
+    jmp next_slot
 
-    add r9, r6          ; Y_total * 960 + X_total
-    ldi r4, 4
-    mul r9, r4          ; * 4 байта на пиксель
-    add r9, r5          ; + VRAM Base
+register_gpu:
+    mov R3, R1
+    addi R3, 4                  ; Смещение до Base Address
+    ld R4, R3                   ; R4 = Base Address
+    ldi R5, VAR_GPU_ADDR
+    st R5, R4                   ; Сохраняем в 0x0400
+    jmp next_slot
 
-    st r9, r7           ; Красим!
+register_disk:
+    mov R3, R1
+    addi R3, 4
+    ld R4, R3
+    ldi R5, VAR_DISK_ADDR
+    st R5, R4                   ; Сохраняем в 0x0404
+    jmp next_slot
 
-    addi r0, 1
-    jmp x_q
-y_q_n:
-    addi r1, 1
-    jmp y_q
+next_slot:
+    addi R1, 16                 ; След. запись (+16 байт)
+    subi R10, 1
+    jmp scan_loop
 
-p_skip_pixel:
-    shl r2, 1           ; Сдвигаем маску влево
-    addi r3, 1
-    jmp p_bit
-
-p_next_line:
-    addi r14, 1
-    jmp p_line
-p_end:
+scan_ret:
     ret
 
-die:
-    hlt
-    jmp die
+; =================================================================
+; Routine: init_video
+; Очищает экран синим цветом. Требует VAR_GPU_ADDR.
+; =================================================================
+init_video:
+    ldi R1, VAR_GPU_ADDR
+    ld R1, R1                   ; R1 = Base Address GPU
 
-; Данные шрифта (каждое значение - 4-байтовое слово для ld)
-font_l: data 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0xFC
-font_o: data 0x7C, 0x82, 0x82, 0x82, 0x82, 0x82, 0x7C
-font_r: data 0xFC, 0x82, 0x82, 0xFC, 0x90, 0x88, 0x84
-font_a: data 0x10, 0x28, 0x44, 0x44, 0x7C, 0x44, 0x44
+    ; Адрес регистров = Base + VRAM_SIZE (480*270*4 = 518400 = 0x7E900)
+    lui R2, 0x0007
+    ori R2, 0xE900
+    add R1, R2                  ; R1 = MMIO Base
+
+    ; Установка цвета (Синий: 0xFF0000AA)
+    lui R3, 0xFF00
+    ori R3, 0x00AA
+
+    mov R4, R1
+    addi R4, 24                 ; Reg Color (offset 24)
+    st R4, R3
+
+    ; Команда очистки
+    ldi R3, 1                   ; CMD_CLEAR
+    mov R4, R1
+    addi R4, 4                  ; Reg Cmd (offset 4)
+    st R4, R3
+    ret
+
+; =================================================================
+; Routine: load_boot_sector
+; Читает LBA 0 в 0x1000
+; =================================================================
+load_boot_sector:
+    ldi R1, VAR_DISK_ADDR
+    ld R1, R1                   ; R1 = Disk MMIO Base
+
+    ; Настройка DMA
+    ; LBA (Offset 8) = 0
+    ldi R2, 0
+    mov R3, R1
+    addi R3, 8
+    st R3, R2
+
+    ; Count (Offset 12) = 1
+    ldi R2, 1
+    mov R3, R1
+    addi R3, 12
+    st R3, R2
+
+    ; DMA Addr (Offset 16) = BOOT_LOAD_ADDR
+    ldi R2, BOOT_LOAD_ADDR
+    mov R3, R1
+    addi R3, 16
+    st R3, R2
+
+    ; Command (Offset 0) = 1 (Read)
+    ldi R2, 1
+    st R1, R2
+
+    ; Polling wait (ждем пока Status станет 0)
+disk_wait:
+    ld R2, R1                   ; Читаем Status
+    cmpi R2, 0
+    jnz disk_wait
+    ret
+
+; --- Error Handlers (POST) ---
+
+post_check_gpu:
+    ldi R1, VAR_GPU_ADDR
+    ld R1, R1
+    cmpi R1, 0
+    jz panic_no_gpu             ; Если 0, значит GPU не найден
+    ret
+
+panic_no_gpu:
+    ; Мы не можем вывести ошибку на экран, GPU нет.
+    ; Просто висим. В эмуляторе это будет видно по регистрам.
+    halt
+
+post_check_disk:
+    ldi R1, VAR_DISK_ADDR
+    ld R1, R1
+    cmpi R1, 0
+    jz panic_no_disk
+    ret
+
+panic_no_disk:
+    ; Красим экран в оранжевый (Warning/Error)
+    call set_screen_orange
+    halt
+
+set_screen_orange:
+    ldi R1, VAR_GPU_ADDR
+    ld R1, R1
+    lui R2, 0x0007
+    ori R2, 0xE900
+    add R1, R2                  ; MMIO Base
+
+    lui R3, 0xFFFF
+    ori R3, 0xA500              ; Orange
+    mov R4, R1
+    addi R4, 24
+    st R4, R3                   ; Color
+
+    ldi R3, 1
+    mov R4, R1
+    addi R4, 4
+    st R4, R3                   ; Cmd Clear
+    ret

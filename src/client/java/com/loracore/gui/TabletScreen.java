@@ -20,7 +20,7 @@ import org.lwjgl.glfw.GLFW;
 import java.util.UUID;
 
 public class TabletScreen extends Screen {
-
+    private boolean debugOverlayEnabled = false;
     private final UUID tabletUuid;
     private final UUID fileSystemUuid;
     private IRuntimeEnvironment clientRuntime = null;
@@ -34,7 +34,13 @@ public class TabletScreen extends Screen {
     private NativeImage screenImage;
     private NativeImageBackedTexture screenTexture;
     private Identifier screenTextureId;
-
+    private double mCpuLoad = 0;
+    private double mRamUsed = 0;
+    private double mRamTotal = 0;
+    private int mDiskQueue = 0;
+    private int mCurrentPc = 0;
+    private String mTabletUuid = "N/A";
+    private String mFsUuid = "N/A";
     public TabletScreen(UUID fileSystemUuid, UUID tabletUuid) {
         super(Text.literal("LoraOS"));
         this.fileSystemUuid = fileSystemUuid;
@@ -133,6 +139,54 @@ public class TabletScreen extends Screen {
             context.drawTexture(screenTextureId, tabletX + 2, tabletY + 2, 0, 0, tabletWidth - 4, tabletHeight - 4, tabletWidth - 4, tabletHeight - 4);
             RenderSystem.disableBlend();
         }
+        if (debugOverlayEnabled) {
+            renderDebugOverlay(context);
+        }
+    }
+
+    private void renderDebugOverlay(DrawContext context) {
+        int padding = 5;
+        int lineHeight = 10;
+        int startX = this.width - 160; // Ширина панели
+        int startY = 5;
+
+        // Фон
+        context.fill(startX - padding, startY - padding, this.width - padding, startY + (7 * lineHeight) + padding, 0x90000000);
+
+        int y = startY;
+        int colorVal = 0x00FF00; // Зеленый текст
+        int colorLabel = 0xFFFFFF; // Белый текст
+
+        // Заголовок
+        context.drawText(textRenderer, "LoraCore Debug (F9)", startX, y, 0xFFAAAA00, false); y += lineHeight;
+
+        // CPU
+        String cpuText = String.format("%.1f%%", mCpuLoad * 100);
+        int cpuColor = mCpuLoad > 0.9 ? 0xFF5555 : colorVal;
+        context.drawText(textRenderer, Text.literal("CPU: ").append(Text.literal(cpuText).withColor(cpuColor)), startX, y, colorLabel, false); y += lineHeight;
+
+        // RAM
+        String ramText = String.format("%.0f / %.0f KB", mRamUsed, mRamTotal);
+        context.drawText(textRenderer, Text.literal("RAM: ").append(Text.literal(ramText).withColor(colorVal)), startX, y, colorLabel, false); y += lineHeight;
+
+        // PC (Instruction Pointer)
+        String pcText = String.format("0x%04X", mCurrentPc);
+        context.drawText(textRenderer, Text.literal("PC:  ").append(Text.literal(pcText).withColor(0x55FFFF)), startX, y, colorLabel, false); y += lineHeight;
+
+        // Disk
+        context.drawText(textRenderer, Text.literal("IO Queue: " + mDiskQueue), startX, y, mDiskQueue > 5 ? 0xFF5555 : colorVal, false); y += lineHeight;
+
+        // UUIDs (уменьшенным шрифтом или просто обрезкой, так как длинные)
+        context.getMatrices().push();
+        float scale = 0.7f;
+        context.getMatrices().scale(scale, scale, 1.0f);
+        int scaledX = (int)(startX / scale);
+        int scaledY = (int)(y / scale);
+
+        context.drawText(textRenderer, "T-UUID: " + mTabletUuid, scaledX, scaledY, 0xAAAAAA, false);
+        context.drawText(textRenderer, "FS-UUID: " + mFsUuid, scaledX, scaledY + 10, 0xAAAAAA, false);
+
+        context.getMatrices().pop();
     }
 
     @Override
@@ -147,6 +201,12 @@ public class TabletScreen extends Screen {
         if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
             this.close();
             return true;
+        }
+        if (keyCode == GLFW.GLFW_KEY_F9) {
+            if (this.client != null && this.client.player != null && this.client.player.isCreative()) {
+                debugOverlayEnabled = !debugOverlayEnabled;
+                return true;
+            }
         }
 
         if (clientRuntime != null) {
@@ -234,7 +294,14 @@ public class TabletScreen extends Screen {
 
     public void onDeviceResult(int requestId, boolean success, Object[] result) { }
 
-    public void updateMetrics(double cpuLoad, double ramUsedKb, double ramTotalKb, int diskQueue, long uptimeSeconds, String tabletUuidStr, String fsUuidStr) { }
-
+    public void updateMetrics(double cpuLoad, double ramUsedKb, double ramTotalKb, int diskQueue, long uptimeSeconds, int currentPc, String tabletUuidStr, String fsUuidStr) {
+        this.mCpuLoad = cpuLoad;
+        this.mRamUsed = ramUsedKb;
+        this.mRamTotal = ramTotalKb;
+        this.mDiskQueue = diskQueue;
+        this.mCurrentPc = currentPc;
+        this.mTabletUuid = tabletUuidStr;
+        this.mFsUuid = fsUuidStr;
+    }
     @Override public boolean shouldPause() { return false; }
 }

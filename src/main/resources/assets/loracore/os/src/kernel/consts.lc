@@ -1,0 +1,29 @@
+// === System Constants ===
+
+// BIOS Variables
+const BIOS_VAR_GPU = 0x0400;
+
+// GPU Register Offsets
+const REG_CMD   = 0x04;
+const REG_X     = 0x08;
+const REG_Y     = 0x0C;
+const REG_W     = 0x10;
+const REG_H     = 0x14;
+const REG_COLOR = 0x18;
+
+// GPU Commands
+const CMD_CLEAR = 1;
+const CMD_FILL  = 2;
+const CMD_TEXT  = 3;
+
+// Keyboard (Based on main.py mapping 0x310000)
+const ADDR_KEYB    = 0x310000;
+const KEYB_REG_CNT = 0; // Offset 0: Status/Count
+const KEYB_REG_VAL = 4; // Offset 4: Key Code
+
+// Colors (ARGB)
+const COL_BG    = 0xFF202020; // Dark Gray
+const COL_WIN   = 0xFFC0C0C0; // Silver
+const COL_BAR   = 0xFF000080; // Navy Blue
+const COL_TEXT  = 0xFFFFFFFF; // White
+const COL_BLACK = 0xFF000000;

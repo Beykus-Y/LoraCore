@@ -1,0 +1,50 @@
+import "stdlib/memory.lc";
+
+// Создать массив на N элементов (int = 4 байта)
+fn array_new(length) {
+    let size_bytes = length * 4;
+    return malloc(size_bytes);
+}
+
+// Записать значение: arr[index] = value
+fn array_set(arr, index, value) {
+    // Адрес = начало + (индекс * 4)
+    // В LoraC нет умножения в mem[], поэтому считаем адрес в регистре
+
+    // Внимание: мы пишем mem[addr], где addr - это ЧИСЛО (адрес)
+    // Твой компилятор парсит mem[...] особым образом.
+    // Если ты напишешь mem[arr + index * 4] = value, твой парсер
+    // ExpressionParser.parseMemRead должен это переварить.
+
+    // Если твой парсер не поддерживает сложные выражения внутри mem[],
+    // нужно использовать вспомогательную функцию записи по адресу (poke).
+
+    let addr = arr + (index * 4);
+
+    // Прямой хак через ассемблер (самый надежный способ в твоей текущей версии)
+    // Но давай попробуем через "синтаксический сахар", если ты его добавил.
+    // Если нет, нам нужна функция poke(addr, val).
+
+    poke(addr, value);
+}
+
+// Прочитать значение: return arr[index]
+fn array_get(arr, index) {
+    let addr = arr + (index * 4);
+    return peek(addr);
+}
+
+// --- Low level memory access helpers ---
+// Это нужно, так как mem[variable] работает, но mem[variable + offset] может глючить
+// в зависимости от того, как ты пофиксил ExpressionParser.
+
+fn poke(addr, val) {
+    // В ASM: ST R_addr, R_val
+    // В LoraC это можно сделать через asm вставку или mem[addr] = val,
+    // если парсер поддерживает переменные внутри [].
+    mem[addr] = val;
+}
+
+fn peek(addr) {
+    return mem[addr];
+}

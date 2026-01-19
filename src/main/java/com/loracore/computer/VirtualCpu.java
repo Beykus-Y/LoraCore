@@ -68,6 +68,13 @@ public class VirtualCpu {
                 errorCount++;
             }
         }
+        if (this.pc == 0x11A0) {
+            int instr = bus.readInt(pc);
+            int opcode = (instr >>> 24) & 0xFF;
+            System.out.printf("CPU HALTED AT DEBUG POINT 0x11A0! Instruction: 0x%08X, Opcode: 0x%02X\n", instr, opcode);
+            // Выведи значения регистров, чтобы понять контекст
+            dumpRegisters(pc);
+        }
 
         // 2. Fetch
         int instr = bus.readInt(pc);
@@ -129,6 +136,11 @@ public class VirtualCpu {
             }
             case InstructionSet.OP_ADDI -> { registers[rD] += simm16; updateFlags(registers[rD]); }
             case InstructionSet.OP_SUBI -> { registers[rD] -= simm16; updateFlags(registers[rD]); }
+            case InstructionSet.OP_POW -> {
+                // Используем Math.pow, приводим к int
+                registers[rD] = (int) Math.pow(registers[rD], registers[rS]);
+                updateFlags(registers[rD]);
+            }
 
             // --- Группа 3: Логика ---
             case InstructionSet.OP_AND  -> { registers[rD] &= registers[rS]; updateFlags(registers[rD]); }
@@ -162,11 +174,43 @@ public class VirtualCpu {
             case InstructionSet.OP_HLT  -> halted = true;
             case InstructionSet.OP_DUMP -> dumpRegisters(currentPc);
             case InstructionSet.OP_WAIT -> { return simm16 > 0 ? simm16 : 1; }
+            case InstructionSet.OP_INT -> {
+                int interruptCode = imm16; // Например, INT 0x21
+                // Мы можем передать это событие в VirtualMachine, чтобы она выполнила действие
+                // Например, печать строки, если это "сервисное прерывание"
+                bus.handleInterrupt(interruptCode, registers);
+            }
+            case InstructionSet.OP_OUT -> {
+                int port = imm16; // Порт из инструкции (или можно взять из регистра)
+                int value = registers[rS];
+                // Передаем шине: "запиши в порт X значение Y"
+                bus.writePort(port, value);
+            }
+            case InstructionSet.OP_IN -> {
+                int port = imm16;
+                registers[rD] = bus.readPort(port);
+            }
+
 
             // --- Группа 6: Физика и Оверклокинг ---
             case InstructionSet.OP_GET_TEMP -> registers[rD] = tempmC / 10;
             case InstructionSet.OP_SET_VOLT -> voltageMV = registers[rS];
             case InstructionSet.OP_GET_CLOCK -> registers[rD] = freqHz;
+            case InstructionSet.OP_CPUID -> {
+                // В R_dest возвращаем инфо, зависящее от того, что лежит в R_src
+                int request = registers[rS];
+                switch (request) {
+                    case 0 -> registers[rD] = cpuId;             // Уникальный ID чипа
+                    case 1 -> registers[rD] = freqHz;            // Частота
+                    case 2 -> registers[rD] = stabilityLimit;    // Предел разгона
+                    case 3 -> registers[rD] = 0x0001;            // Версия архитектуры Lora-1
+                    default -> registers[rD] = 0;
+                }
+            }
+            case InstructionSet.OP_JMPR -> {
+                // Прыгаем на адрес из регистра rD
+                pc = registers[rD];
+            }
 
             default ->{
                 LoraCoreMod.LOGGER.warn(String.format("[CPU FAULT] Unknown Opcode: 0x%02X at PC: 0x%04X (Instr: 0x%08X)",
@@ -176,6 +220,17 @@ public class VirtualCpu {
         }
 
         return 1;
+    }
+
+    public void reset() {
+        this.pc = 0;
+        this.flags = 0;
+        this.halted = false; // <--- САМОЕ ВАЖНОЕ
+        this.errorCount = 0;
+        this.cycleCounter = 0;
+        // Очистка регистров (опционально, но полезно)
+        java.util.Arrays.fill(this.registers, 0);
+        this.registers[15] = 0x0FFC; // Reset SP
     }
 
     private void updateFlags(int val) {

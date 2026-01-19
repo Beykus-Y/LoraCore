@@ -22,6 +22,8 @@ public class SystemBus {
      */
     private final IMemoryMappedDevice[][] segments = new IMemoryMappedDevice[SEGMENT_COUNT][];
     private final int[] segmentSizes = new int[SEGMENT_COUNT]; // Количество устройств в сегменте
+    private IInterruptHandler interruptHandler;
+    private final IPortDevice[] ports = new IPortDevice[65536];
 
     /**
      * Описывает конкретный диапазон устройства в сегменте.
@@ -282,5 +284,42 @@ public class SystemBus {
                 tickable.tick(cycles);
             }
         }
+    }
+    /**
+     * Устанавливает обработчик программных прерываний (Syscalls).
+     */
+    public void setInterruptHandler(IInterruptHandler handler) {
+        this.interruptHandler = handler;
+    }
+
+    /**
+     * Выполняет системный вызов. Вызывается из CPU при инструкции INT.
+     */
+    public void handleInterrupt(int code, int[] registers) {
+        if (interruptHandler != null) {
+            interruptHandler.handle(code, registers);
+        } else {
+            LoraCoreMod.LOGGER.warn("[BUS] Interrupt 0x{} called but no handler registered!",
+                    Integer.toHexString(code));
+        }
+    }
+
+    /**
+     * Запись в порт (инструкция OUT).
+     */
+    public void writePort(int port, int value) {
+        if (port >= 0 && port < ports.length && ports[port] != null) {
+            ports[port].write(value);
+        }
+    }
+
+    /**
+     * Чтение из порта (инструкция IN).
+     */
+    public int readPort(int port) {
+        if (port >= 0 && port < ports.length && ports[port] != null) {
+            return ports[port].read();
+        }
+        return 0;
     }
 }

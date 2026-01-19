@@ -35,6 +35,7 @@ public final class Assembler {
     public Assembler mul(int rd, int rs) { code.add(enc(InstructionSet.OP_MUL, rd, rs, 0)); return this; }
     public Assembler div(int rd, int rs) { code.add(enc(InstructionSet.OP_DIV, rd, rs, 0)); return this; }
     public Assembler mod(int rd, int rs) { code.add(enc(InstructionSet.OP_MOD, rd, rs, 0)); return this; }
+    public Assembler pow(int rd, int rs) { code.add(enc(InstructionSet.OP_POW, rd, rs, 0)); return this; }
 
     // === ДОБАВЛЕНО: Арифметика с константами (Immediate) ===
     // Именно этого метода не хватало для BiosGenerator
@@ -63,11 +64,20 @@ public final class Assembler {
     public Assembler jl(int addr) { code.add(enc(InstructionSet.OP_JL, 0, 0, addr)); return this; }
     public Assembler call(int addr) { code.add(enc(InstructionSet.OP_CALL, 0, 0, addr)); return this; }
     public Assembler ret() { code.add(enc(InstructionSet.OP_RET, 0, 0, 0)); return this; }
+    public Assembler cpuid(int rd, int rs) { emit(InstructionSet.OP_CPUID, rd, rs, 0); return this; }
+    public Assembler interrupt(int code) { emit(InstructionSet.OP_INT, 0, 0, code); return this; }
+    public Assembler out(int port, int rs) { emit(InstructionSet.OP_OUT, 0, rs, port); return this; }
+    public Assembler in(int rd, int port) { emit(InstructionSet.OP_IN, rd, 0, port); return this; }
 
     // --- Группа 5: Система ---
     public Assembler waitCycles(int cycles) { code.add(enc(InstructionSet.OP_WAIT, 0, 0, cycles)); return this; }
     public Assembler hlt() { code.add(enc(InstructionSet.OP_HLT, 0, 0, 0)); return this; }
     public Assembler dump() { code.add(enc(InstructionSet.OP_DUMP, 0, 0, 0)); return this; }
+
+    public Assembler jmpr(int rd) {
+        emit(InstructionSet.OP_JMPR, rd, 0, 0);
+        return this;
+    }
 
     // --- Утилиты ---
 

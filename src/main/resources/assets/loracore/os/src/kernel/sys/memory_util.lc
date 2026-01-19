@@ -1,0 +1,10 @@
+// Функция записи 32-битного слова по точному адресу
+fn poke(addr, value) {
+    mem[addr] = value;
+}
+
+// Функция чтения 32-битного слова
+fn peek(addr) {
+    let val = mem[addr];
+    return val;
+}

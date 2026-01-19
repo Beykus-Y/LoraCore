@@ -1,0 +1,54 @@
+import "sys/layout.lc";
+import "sys/memory_util.lc";
+
+const TOTAL_PAGES = 4096;
+
+fn pmm_init() {
+    let i = 0;
+    while (i < 128) {
+        poke(PMM_BITMAP_BASE + (i * 4), 0);
+        i = i + 1;
+    }
+    // Резервируем первые 32КБ (8 страниц) под ядро и таблицы
+    pmm_mark_region_used(0, 8);
+    gpu_print(10, 48, "PMM: Bitmap Fixed", 0xFF00FF00);
+}
+
+fn pmm_mark_region_used(start, count) {
+    let j = 0;
+    while (j < count) {
+        pmm_set_bit(start + j);
+        j = j + 1;
+    }
+}
+
+fn pmm_set_bit(page_idx) {
+    let word_idx = page_idx >> 5;
+    let bit_off  = page_idx & 31;
+    let addr = PMM_BITMAP_BASE + (word_idx * 4);
+    let val = peek(addr);
+    let mask = 1 << bit_off;
+    poke(addr, val | mask);
+}
+
+fn pmm_test_bit(page_idx) {
+    let word_idx = page_idx >> 5;
+    let bit_off  = page_idx & 31;
+    let addr = PMM_BITMAP_BASE + (word_idx * 4);
+    let val = peek(addr);
+    let mask = 1 << bit_off;
+
+    if ((val & mask) != 0) { return 1; }
+    return 0;
+}
+fn pmm_alloc_page() {
+    let k = 8; // Начинаем поиск ПОСЛЕ зарезервированной зоны
+    while (k < TOTAL_PAGES) {
+        if (pmm_test_bit(k) == 0) {
+            pmm_set_bit(k);
+            return k << 12;
+        }
+        k = k + 1;
+    }
+    return -1; // Возвращаем -1 при ошибке (0xFFFFFFFF)
+}

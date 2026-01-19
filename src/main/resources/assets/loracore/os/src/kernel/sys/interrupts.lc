@@ -1,0 +1,102 @@
+// === Interrupt Manager (ISR) ===
+// Центральный хаб обработки событий и системных вызовов
+
+// --- Коды прерываний (Interrupt Vectors) ---
+// 0x00 - 0x0F: Критические ошибки (Exceptions)
+const INT_PANIC       = 0x00;
+const INT_DIV_ZERO    = 0x01;
+const INT_ILL_OP      = 0x02;
+
+// 0x10 - 0x2F: Системные службы (System Services)
+const INT_MALLOC      = 0x10; // p1=size -> returns ptr
+const INT_FREE        = 0x11; // p1=ptr
+const INT_PROCESS     = 0x12; // Управление процессами (на будущее)
+
+// 0x30 - 0x4F: Драйверы ввода-вывода (IO Drivers)
+const INT_GPU_CLEAR   = 0x30; // p1=color
+const INT_GPU_PRINT   = 0x31; // p1=x, p2=y, p3=str_ptr
+const INT_GPU_DRAW    = 0x32; // Рисование фигур
+
+const INT_KEYBOARD    = 0x40; // Событие нажатия клавиши
+
+// --- Глобальные переменные ---
+let sys_status = 0; // 0=OK, 1=PANIC
+
+// --- Инициализация ---
+fn isr_init() {
+    sys_status = 0;
+    gpu_print(10, 20, "ISR: Interrupt Manager Loaded", 0xFF00FF00);
+}
+
+// --- Главный диспетчер прерываний ---
+// Вызывается ядром или инструкцией INT.
+// code - номер прерывания
+// p1, p2, p3 - аргументы (регистры R1, R2, R3)
+fn handle_interrupt(code, p1, p2, p3) {
+    // Если система в панике, игнорируем всё, кроме перезагрузки
+    if (sys_status == 1) {
+        return 0;
+    }
+
+    // --- Обработка ошибок ---
+    if (code == INT_PANIC) {
+        isr_panic(p1); // p1 = указатель на строку ошибки
+        return 0;
+    }
+
+    // --- Менеджер памяти ---
+    if (code == INT_MALLOC) {
+        return malloc(p1);
+    }
+    if (code == INT_FREE) {
+        free(p1);
+        return 0;
+    }
+
+    // --- GPU Драйвер ---
+    if (code == INT_GPU_CLEAR) {
+        // Очистка экрана цветом p1
+        // Прямой доступ к драйверу (предполагаем, что драйвер GPU подключен)
+        // Здесь мы используем низкоуровневую запись в MMIO, если драйвер не экспортирует функцию
+        // Но лучше вызвать функцию драйвера, если она есть.
+        // Допустим, у нас есть gpu_clear_screen(color)
+        // gpu_fill(0, 0, 480, 270, p1);
+        return 0;
+    }
+
+    if (code == INT_GPU_PRINT) {
+        // p1=x, p2=y, p3=text_ptr
+        // Аргумент цвета можно брать дефолтный или добавить p4
+        gpu_print(p1, p2, p3, 0xFFFFFFFF);
+        return 0;
+    }
+
+    // --- Неизвестное прерывание ---
+    // Не крашим систему, просто пишем варнинг в лог (если есть консоль отладки)
+    return -1;
+}
+
+// --- Обработчик Kernel Panic ---
+// Останавливает работу системы и выводит "Синий экран смерти" (BSoD)
+fn isr_panic(msg_ptr) {
+    sys_status = 1;
+
+    // Заливаем экран синим/красным
+    gpu_fill(0, 0, 480, 270, 0xFF800000); // Темно-красный фон
+
+    gpu_print(10, 10, "!!! KERNEL PANIC !!!", 0xFFFFFFFF);
+    gpu_print(10, 30, "System halted due to fatal error:", 0xFFFFFFFF);
+
+    if (msg_ptr != 0) {
+        gpu_print(10, 50, msg_ptr, 0xFFFFFF00); // Желтый текст ошибки
+    } else {
+        gpu_print(10, 50, "Unknown Error", 0xFFFFFF00);
+    }
+
+    gpu_print(10, 80, "Please restart the tablet.", 0xFFCCCCCC);
+
+    // Бесконечный цикл, чтобы процессор не пошел дальше
+    while (1 == 1) {
+        wait(100);
+    }
+}

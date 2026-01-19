@@ -212,6 +212,7 @@ public class LoraCoreMod implements ModInitializer {
 					metrics.ramTotalKb(),
 					metrics.diskQueue(),
 					uptimeSeconds,
+                    metrics.currentPc(),
 					metrics.tabletUuidStr(),
 					metrics.fsUuidStr()
 			));

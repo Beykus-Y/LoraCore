@@ -18,7 +18,7 @@ public class ServerFont {
 
     public static final int SCREEN_WIDTH = 480;
     public static final int SCREEN_HEIGHT = 270;
-    private static final int CHAR_RENDER_WIDTH = 7;
+    private static final int CHAR_RENDER_WIDTH = 8;
 
     // Внутренний класс для хранения данных о символе:
     // какая картинка и какие координаты на ней

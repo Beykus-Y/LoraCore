@@ -1,0 +1,70 @@
+import "consts.lc";
+import "globals.lc";
+
+fn init_gpu_driver() {
+    let base = mem[BIOS_VAR_GPU];
+    // 480 * 270 * 4 = 0x7E900
+    let offset = 0x7E900;
+    gpu_regs_ptr = base + offset;
+}
+
+fn gpu_clear(color) {
+    let regs = gpu_regs_ptr;
+    mem[regs + REG_COLOR] = color;
+    mem[regs + REG_CMD] = CMD_CLEAR;
+}
+
+fn gpu_rect(x, y, w, h, color) {
+    let regs = gpu_regs_ptr;
+    mem[regs + REG_X] = x;
+    mem[regs + REG_Y] = y;
+    mem[regs + REG_W] = w;
+    mem[regs + REG_H] = h;
+    mem[regs + REG_COLOR] = color;
+    mem[regs + REG_CMD] = CMD_FILL;
+}
+
+fn gpu_char(x, y, code, color) {
+    let regs = gpu_regs_ptr;
+    mem[regs + REG_X] = x;
+    mem[regs + REG_Y] = y;
+    mem[regs + REG_W] = code;
+    mem[regs + REG_COLOR] = color;
+    mem[regs + REG_CMD] = CMD_TEXT;
+}
+
+fn gpu_print(x, y, str_ptr, color) {
+    let ptr = str_ptr;
+    let cx = x;
+
+    while (1) {
+        let char = mem[ptr];
+        if (char == 0) { break; }
+
+        gpu_char(cx, y, char, color);
+        // ВАЖНО: Ширина символа теперь 8
+        cx = cx + 8;
+        ptr = ptr + 4;
+    }
+}
+
+// Печать Hex числа (для дебага)
+fn gpu_print_hex(x, y, val, color) {
+    let i = 28;
+    let cx = x;
+
+    // Префикс 0x
+    gpu_char(cx, y, 48, color); cx = cx + 8; // '0'
+    gpu_char(cx, y, 120, color); cx = cx + 8; // 'x'
+
+    while (i >= 0) {
+        let digit = (val >> i) & 0xF;
+        let char = 0;
+        if (digit < 10) { char = 48 + digit; }
+        else { char = 55 + digit; }
+
+        gpu_char(cx, y, char, color);
+        cx = cx + 8;
+        i = i - 4;
+    }
+}

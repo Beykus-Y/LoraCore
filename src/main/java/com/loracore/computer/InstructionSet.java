@@ -26,6 +26,7 @@ public class InstructionSet {
     public static final int OP_MOD   = 0x14; // MOD  R_dest, R_src
     public static final int OP_ADDI  = 0x15; // ADDI R_dest, Value (Add Immediate)
     public static final int OP_SUBI  = 0x16;
+    public static final int OP_POW   = 0x17;
 
     // --- Группа 3: Логика (Bitwise) ---
     public static final int OP_AND   = 0x20; // AND R_dest, R_src
@@ -61,4 +62,5 @@ public class InstructionSet {
     public static final int OP_SET_VOLT  = 0x51; // SET_VOLT R_src
     public static final int OP_GET_CLOCK = 0x52; // GET_CLOCK R_dest
     public static final int OP_CPUID = 0x53;
+    public static final int OP_JMPR  = 0x54;
 }
