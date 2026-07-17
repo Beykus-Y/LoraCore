@@ -1,0 +1,11 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "pattern": ["RDR", "DCD", "RDR"],
+  "key": {
+    "R": { "item": "minecraft:redstone" },
+    "D": { "item": "minecraft:diamond" },
+    "C": { "item": "loracore:cpu_t2" }
+  },
+  "result": { "id": "loracore:cpu_t3", "count": 1 }
+}

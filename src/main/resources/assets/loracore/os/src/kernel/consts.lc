@@ -2,6 +2,12 @@
 
 // BIOS Variables
 const BIOS_VAR_GPU = 0x0400;
+const BIOS_VAR_DISK = 0x0404;
+const BIOS_VAR_KEYBOARD = 0x0408;
+const BIOS_VAR_GPU_SIZE = 0x0410;
+
+const PNP_ROM = 0xFFF000;
+const PNP_MAGIC = 0x4C4F5241;
 
 // GPU Register Offsets
 const REG_CMD   = 0x04;
@@ -16,10 +22,17 @@ const CMD_CLEAR = 1;
 const CMD_FILL  = 2;
 const CMD_TEXT  = 3;
 
-// Keyboard (Based on main.py mapping 0x310000)
-const ADDR_KEYB    = 0x310000;
 const KEYB_REG_CNT = 0; // Offset 0: Status/Count
 const KEYB_REG_VAL = 4; // Offset 4: Key Code
+
+// Raw disk controller registers and commands
+const DISK_REG_COMMAND = 0;
+const DISK_REG_ERROR = 4;
+const DISK_REG_LBA = 8;
+const DISK_REG_COUNT = 12;
+const DISK_REG_DMA = 16;
+const DISK_CMD_READ = 1;
+const DISK_CMD_WRITE = 2;
 
 // Colors (ARGB)
 const COL_BG    = 0xFF202020; // Dark Gray
@@ -27,3 +40,5 @@ const COL_WIN   = 0xFFC0C0C0; // Silver
 const COL_BAR   = 0xFF000080; // Navy Blue
 const COL_TEXT  = 0xFFFFFFFF; // White
 const COL_BLACK = 0xFF000000;
+const COL_OK    = 0xFF55FF55;
+const COL_DIM   = 0xFFB0B0B0;

@@ -2,67 +2,20 @@ import "consts.lc";
 import "globals.lc";
 import "drivers/gpu.lc";
 import "drivers/keyboard.lc";
-import "sys/layout.lc";
-import "sys/stack.lc";
-import "sys/pmm.lc";
-import "sys/vmm.lc";
-import "stdlib/memory.lc";
+import "drivers/hardware.lc";
+import "stdlib/string.lc";
+import "sys/shell.lc";
+import "sys/filesystem.lc";
 
 fn main() {
-    init_gpu_driver();
-    gpu_clear(COL_BG);
-
-    gpu_rect(0, 0, 480, 16, COL_BAR);
-    gpu_print(8, 0, "LoraOS v4.4 [MMU Debug Mode]", COL_TEXT);
-
-    stack_init();
-    // Проверка адреса стека
-    gpu_print(10, 20, "Stack top:", 0xFFCCCCCC);
-    gpu_print_hex(100, 20, K_STACK_TOP, 0xFFFFFFFF);
-
-    pmm_init();
-
-    vmm_init();
-    gpu_print(10, 64, "PageTable at:", 0xFFCCCCCC);
-    gpu_print_hex(120, 64, PAGE_DIR_ADDR, 0xFFFFFFFF); // Должно быть 0x5000
-
-    mm_init();
-    gpu_print(10, 80, "Heap: Ready", 0xFF00FF00);
-
-    let p1 = pmm_alloc_page();
-    if (p1 != -1) {
-        gpu_print(10, 100, "Allocated Page:", COL_WIN);
-        gpu_print_hex(140, 100, p1, 0xFFFFFF00); // Ожидаем 0x00008000 или выше
-
-        vmm_map_page(0x800000, p1, 7);
-        let virt = vmm_translate(0x800000);
-        if (virt == p1) {
-            gpu_print(10, 116, "VMM Test: PASS", 0xFF00FF00);
-        } else {
-            gpu_print(10, 116, "VMM Test: FAIL", 0xFFFF0000);
-        }
+    init_hardware();
+    terminal_reset();
+    terminal_line("Native kernel ready", COL_OK);
+    if (fs_init() == 1) {
+        terminal_line("LoraFS mounted", COL_OK);
     } else {
-        gpu_print(10, 100, "Allocated Page: FAILED", 0xFFFF0000);
+        terminal_line("LoraFS unavailable", 0xFFFF8080);
     }
-
-    gpu_print(10, 140, "SYSTEM RUNNING", 0xFF55FF55);
-
-    let cursor_y = 156;
-    term_cursor_x = 10; // Глобальная переменная
-
-    while (1 == 1) {
-        let key = poll_keyboard();
-        if (key != 0) {
-            // Эхо ввод
-            gpu_char(term_cursor_x, cursor_y, key, COL_TEXT);
-            term_cursor_x = term_cursor_x + 8;
-
-            // Перенос строки (упрощенно)
-            if (term_cursor_x > 470) {
-                term_cursor_x = 10;
-                cursor_y = cursor_y + 16;
-            }
-        }
-        wait(10); // Экономим циклы CPU
-    }
+    terminal_line("Type help to begin", COL_DIM);
+    shell_run();
 }

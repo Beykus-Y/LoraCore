@@ -1,0 +1,12 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "pattern": ["IRI", "RQR", "ICI"],
+  "key": {
+    "I": { "item": "minecraft:iron_ingot" },
+    "R": { "item": "minecraft:redstone" },
+    "Q": { "item": "minecraft:quartz" },
+    "C": { "item": "minecraft:copper_ingot" }
+  },
+  "result": { "id": "loracore:cpu_t1", "count": 1 }
+}

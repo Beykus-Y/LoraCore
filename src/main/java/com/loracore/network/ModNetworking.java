@@ -8,7 +8,6 @@ import com.loracore.component.*;
 import com.loracore.component.data.*;
 // ИСПРАВЛЕНО: Полностью переработан обработчик VFS
 import com.loracore.computer.*;
-import com.loracore.computer.device.IDevice;
 import com.loracore.item.ModItems;
 import com.loracore.item.TabletItem;
 import com.loracore.network.graphics.GpuCommand;
@@ -39,7 +38,6 @@ import net.minecraft.util.Identifier;
 import net.minecraft.village.VillagerProfession;
 
 
-import java.lang.reflect.Method;
 import java.util.*;
 
 public class ModNetworking {
@@ -62,11 +60,7 @@ public class ModNetworking {
         PayloadTypeRegistry.playC2S().register(KeyPressedC2SPacket.ID, KeyPressedC2SPacket.CODEC);
         PayloadTypeRegistry.playC2S().register(CharTypedC2SPacket.ID, CharTypedC2SPacket.CODEC);
         PayloadTypeRegistry.playC2S().register(MouseClickedC2SPacket.ID, MouseClickedC2SPacket.CODEC);
-        PayloadTypeRegistry.playS2C().register(SwitchToClientKernelS2CPacket.ID, SwitchToClientKernelS2CPacket.CODEC);
         PayloadTypeRegistry.playS2C().register(SystemMetricsS2CPacket.ID, SystemMetricsS2CPacket.CODEC);
-
-        PayloadTypeRegistry.playC2S().register(InvokeDeviceMethodC2SPacket.ID, InvokeDeviceMethodC2SPacket.CODEC);
-        PayloadTypeRegistry.playS2C().register(DeviceMethodResultS2CPacket.ID, DeviceMethodResultS2CPacket.CODEC);
         PayloadTypeRegistry.playC2S().register(SpawnDebugTabletC2SPacket.ID, SpawnDebugTabletC2SPacket.CODEC);
 
 
@@ -77,7 +71,6 @@ public class ModNetworking {
         registerGpuHandlers();
         registerInputHandlers();
         
-        registerDeviceHandlers();
         registerDebugHandlers();
     }
 
@@ -659,73 +652,6 @@ public class ModNetworking {
         });
     }
     
-    private static void registerDeviceHandlers() {
-        ServerPlayNetworking.registerGlobalReceiver(InvokeDeviceMethodC2SPacket.ID, (payload, context) -> {
-            ServerPlayerEntity player = context.player();
-            MinecraftServer server = player.getServer();
-            server.execute(() -> {
-                VirtualMachine vm = VirtualMachineManager.getInstance().get(payload.tabletUuid());
-                
-                // Если VM не найдена или выключена, отправляем ошибку сразу
-                if (vm == null || !vm.isOn()) {
-                    String errorMsg = "Device call rejected: VM not available";
-                    ServerPlayNetworking.send(player, new DeviceMethodResultS2CPacket(payload.requestId(), false, DeviceMethodResultS2CPacket.resultToJson(errorMsg)));
-                    return;
-                }
-
-                Object deviceObj = vm.getDevices().stream()
-                        .filter(d -> d.getClass().getSimpleName().equalsIgnoreCase(payload.deviceType() + "Device"))
-                        .findFirst()
-                        .orElse(null);
-
-                if (deviceObj == null) {
-                    String errorMsg = "Device '" + payload.deviceType() + "' not found in VM.";
-                    ServerPlayNetworking.send(player, new DeviceMethodResultS2CPacket(payload.requestId(), false, DeviceMethodResultS2CPacket.resultToJson(errorMsg)));
-                    return;
-                }
-
-                // Создаем задачу для выполнения вызова устройства
-                // Задача будет поставлена в очередь и выполнена, когда у VM будет достаточно циклов (100 за задачу)
-                Runnable deviceTask = () -> {
-                    try {
-                        // Проверяем, реализует ли устройство наш интерфейс IDevice
-                        if (deviceObj instanceof IDevice device) {
-                            // Получаем актуальный мир и позицию, на которую смотрит игрок
-                            ServerWorld world = player.getServerWorld();
-                            net.minecraft.util.hit.HitResult hit = player.raycast(5.0, 0.0f, false);
-                            net.minecraft.util.math.BlockPos targetPos = null;
-                            if (hit.getType() == net.minecraft.util.hit.HitResult.Type.BLOCK) {
-                                targetPos = ((net.minecraft.util.hit.BlockHitResult) hit).getBlockPos();
-                            }
-
-                            // ВЫПОЛНЯЕМ ПРИВЯЗКУ!
-                            device.rebind(player, world, targetPos);
-                        }
-                        
-                        Object[] args = payload.getArgs();
-                        Method methodToCall = Arrays.stream(deviceObj.getClass().getMethods())
-                                .filter(m -> m.isAnnotationPresent(com.loracore.computer.api.Callback.class))
-                                .filter(m -> m.getName().equals(payload.methodName()))
-                                .findFirst()
-                                .orElseThrow(() -> new NoSuchMethodException("Method '" + payload.methodName() + "' not found or not a @Callback."));
-
-                        Object result = methodToCall.invoke(deviceObj, args);
-
-                        String resultJson = DeviceMethodResultS2CPacket.resultToJson(result);
-                        ServerPlayNetworking.send(player, new DeviceMethodResultS2CPacket(payload.requestId(), true, resultJson));
-
-                    } catch (Exception e) {
-                        String errorMsg = e.getCause() != null ? e.getCause().getMessage() : e.getMessage();
-                        ServerPlayNetworking.send(player, new DeviceMethodResultS2CPacket(payload.requestId(), false, DeviceMethodResultS2CPacket.resultToJson(errorMsg)));
-                    }
-                };
-                
-                // Ставим задачу в очередь VM (100 циклов будет потреблено автоматически в tick())
-                vm.enqueueTask(deviceTask);
-            });
-        });
-    }
-
     /**
      * Обработчик для создания отладочного планшета "Flagship".
      */

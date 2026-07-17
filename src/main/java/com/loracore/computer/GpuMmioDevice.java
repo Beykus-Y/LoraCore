@@ -44,10 +44,11 @@ public class GpuMmioDevice implements IMemoryMappedDevice, ITickable {
     private static final int CMD_CLEAR     = 1;
     private static final int CMD_FILL_RECT = 2;
     private static final int CMD_DRAW_CHAR = 3;
+    private static final int CMD_SCROLL = 4;
+    private static final int TOTAL_CHARS = 2048;
 
 
-
-    private final byte[] fontData = new byte[128 * 16]; // 128 символов * 16 байт
+    private final byte[] fontData = new byte[TOTAL_CHARS * CHAR_HEIGHT];
     private static final int CHAR_HEIGHT = 16;
     
     // Внутреннее состояние GPU
@@ -95,16 +96,21 @@ public class GpuMmioDevice implements IMemoryMappedDevice, ITickable {
     private void loadFont() {
         try (InputStream is = getClass().getResourceAsStream("/assets/loracore/os/font.bin")) {
             if (is != null) {
-                int read = is.read(fontData);
-                LoraCoreMod.LOGGER.info("GpuMmioDevice: Loaded hardware font ({} bytes)", read);
+                int read = is.readNBytes(fontData, 0, fontData.length);
+                if (read != fontData.length) {
+                    throw new java.io.EOFException("Expected " + fontData.length
+                            + " font bytes, got " + read);
+                }
+                LoraCoreMod.LOGGER.info("GpuMmioDevice: Loaded font ({} bytes)", read);
             } else {
-                LoraCoreMod.LOGGER.warn("GpuMmioDevice: font.bin not found! Text rendering will fail.");
+                LoraCoreMod.LOGGER.warn("GpuMmioDevice: font.bin resource not found");
             }
         } catch (Exception e) {
             LoraCoreMod.LOGGER.error("GpuMmioDevice: Failed to load font.bin", e);
         }
     }
-    
+
+
     @Override
     public int getSize() {
         // VRAM + 64 байта на регистры
@@ -249,6 +255,10 @@ public class GpuMmioDevice implements IMemoryMappedDevice, ITickable {
             case CMD_DRAW_CHAR: // <--- Расчет стоимости для символа
                 pixels = 8 * CHAR_HEIGHT; // 8x16 пикселей
                 break;
+            case CMD_SCROLL:
+                // Операция затрагивает всё полотно экрана
+                pixels = SCREEN_WIDTH * SCREEN_HEIGHT;
+                break;
             default:
                 return; // Неизвестная команда
         }
@@ -266,7 +276,7 @@ public class GpuMmioDevice implements IMemoryMappedDevice, ITickable {
     }
 
     private void drawChar(int x, int y, int code, int color) {
-        if (code >= 128) return;
+        if (code < 0 || code >= 2048) return;
         int fontOffset = code * CHAR_HEIGHT;
 
         for (int row = 0; row < CHAR_HEIGHT; row++) {
@@ -331,11 +341,42 @@ public class GpuMmioDevice implements IMemoryMappedDevice, ITickable {
 
             case CMD_DRAW_CHAR: // <--- Обработка новой команды
                 // rW используется как код символа (так же, как в Python регистр REG_ARG_2)
-                drawChar(rX, rY, rW & 0xFF, convertColor(rColor));
+                drawChar(rX, rY, rW & 0x7FF, convertColor(rColor));
+                vramDirty = true;
+                break;
+            case CMD_SCROLL:
+                // rColor берется из регистра REG_ARG_4 (индекс 6)
+                // Мы сдвигаем экран на 16 пикселей вверх
+                scrollScreenUp(16, convertColor(rColor));
                 vramDirty = true;
                 break;
         }
         syncToScreenState();
+    }
+
+    /**
+     * Сдвигает содержимое VRAM вверх на указанное количество строк.
+     * @param lines Количество строк (пикселей по вертикали)
+     * @param fillOriginalColor Цвет, которым зальется пустое место снизу
+     */
+    private void scrollScreenUp(int lines, int fillOriginalColor) {
+        // Вычисляем, сколько пикселей нужно сдвинуть
+        int pixelsToShift = lines * SCREEN_WIDTH;
+
+        if (pixelsToShift >= vram.length) {
+            // Если сдвиг больше экрана, просто очищаем всё
+            Arrays.fill(vram, fillOriginalColor);
+        } else {
+            // 1. Сдвигаем массив vram сам в себя:
+            // Source: vram, начиная с pixelsToShift
+            // Dest: vram, начиная с 0
+            // Length: общий размер минус сдвиг
+            System.arraycopy(vram, pixelsToShift, vram, 0, vram.length - pixelsToShift);
+
+            // 2. Очищаем (заливаем цветом фона) появившуюся пустую область снизу
+            int startIndex = vram.length - pixelsToShift;
+            Arrays.fill(vram, startIndex, vram.length, fillOriginalColor);
+        }
     }
     
     private void fillRect(int x, int y, int w, int h, int color) {

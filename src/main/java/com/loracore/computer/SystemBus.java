@@ -24,6 +24,7 @@ public class SystemBus {
     private final int[] segmentSizes = new int[SEGMENT_COUNT]; // Количество устройств в сегменте
     private IInterruptHandler interruptHandler;
     private final IPortDevice[] ports = new IPortDevice[65536];
+    private final java.util.concurrent.atomic.AtomicInteger pendingInterrupts = new java.util.concurrent.atomic.AtomicInteger();
 
     /**
      * Описывает конкретный диапазон устройства в сегменте.
@@ -321,5 +322,41 @@ public class SystemBus {
             return ports[port].read();
         }
         return 0;
+    }
+
+    /**
+     * Запрашивает прерывание. Вызывается устройствами (Клавиатура, Таймер).
+     * @param irq Номер прерывания (0-15).
+     */
+    public void requestInterrupt(int irq) {
+        validateIrq(irq);
+        pendingInterrupts.getAndUpdate(current -> current | (1 << irq));
+    }
+
+    /**
+     * Проверяет наличие активных прерываний.
+     * @return Номер самого приоритетного прерывания или -1, если их нет.
+     */
+    public int checkPendingInterrupts() {
+        int pending = pendingInterrupts.get();
+        return pending == 0 ? -1 : Integer.numberOfTrailingZeros(pending);
+    }
+
+    /**
+     * Сбрасывает флаг прерывания (вызывается CPU при начале обработки).
+     */
+    public void clearInterrupt(int irq) {
+        validateIrq(irq);
+        pendingInterrupts.getAndUpdate(current -> current & ~(1 << irq));
+    }
+
+    public void clearPendingInterrupts() {
+        pendingInterrupts.set(0);
+    }
+
+    private static void validateIrq(int irq) {
+        if (irq < 0 || irq >= 16) {
+            throw new IllegalArgumentException("IRQ must be in range 0-15: " + irq);
+        }
     }
 }

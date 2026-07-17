@@ -5,35 +5,42 @@ import com.loracore.lang.TextAssembler;
 import java.nio.file.*;
 
 public class LoraCGenerator {
+    private static final Path SOURCE_DIR = Paths.get(
+            "src/main/resources/assets/loracore/os/src/kernel");
+    private static final Path SYSTEM_ASSEMBLY = Paths.get(
+            "src/main/resources/assets/loracore/os/src/kernel.asm");
+    private static final Path RECOVERY_ASSEMBLY = Paths.get(
+            "src/main/resources/assets/loracore/os/src/recovery.asm");
+    private static final Path OS_DIR = Paths.get(
+            "src/main/resources/assets/loracore/os");
+
     public static void main(String[] args) throws Exception {
-        // Путь к папке с исходниками
-        String srcDir = "src/main/resources/assets/loracore/os/src/kernel";
+        compile("LoraOS", "kernel.lc", SYSTEM_ASSEMBLY,
+                OS_DIR.resolve("system.map"), OS_DIR.resolve("system.bin"));
+        compile("Recovery", "recovery.lc", RECOVERY_ASSEMBLY,
+                OS_DIR.resolve("recovery.map"), OS_DIR.resolve("recovery.bin"));
+    }
 
-        System.out.println("Compiling Kernel from: " + srcDir);
-
-        // 1. Компилируем (используем новую перегрузку с поддержкой импортов)
+    private static void compile(String name, String sourceName, Path assemblyPath,
+                                Path mapPath, Path binaryPath) throws Exception {
+        System.out.println("Compiling " + name + " from: " + SOURCE_DIR.resolve(sourceName));
         LoraCompiler compiler = new LoraCompiler();
-        // Передаем папку и имя входного файла
-        String asmCode = compiler.compile(srcDir, "kernel.lc");
+        String asmCode = compiler.compile(SOURCE_DIR.toString(), sourceName);
 
-        // Сохраняем ASM для отладки
-        Files.writeString(Paths.get(srcDir + "/kernel.asm"), asmCode);
+        Files.writeString(assemblyPath, asmCode);
 
-        // 2. Ассемблируем в BIN
         TextAssembler assembler = new TextAssembler();
-        // Base Address = 0x2000 (куда Bootloader грузит ядро)
         byte[] binary = assembler.compile(asmCode, 0x2000);
 
-        // 3. Сохраняем map-файл
         StringBuilder mapFile = new StringBuilder();
         for (String entry : assembler.getDebugMap()) {
             mapFile.append(entry).append("\n");
         }
-        Files.writeString(Paths.get(srcDir + "/kernel.map"), mapFile.toString());
+        Files.writeString(mapPath, mapFile.toString());
 
-        // 4. Сохраняем готовый бинарник
-        Files.write(Paths.get("src/main/resources/assets/loracore/os/kernel.bin"), binary);
+        Files.write(binaryPath, binary);
 
-        System.out.println("SUCCESS! kernel.bin generated (" + binary.length + " bytes)");
+        System.out.println("SUCCESS! " + binaryPath.getFileName()
+                + " generated (" + binary.length + " bytes)");
     }
 }

@@ -1,0 +1,11 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "pattern": ["RGR", "GCG", "RGR"],
+  "key": {
+    "R": { "item": "minecraft:redstone" },
+    "G": { "item": "minecraft:gold_ingot" },
+    "C": { "item": "loracore:cpu_t1" }
+  },
+  "result": { "id": "loracore:cpu_t2", "count": 1 }
+}

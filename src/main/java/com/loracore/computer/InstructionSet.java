@@ -17,6 +17,8 @@ public class InstructionSet {
     public static final int OP_PUSH  = 0x05; // PUSH R_src
     public static final int OP_POP   = 0x06; // POP R_dest
     public static final int OP_LUI   = 0x07; // LUI R_dest, Value (Load Upper Immediate)
+    public static final int OP_LDO   = 0x08; // LDO Rd, Rs, Imm16 -> Rd = mem[Rs + Imm16]
+    public static final int OP_STO   = 0x09; // STO Rd, Rs, Imm16 -> mem[Rd + Imm16] = Rs
 
     // --- Группа 2: Арифметика (Math) ---
     public static final int OP_ADD   = 0x10; // ADD  R_dest, R_src
@@ -63,4 +65,12 @@ public class InstructionSet {
     public static final int OP_GET_CLOCK = 0x52; // GET_CLOCK R_dest
     public static final int OP_CPUID = 0x53;
     public static final int OP_JMPR  = 0x54;
+    public static final int OP_IRET  = 0x60; // Возврат из прерывания
+    public static final int OP_STI   = 0x61; // Разрешить прерывания
+    public static final int OP_CLI   = 0x62; // Запретить прерывания
+
+    // Группа 7: Управление MMU
+    public static final int OP_SET_CR3   = 0x70; // SET_CR3 R_src (Установить адрес таблицы страниц)
+    public static final int OP_PG_ENABLE = 0x71; // Включить пейджинг
+    public static final int OP_PG_DISABLE= 0x72; // Выключить пейджинг
 }

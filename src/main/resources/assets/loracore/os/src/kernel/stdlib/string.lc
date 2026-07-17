@@ -1,0 +1,20 @@
+fn string_equals(left, right) {
+    let a = left;
+    let b = right;
+    while (1 == 1) {
+        let ca = mem[a];
+        let cb = mem[b];
+        if (ca != cb) { return 0; }
+        if (ca == 0) { return 1; }
+        a = a + 4;
+        b = b + 4;
+    }
+}
+
+fn string_clear(buffer, capacity) {
+    let index = 0;
+    while (index < capacity) {
+        mem[buffer + (index * 4)] = 0;
+        index = index + 1;
+    }
+}

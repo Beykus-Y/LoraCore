@@ -125,8 +125,35 @@ tasks.register('copyMods', Copy) {
 	into "$buildDir/libs/mods"
 }
 
+tasks.register('generateKernel', JavaExec) {
+	group = 'loracore os'
+	description = 'Compiles the bundled LoraOS and recovery environment.'
+	dependsOn compileJava
+	classpath = files(sourceSets.main.output.classesDirs, configurations.runtimeClasspath)
+	mainClass = 'com.loracore.LoraCGenerator'
+}
+
+tasks.register('generateFirmware', JavaExec) {
+	group = 'loracore os'
+	description = 'Compiles BIOS, stage-1 and the dualboot stage-2 loader.'
+	dependsOn compileJava
+	classpath = files(sourceSets.main.output.classesDirs, configurations.runtimeClasspath)
+	mainClass = 'com.loracore.BiosGenerator'
+}
+
+tasks.register('generateSystemDisk', JavaExec) {
+	group = 'loracore os'
+	description = 'Builds a fresh autonomous factory disk with LoraOS and Recovery.'
+	dependsOn generateFirmware, generateKernel
+	classpath = files(sourceSets.main.output.classesDirs, configurations.runtimeClasspath)
+	mainClass = 'com.loracore.DiskImageGenerator'
+}
+
+processResources.mustRunAfter generateSystemDisk
+build.dependsOn generateSystemDisk
+
 runClient {
-	dependsOn 'copyMods'
+	dependsOn 'copyMods', 'generateSystemDisk'
 	doFirst {
 		// при необходимости, настройте jvmArgs, classpath
 	}

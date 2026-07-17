@@ -1,0 +1,29 @@
+import "consts.lc";
+import "globals.lc";
+
+fn init_hardware() {
+    init_gpu_driver();
+    init_keyboard_driver();
+    disk_regs_ptr = mem[BIOS_VAR_DISK];
+    let world_base = find_device(6);
+    world_regs_ptr = world_base;
+}
+
+fn hardware_count() {
+    if (mem[PNP_ROM] != PNP_MAGIC) { return 0; }
+    return mem[PNP_ROM + 4];
+}
+
+fn find_device(device_type) {
+    if (mem[PNP_ROM] != PNP_MAGIC) { return 0; }
+    let count = mem[PNP_ROM + 4];
+    let index = 0;
+    while (index < count) {
+        let entry = PNP_ROM + 8 + (index * 16);
+        if (mem[entry] == device_type) {
+            return mem[entry + 4];
+        }
+        index = index + 1;
+    }
+    return 0;
+}

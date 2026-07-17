@@ -1,0 +1,13 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "equipment",
+  "pattern": ["IGI", "RCR", "IHI"],
+  "key": {
+    "I": { "item": "minecraft:iron_ingot" },
+    "G": { "item": "minecraft:glass_pane" },
+    "R": { "item": "minecraft:redstone" },
+    "C": { "item": "minecraft:comparator" },
+    "H": { "item": "loracore:hdd_t1" }
+  },
+  "result": { "id": "loracore:tablet", "count": 1 }
+}

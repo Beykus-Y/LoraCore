@@ -2,6 +2,10 @@
 
 // Адрес регистров GPU (вычисляется при старте)
 let gpu_regs_ptr = 0;
+let disk_regs_ptr = 0;
+let keyboard_regs_ptr = 0;
+let world_regs_ptr = 0;
 
 // Позиция курсора для печати (для теста)
 let term_cursor_x = 10;
+let term_cursor_y = 40;

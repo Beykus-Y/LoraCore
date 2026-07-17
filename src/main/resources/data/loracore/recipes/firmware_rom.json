@@ -1,0 +1,12 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "pattern": ["CRC", "RQR", "CGC"],
+  "key": {
+    "C": { "item": "minecraft:copper_ingot" },
+    "R": { "item": "minecraft:redstone" },
+    "Q": { "item": "minecraft:quartz" },
+    "G": { "item": "minecraft:gold_ingot" }
+  },
+  "result": { "id": "loracore:firmware_rom", "count": 1 }
+}

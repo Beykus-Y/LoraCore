@@ -1,0 +1,61 @@
+import "drivers/disk.lc";
+import "stdlib/string.lc";
+
+const LFS_MAGIC = 0x3153464C;
+const LFS_VERSION = 1;
+const LFS_SUPER_LBA = 64;
+const LFS_NOTE_LBA = 65;
+const LFS_NOTE_SECTORS = 4;
+const LFS_SUPER_BUFFER = 0x18000;
+const LFS_DATA_BUFFER = 0x18200;
+const LFS_NOTE_LENGTH = 0x18048;
+const LFS_MAX_CHARS = 511;
+
+fn fs_init() {
+    if (disk_read(LFS_SUPER_LBA, 1, LFS_SUPER_BUFFER) != 0) { return 0; }
+    if (mem[LFS_SUPER_BUFFER] == LFS_MAGIC) { return 1; }
+
+    let index = 0;
+    while (index < 128) {
+        mem[LFS_SUPER_BUFFER + (index * 4)] = 0;
+        index = index + 1;
+    }
+    mem[LFS_SUPER_BUFFER] = LFS_MAGIC;
+    mem[LFS_SUPER_BUFFER + 4] = LFS_VERSION;
+    mem[LFS_SUPER_BUFFER + 8] = 1;
+
+    // First directory entry at +32: UTF-32 name, flags, LBA, length, capacity.
+    mem[LFS_SUPER_BUFFER + 32] = 110;
+    mem[LFS_SUPER_BUFFER + 36] = 111;
+    mem[LFS_SUPER_BUFFER + 40] = 116;
+    mem[LFS_SUPER_BUFFER + 44] = 101;
+    mem[LFS_SUPER_BUFFER + 48] = 0;
+    mem[LFS_SUPER_BUFFER + 64] = 1;
+    mem[LFS_SUPER_BUFFER + 68] = LFS_NOTE_LBA;
+    mem[LFS_SUPER_BUFFER + 72] = 0;
+    mem[LFS_SUPER_BUFFER + 76] = LFS_NOTE_SECTORS;
+    if (disk_write(LFS_SUPER_LBA, 1, LFS_SUPER_BUFFER) != 0) { return 0; }
+    return 1;
+}
+
+fn fs_write_note(buffer, length) {
+    if (length > LFS_MAX_CHARS) { return 0; }
+    mem[buffer + (length * 4)] = 0;
+    if (disk_write(LFS_NOTE_LBA, LFS_NOTE_SECTORS, buffer) != 0) { return 0; }
+    mem[LFS_NOTE_LENGTH] = length;
+    if (disk_write(LFS_SUPER_LBA, 1, LFS_SUPER_BUFFER) != 0) { return 0; }
+    return 1;
+}
+
+fn fs_read_note() {
+    if (disk_read(LFS_NOTE_LBA, LFS_NOTE_SECTORS, LFS_DATA_BUFFER) != 0) { return 0; }
+    let length = mem[LFS_NOTE_LENGTH];
+    if (length < 0) { return 0; }
+    if (length > LFS_MAX_CHARS) { return 0; }
+    mem[LFS_DATA_BUFFER + (length * 4)] = 0;
+    return LFS_DATA_BUFFER;
+}
+
+fn fs_note_length() {
+    return mem[LFS_NOTE_LENGTH];
+}

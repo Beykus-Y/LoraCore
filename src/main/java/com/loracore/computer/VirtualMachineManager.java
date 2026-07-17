@@ -5,6 +5,8 @@ import com.loracore.LoraCoreMod;
 import com.loracore.component.ModComponents;
 import com.loracore.component.data.*;
 import com.loracore.computer.device.ConfigurationSpaceDevice;
+import com.loracore.computer.device.KeyboardDevice;
+import com.loracore.computer.device.WorldBridgeDevice;
 import com.loracore.computer.pnp.PnpEntry;
 import com.loracore.item.ModItems;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
@@ -77,6 +79,7 @@ public class VirtualMachineManager {
     }
 
     private VirtualMachine createNewVM(ServerPlayerEntity player, ItemStack stack, UUID tabletUuid) {
+        // --- 1. Извлечение компонентов из NBT ---
         MotherboardData mobo = stack.get(ModComponents.MOTHERBOARD_DATA);
         if (mobo == null) {
             LoraCoreMod.LOGGER.warn("Tablet {} is missing MotherboardData! Applying default components.", tabletUuid);
@@ -92,7 +95,7 @@ public class VirtualMachineManager {
                         .map(RamData::sizeKb).orElse(0))
                 .sum();
 
-        // 1. Находим первый установленный жесткий диск
+        // Проверка наличия диска
         Optional<ItemStack> hddStackOpt = mobo.storage().stream().findFirst();
         if (hddStackOpt.isEmpty()) {
             LoraCoreMod.LOGGER.error("Tablet {} has no storage device installed!", tabletUuid);
@@ -100,7 +103,6 @@ public class VirtualMachineManager {
         }
         ItemStack hddStack = hddStackOpt.get();
 
-        // 2. Получаем данные с этого диска
         FileSystemsData fsData = hddStack.get(ModComponents.FILE_SYSTEMS_DATA);
         StorageData storageData = hddStack.get(ModComponents.STORAGE_DATA);
 
@@ -111,157 +113,154 @@ public class VirtualMachineManager {
         UUID fsUuid = fsData.fsUuid();
         int capacityKb = storageData.capacityKb();
 
-        LoraCoreMod.LOGGER.info("Параметры для новой ВМ: arch={}, ram={}KB, fsUUID={}, tabletUUID={}",
+        LoraCoreMod.LOGGER.info("VM Init: arch={}, ram={}KB, fsUUID={}, tabletUUID={}",
                 architecture, totalRamKb, fsUuid, tabletUuid);
 
-        // === 3. Создаем VFS заранее (нужна для контроллера диска) ===
-        // Создаем СИНХРОННУЮ ImageVfs
+        // --- 2. Инициализация VFS ---
         IFileSystem imageVfs = new ImageVfs(
                 player.getServer().getSavePath(net.minecraft.util.WorldSavePath.ROOT),
                 fsUuid,
                 capacityKb
         );
 
-        // === HARDWARE INITIALIZATION & PnP MAPPING ===
-
+        // --- 3. Инициализация Шины и Устройств ---
         SystemBus systemBus = new SystemBus();
         List<PnpEntry> pnpTable = new ArrayList<>();
-
-        // Адрес начала конфигурационного пространства (фиксирован: последние 4КБ)
         final int CONFIG_ROM_ADDR = 0xFFF000;
-        int currentAddress = 0;
-
-        // --- 4. RAM Allocation (Always starts at 0x000000) ---
-        int ramSizeBytes = totalRamKb * 1024;
-        GenericRam systemRam = new GenericRam(ramSizeBytes);
-
-        systemBus.mapDevice(currentAddress, systemRam);
-        pnpTable.add(new PnpEntry(PnpEntry.TYPE_RAM, currentAddress, ramSizeBytes, 0));
-
-        currentAddress += ramSizeBytes;
-        // Выравнивание адреса до 4KB (0x1000)
-        currentAddress = (currentAddress + 0xFFF) & ~0xFFF;
-
-        // --- 5. GPU Allocation ---
-        ServerScreenState screenState = TabletScreenManager.getInstance().getOrCreateScreen(stack);
-
-        // Логика определения Tier GPU
-        GpuMmioDevice.GpuTier gpuTier = GpuMmioDevice.GpuTier.TIER3;
-        if (mobo.gpu().isPresent()) {
-            // Здесь можно добавить логику чтения тира из GpuData
-            gpuTier = GpuMmioDevice.GpuTier.TIER3; // Пока ставим Tier 3 по умолчанию, если карта есть
-        }
-
-        GpuMmioDevice gpuMmioDevice = new GpuMmioDevice(screenState, gpuTier);
-        int gpuSize = gpuMmioDevice.getSize();
-
-        // Проверка на переполнение памяти
-        if (currentAddress + gpuSize > CONFIG_ROM_ADDR) {
-            LoraCoreMod.LOGGER.error("Critical Error: GPU does not fit in memory space!");
-            return null;
-        }
-
-        systemBus.mapDevice(currentAddress, gpuMmioDevice);
-        pnpTable.add(new PnpEntry(PnpEntry.TYPE_GPU, currentAddress, gpuSize, 0));
-
-        LoraCoreMod.LOGGER.info("PnP: GPU Mapped at 0x{}", String.format("%06X", currentAddress));
-
-        currentAddress += gpuSize;
-        currentAddress = (currentAddress + 0xFFF) & ~0xFFF; // Align
-
-        // --- 6. Storage (HDD Controller) Allocation ---
-
-        // Подготовка "сырого" файла диска внутри VFS
-        Path diskFolder = player.getServer().getSavePath(net.minecraft.util.WorldSavePath.ROOT)
-                .resolve("loracore_vfs")
-                .resolve(fsUuid.toString());
-
-        String rawDiskFilename = "disk.bin";
-        int diskSizeBytes = capacityKb * 1024;
-
-        // Создаем физический привод
-        RawDiskDrive rawDrive = new RawDiskDrive(diskFolder, rawDiskFilename, diskSizeBytes);
 
         try {
-            // Если файла диска еще нет на физическом носителе (HDD/SSD хоста)
-            java.io.File diskFile = diskFolder.resolve(rawDiskFilename).toFile();
-            if (!diskFile.exists()) {
-                rawDrive.ensureExists(); // Создает пустой файл нужного размера
+            // == A. RAM (0x000000 - ...) ==
+            // Всегда начинается с 0
+            int ramSizeBytes = totalRamKb * 1024;
+            GenericRam systemRam = new GenericRam(ramSizeBytes);
+            systemBus.mapDevice(0x000000, systemRam);
+            pnpTable.add(new PnpEntry(PnpEntry.TYPE_RAM, 0x000000, ramSizeBytes, 0));
 
-                // Читаем дефолтный загрузочный сектор из ресурсов мода
-                byte[] defaultDiskContent = null;
-                try (var stream = LoraCoreMod.class.getResourceAsStream("/assets/" + LoraCoreMod.MOD_ID + "/os/disk.bin")) {
-                    if (stream != null) {
-                        defaultDiskContent = stream.readAllBytes();
-                    }
-                }
+            // Текущий адрес после RAM (выравненный до 4KB)
+            int currentAddr = (ramSizeBytes + 0xFFF) & ~0xFFF;
 
-                // Если нашли дефолтный образ - записываем его в начало диска
-                if (defaultDiskContent != null) {
-                    // Записываем данные напрямую в файл, так как мы сейчас в синхронном потоке инициализации
-                    java.nio.file.Files.write(diskFile.toPath(), defaultDiskContent, java.nio.file.StandardOpenOption.WRITE);
-                    LoraCoreMod.LOGGER.info("[VM] Flashed default boot image to new disk {}", fsUuid);
-                }
-            }
-        } catch (java.io.IOException e) {
-            LoraCoreMod.LOGGER.error("Critical: Failed to initialize raw disk file for VM", e);
-            return null;
-        }
-
-        // Создаем контроллер, передавая ему нашу шину и новый RawDrive
-        com.loracore.computer.device.DiskControllerDevice diskController =
-                new com.loracore.computer.device.DiskControllerDevice(systemBus, rawDrive);
-
-        int diskCtrlSize = diskController.getSize();
-
-        if (currentAddress + diskCtrlSize > CONFIG_ROM_ADDR) {
-            LoraCoreMod.LOGGER.error("Critical Error: Disk Controller does not fit in memory space.");
-            return null;
-        }
-
-        systemBus.mapDevice(currentAddress, diskController);
-        pnpTable.add(new PnpEntry(PnpEntry.TYPE_STORAGE, currentAddress, diskCtrlSize, 0));
-
-        LoraCoreMod.LOGGER.info("PnP: Disk Controller Mapped at 0x{}", String.format("%06X", currentAddress));
-
-        currentAddress += diskCtrlSize;
-        currentAddress = (currentAddress + 0xFFF) & ~0xFFF;
-
-
-
-        // --- 7. Configuration Space (ROM) ---
-        // Создаем ROM с таблицей устройств
-        ConfigurationSpaceDevice configDevice = new ConfigurationSpaceDevice(pnpTable);
-        systemBus.mapDevice(CONFIG_ROM_ADDR, configDevice);
-
-        // ==========================================
-
-        ServerTerminal serverTerminal = new ServerTerminal(tabletUuid);
-
-        // Оборачиваем VFS в асинхронную обертку для использования в API (если нужно)
-        IAsyncVFS serverVfs = new ServerVFSWrapper(imageVfs);
-
-        MinecraftServer server = player.getServer();
-        ResourceLoader serverResourceLoader = (path) -> {
-            String fullPathInJar = "/assets/" + LoraCoreMod.MOD_ID + "/" + path;
-            try (var stream = LoraCoreMod.class.getResourceAsStream(fullPathInJar)) {
-                if (stream == null) {
-                    LoraCoreMod.LOGGER.error("КРИТИЧЕСКАЯ ОШИБКА: Не удалось найти файл: {}", fullPathInJar);
-                    return null;
-                }
-                return stream.readAllBytes();
-            } catch (Exception e) {
-                LoraCoreMod.LOGGER.error("КРИТИЧЕСКАЯ ОШИБКА: Не удалось прочитать встроенный системный файл: {}", fullPathInJar, e);
+            // == B. Disk Controller (FIXED: 0x300000) ==
+            // Хардкод адреса обязателен для совместимости с текущим ядром (consts.lc)
+            // Если RAM > 3MB, это вызовет ошибку (но у нас пока макс 2MB)
+            int diskAddr = 0x300000;
+            if (currentAddr > diskAddr) {
+                LoraCoreMod.LOGGER.error("VM Init Error: RAM too large ({} bytes), overlaps Disk Controller at 0x300000", ramSizeBytes);
+                // Fallback: обрезаем RAM (виртуально) или просто предупреждаем
+                // Для стабильности лучше вернуть null
                 return null;
             }
-        };
 
-        // ВАЖНО: Передаем уже настроенные компоненты в конструктор VM
-        // Обратите внимание: DiskControllerDevice живет в SystemBus, поэтому передавать его отдельно не обязательно,
-        // но он доступен CPU через MMIO.
-        return new VirtualMachine(player, architecture, totalRamKb, serverTerminal,
-                serverResourceLoader, serverVfs, fsUuid, tabletUuid,
-                systemBus, systemRam, gpuMmioDevice);
+            // Подготовка файла диска
+            Path diskFolder = player.getServer().getSavePath(net.minecraft.util.WorldSavePath.ROOT)
+                    .resolve("loracore_vfs")
+                    .resolve(fsUuid.toString());
+            String rawDiskFilename = "disk.bin";
+            int diskSizeBytes = capacityKb * 1024;
+
+            RawDiskDrive rawDrive = new RawDiskDrive(diskFolder, rawDiskFilename, diskSizeBytes);
+            initializeDiskImageIfNeeded(rawDrive, diskFolder.resolve(rawDiskFilename),
+                    diskSizeBytes, fsUuid);
+
+            com.loracore.computer.device.DiskControllerDevice diskController =
+                    new com.loracore.computer.device.DiskControllerDevice(systemBus, rawDrive);
+
+            systemBus.mapDevice(diskAddr, diskController);
+            pnpTable.add(new PnpEntry(PnpEntry.TYPE_STORAGE, diskAddr, diskController.getSize(), 0));
+            LoraCoreMod.LOGGER.info("PnP: Disk Controller Mapped at 0x300000");
+
+            // == C. Keyboard (FIXED: 0x310000) ==
+            // Также фиксированный адрес
+            int keybAddr = 0x310000;
+            com.loracore.computer.device.KeyboardDevice keyboard = new com.loracore.computer.device.KeyboardDevice(systemBus);
+            systemBus.mapDevice(keybAddr, keyboard);
+            pnpTable.add(new PnpEntry(PnpEntry.TYPE_INPUT, keybAddr, keyboard.getSize(), 0));
+            LoraCoreMod.LOGGER.info("PnP: Keyboard Mapped at 0x310000");
+
+            // == D. Read-only survival world bridge (0x320000) ==
+            int worldBridgeAddr = 0x320000;
+            WorldBridgeDevice worldBridge = new WorldBridgeDevice(player);
+            systemBus.mapDevice(worldBridgeAddr, worldBridge);
+            pnpTable.add(new PnpEntry(PnpEntry.TYPE_WORLD, worldBridgeAddr, worldBridge.getSize(), 0));
+            LoraCoreMod.LOGGER.info("PnP: World Bridge Mapped at 0x320000 (read-only ABI v1)");
+
+            // == E. GPU (DYNAMIC START: 0x400000) ==
+            // Начинаем с 4MB, чтобы гарантированно не задеть диск и клавиатуру
+            int gpuAddr = 0x400000;
+
+            ServerScreenState screenState = TabletScreenManager.getInstance().getOrCreateScreen(stack);
+            GpuMmioDevice.GpuTier gpuTier = GpuMmioDevice.GpuTier.TIER3;
+            if (mobo.gpu().isPresent()) {
+                gpuTier = GpuMmioDevice.GpuTier.TIER3;
+            }
+
+            GpuMmioDevice gpuMmioDevice = new GpuMmioDevice(screenState, gpuTier);
+            int gpuSize = gpuMmioDevice.getSize();
+
+            // Проверка на выход за пределы памяти (до PnP ROM)
+            if (gpuAddr + gpuSize > CONFIG_ROM_ADDR) {
+                LoraCoreMod.LOGGER.error("Critical Error: GPU (size {}) at 0x{} does not fit before PnP ROM at 0x{}",
+                        gpuSize, Integer.toHexString(gpuAddr), Integer.toHexString(CONFIG_ROM_ADDR));
+                return null;
+            }
+
+            systemBus.mapDevice(gpuAddr, gpuMmioDevice);
+            pnpTable.add(new PnpEntry(PnpEntry.TYPE_GPU, gpuAddr, gpuSize, 0));
+            LoraCoreMod.LOGGER.info("PnP: GPU Mapped at 0x{}", Integer.toHexString(gpuAddr));
+
+            // == F. PnP Configuration Space (FIXED: 0xFFF000) ==
+            ConfigurationSpaceDevice configDevice = new ConfigurationSpaceDevice(pnpTable);
+            systemBus.mapDevice(CONFIG_ROM_ADDR, configDevice);
+
+            // --- 4. Сборка остальной периферии ---
+            ServerTerminal serverTerminal = new ServerTerminal(tabletUuid);
+            IAsyncVFS serverVfs = new ServerVFSWrapper(imageVfs);
+
+            ResourceLoader serverResourceLoader = (path) -> {
+                String fullPathInJar = "/assets/" + LoraCoreMod.MOD_ID + "/" + path;
+                try (var stream = LoraCoreMod.class.getResourceAsStream(fullPathInJar)) {
+                    if (stream == null) {
+                        LoraCoreMod.LOGGER.error("CRITICAL: System file missing: {}", fullPathInJar);
+                        return null;
+                    }
+                    return stream.readAllBytes();
+                } catch (Exception e) {
+                    LoraCoreMod.LOGGER.error("CRITICAL: Failed to read system file: {}", fullPathInJar, e);
+                    return null;
+                }
+            };
+
+            // Возврат готовой VM
+            return new VirtualMachine(player, architecture, totalRamKb, serverTerminal,
+                    serverResourceLoader, serverVfs, fsUuid, tabletUuid,
+                    systemBus, systemRam, gpuMmioDevice, keyboard);
+
+        } catch (Exception e) {
+            LoraCoreMod.LOGGER.error("Fatal error during VM creation for tablet {}", tabletUuid, e);
+            return null;
+        }
+    }
+
+    /**
+     * Вспомогательный метод для инициализации файла диска
+     */
+    private void initializeDiskImageIfNeeded(RawDiskDrive rawDrive, Path diskPath,
+                                             int diskSizeBytes, UUID fsUuid) throws java.io.IOException {
+        try (var stream = LoraCoreMod.class.getResourceAsStream(
+                "/assets/" + LoraCoreMod.MOD_ID + "/os/disk.bin")) {
+            if (stream == null) {
+                throw new java.io.IOException("Bundled LoraOS factory image is missing");
+            }
+            FactoryDiskInstaller.Result result = FactoryDiskInstaller.ensureInstalled(
+                    rawDrive, diskPath, diskSizeBytes, stream.readAllBytes());
+            switch (result) {
+                case CREATED -> LoraCoreMod.LOGGER.info(
+                        "[VM] Flashed LoraCore 2.x factory image to new disk {}", fsUuid);
+                case MIGRATED -> LoraCoreMod.LOGGER.warn(
+                        "[VM] Migrated legacy disk {} to 2.x; backup saved as disk.bin.pre-2.0.bak",
+                        fsUuid);
+                case CURRENT -> { }
+            }
+        }
     }
     public Map<UUID, VirtualMachine> getRunningMachines() {
         return this.runningMachines;

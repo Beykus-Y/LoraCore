@@ -1,0 +1,29 @@
+import "consts.lc";
+import "globals.lc";
+import "drivers/gpu.lc";
+import "drivers/keyboard.lc";
+
+fn main() {
+    init_gpu_driver();
+    gpu_clear(0xFF301010);
+    gpu_rect(0, 0, 480, 16, 0xFF800000);
+    gpu_print(8, 0, "LoraOS 2.0 Recovery", COL_TEXT);
+    gpu_print(10, 32, "Recovery environment is running", 0xFFFFCC80);
+    gpu_print(10, 48, "Press keys to test keyboard", COL_TEXT);
+
+    let cursor_y = 72;
+    term_cursor_x = 10;
+    while (1 == 1) {
+        let key = poll_keyboard();
+        if (key != 0) {
+            if (key == 13) {
+                term_cursor_x = 10;
+                cursor_y = cursor_y + 16;
+            } else {
+                gpu_char(term_cursor_x, cursor_y, key, COL_TEXT);
+                term_cursor_x = term_cursor_x + 8;
+            }
+        }
+        wait(10);
+    }
+}

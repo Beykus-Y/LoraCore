@@ -1,0 +1,25 @@
+import "consts.lc";
+import "globals.lc";
+
+fn disk_transfer(command, lba, count, dma_address) {
+    let base = disk_regs_ptr;
+    if (base == 0) { return 1; }
+
+    mem[base + DISK_REG_LBA] = lba;
+    mem[base + DISK_REG_COUNT] = count;
+    mem[base + DISK_REG_DMA] = dma_address;
+    mem[base + DISK_REG_COMMAND] = command;
+
+    while (mem[base + DISK_REG_COMMAND] != 0) {
+        wait(10);
+    }
+    return mem[base + DISK_REG_ERROR];
+}
+
+fn disk_read(lba, count, dma_address) {
+    return disk_transfer(DISK_CMD_READ, lba, count, dma_address);
+}
+
+fn disk_write(lba, count, dma_address) {
+    return disk_transfer(DISK_CMD_WRITE, lba, count, dma_address);
+}

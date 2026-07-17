@@ -1,20 +1,11 @@
-// === Новая компактная карта памяти (Safe 16-bit addresses) ===
+const PMM_BITMAP_BASE = 0x10000;
+const PAGE_DIR_ADDR    = 0x11000;
+const K_STACK_TOP      = 0x13FFC;
 
-// 0x0000 - 0x3FFF: BIOS / Kernel (16 KB)
-// 0x4000 - 0x41FF: PMM Bitmap (512 байт для 16MB памяти)
-const PMM_BITMAP_BASE = 0x4000;
+const K_HEAP_START     = 0x14000;
+const K_HEAP_SIZE      = 0x4000; // 16 KB
 
-// 0x5000 - 0x5FFF: VMM Page Directory (4 KB)
-const PAGE_DIR_ADDR    = 0x5000;
-
-// 0x6000 - 0x7FFF: Kernel Stack (8 KB, растет вниз)
-const K_STACK_TOP      = 0x6FFC;
-
-// 0x8000 - 0xFFFF: Kernel Heap (32 KB)
-const K_HEAP_START     = 0x7000;
-const K_HEAP_SIZE      = 0x1000;
-
-// 0x10000+: Свободная память для приложений
-const USER_SPACE_START = 0x10000;
+// User Space
+const USER_SPACE_START = 0x20000;
 
 const PAGE_SIZE        = 4096;

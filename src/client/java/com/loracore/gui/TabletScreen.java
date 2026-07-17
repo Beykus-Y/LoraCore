@@ -1,9 +1,7 @@
 // Расположение: src/client/java/com/loracore/gui/TabletScreen.java
 package com.loracore.gui;
 
-import com.loracore.LoraCoreClient;
 import com.loracore.LoraCoreMod;
-import com.loracore.computer.IRuntimeEnvironment;
 import com.loracore.network.input.CharTypedC2SPacket;
 import com.loracore.network.input.KeyPressedC2SPacket;
 import com.loracore.network.input.MouseClickedC2SPacket;
@@ -23,7 +21,6 @@ public class TabletScreen extends Screen {
     private boolean debugOverlayEnabled = false;
     private final UUID tabletUuid;
     private final UUID fileSystemUuid;
-    private IRuntimeEnvironment clientRuntime = null;
 
     private int tabletX, tabletY, tabletWidth, tabletHeight;
 
@@ -73,11 +70,6 @@ public class TabletScreen extends Screen {
         if (this.screenImage == null || this.screenTexture == null || pixelBuffer == null) {
             return;
         }
-        // Если работает Java-ядро, игнорируем серверные обновления (они низкого разрешения)
-        if (clientRuntime != null && clientRuntime.isRunning()) {
-            return;
-        }
-
         // Сервер присылает 480x270. Нам нужно растянуть это на 960x540.
         int serverWidth = 480;
         int serverHeight = 270;
@@ -126,11 +118,6 @@ public class TabletScreen extends Screen {
         super.render(context, mouseX, mouseY, delta);
         context.fill(0, 0, this.width, this.height, 0xB0000000); // Overlay
         context.fill(tabletX, tabletY, tabletX + tabletWidth, tabletY + tabletHeight, 0xFF0A0A0A); // Border
-
-        if (clientRuntime != null && clientRuntime.needsClientSideRendering()) {
-            clientRuntime.render(mouseX, mouseY, delta);
-            this.screenTexture.upload();
-        }
 
         if (screenTextureId != null) {
             RenderSystem.setShader(GameRenderer::getPositionTexProgram);
@@ -190,13 +177,6 @@ public class TabletScreen extends Screen {
     }
 
     @Override
-    public void tick() {
-        if (clientRuntime != null) {
-            clientRuntime.tick();
-        }
-    }
-
-    @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
         if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
             this.close();
@@ -209,20 +189,12 @@ public class TabletScreen extends Screen {
             }
         }
 
-        if (clientRuntime != null) {
-            return clientRuntime.onKeyPressed(keyCode, scanCode, modifiers);
-        }
-
         ClientPlayNetworking.send(new KeyPressedC2SPacket(this.tabletUuid, keyCode, scanCode, modifiers));
         return true;
     }
 
     @Override
     public boolean charTyped(char chr, int modifiers) {
-        if (clientRuntime != null) {
-            return clientRuntime.onCharTyped(chr, modifiers);
-        }
-
         ClientPlayNetworking.send(new CharTypedC2SPacket(this.tabletUuid, chr, modifiers));
         return true;
     }
@@ -234,12 +206,7 @@ public class TabletScreen extends Screen {
         double localY = (mouseY - (tabletY + 2)) * ((double) INTERNAL_HEIGHT / (tabletHeight - 4));
 
         if (localX >= 0 && localX < INTERNAL_WIDTH && localY >= 0 && localY < INTERNAL_HEIGHT) {
-            if (clientRuntime != null) {
-                return clientRuntime.onMouseClicked(localX, localY, button);
-            }
-
-            // Для Lua режима (который 480x270) нам нужно даунскейлить координаты перед отправкой
-            // чтобы os.pullEvent получал корректные данные
+            // Серверный framebuffer использует логическое разрешение 480x270.
             double serverX = localX / 2.0;
             double serverY = localY / 2.0;
 
@@ -249,10 +216,6 @@ public class TabletScreen extends Screen {
         return super.mouseClicked(mouseX, mouseY, button);
     }
 
-    public void switchToClientKernel(String kernelPath) {
-        LoraCoreClient.LOGGER.info("Запрос на переключение на клиентское ядро проигнорирован: режим Java-ядра удален");
-    }
-
     @Override
     public void removed() {
         super.removed();
@@ -260,10 +223,6 @@ public class TabletScreen extends Screen {
 
     @Override
     public void close() {
-        if (clientRuntime != null) {
-            clientRuntime.shutdown();
-            clientRuntime = null;
-        }
         if (this.client != null && this.screenTextureId != null) {
             this.client.getTextureManager().destroyTexture(this.screenTextureId);
         }

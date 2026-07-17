@@ -3,8 +3,10 @@ import "globals.lc";
 
 fn init_gpu_driver() {
     let base = mem[BIOS_VAR_GPU];
-    // 480 * 270 * 4 = 0x7E900
-    let offset = 0x7E900;
+    let size = mem[BIOS_VAR_GPU_SIZE];
+    // PnP reports the complete GPU window: VRAM followed by 64 bytes of MMIO.
+    // Deriving the address keeps the driver correct for every GPU resolution.
+    let offset = size - 64;
     gpu_regs_ptr = base + offset;
 }
 

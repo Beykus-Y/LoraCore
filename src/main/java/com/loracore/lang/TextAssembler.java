@@ -207,19 +207,16 @@ public class TextAssembler {
         if (!argsRaw.isEmpty()) {
             String[] args = splitArgs(argsRaw);
 
+            // 1. Двухаргументные: Регистр-Регистр или Регистр-Число
             if (isRegImm(mnemonic) || isRegReg(mnemonic)) {
                 if (args.length > 0) rD = parseRegister(args[0]);
                 if (args.length > 1) {
-                    // Сначала пробуем распарсить как регистр
                     try {
                         rS = parseRegister(args[1]);
-                        // Если это удалось, значит используем Reg-Reg версию.
-                        // Для команд типа ADDI/ANDI мы превращаем их в базовые ADD/AND
                         if (mnemonic.endsWith("i")) {
                             opcode = OPCODES.get(mnemonic.substring(0, mnemonic.length() - 1));
                         }
                     } catch (Exception e) {
-                        // Если не регистр, значит это число или метка (Immediate)
                         try {
                             imm = parseNumber(args[1]);
                         } catch (NumberFormatException nfe) {
@@ -229,21 +226,34 @@ public class TextAssembler {
                     }
                 }
             }
-            // 3. Инструкции с одним регистром (PUSH R1)
+            // 2. Одноаргументные (PUSH R1, WAIT R0, WAIT 100)
             else if (isSingleReg(mnemonic)) {
-                // PUSH использует rS (источник), POP использует rD (назначение)
+                // PUSH и OUT используют rS (источник)
                 if (mnemonic.equals("push") || mnemonic.equals("out")) {
-                    if (args.length > 0) rS = parseRegister(args[0]); // OUT port, Rs ? Нет, OUT port, reg
-                    // OUT instruction: OUT Imm(port), Reg
+                    if (args.length > 0) rS = parseRegister(args[0]);
                     if (mnemonic.equals("out") && args.length > 1) {
+                        // OUT port, Reg
                         try { imm = parseNumber(args[0]); } catch(Exception e) {hasPatch=true; patchLabel=args[0];}
                         rS = parseRegister(args[1]);
                     }
                 } else {
-                    if (args.length > 0) rD = parseRegister(args[0]);
+                    // POP, WAIT, INC, DEC и т.д.
+                    // Пытаемся распарсить аргумент как РЕГИСТР (rD)
+                    try {
+                        if (args.length > 0) rD = parseRegister(args[0]);
+                    } catch (IllegalArgumentException e) {
+                        // Если не вышло (например WAIT 100), пробуем как ЧИСЛО (Immediate)
+                        // Это критическое исправление для WAIT
+                        try {
+                            imm = parseNumber(args[0]);
+                        } catch (NumberFormatException nfe) {
+                            hasPatch = true;
+                            patchLabel = args[0];
+                        }
+                    }
                 }
             }
-            // 4. Инструкции перехода (JMP label)
+            // 3. Переходы (JMP label) - только метки/числа
             else if (isJump(mnemonic)) {
                 if (args.length > 0) {
                     try {
@@ -254,19 +264,25 @@ public class TextAssembler {
                     }
                 }
             }
-            // 5. ST / LD (LD R_dest, R_addr | ST R_addr, R_src)
+            // 4. Смещения (LDO R1, R2, 4)
+            else if (isOffsetOp(mnemonic)) {
+                if (args.length < 3) throw new IllegalArgumentException("LDO/STO require 3 args");
+                rD = parseRegister(args[0]);
+                rS = parseRegister(args[1]);
+                try { imm = parseNumber(args[2]); }
+                catch (NumberFormatException nfe) { hasPatch = true; patchLabel = args[2]; }
+            }
+            // 5. ST / LD
             else if (mnemonic.equals("ld")) {
                 if (args.length > 0) rD = parseRegister(args[0]);
                 if (args.length > 1) rS = parseRegister(args[1]);
             }
             else if (mnemonic.equals("st")) {
-                // ST R_addr(D), R_val(S) -> используем поле rD как адресный регистр
                 if (args.length > 0) rD = parseRegister(args[0]);
                 if (args.length > 1) rS = parseRegister(args[1]);
             }
         }
 
-        // Кодирование: [Op:8][RD:4][RS:4][Imm:16]
         int instruction = (opcode << 24) | ((rD & 0xF) << 20) | ((rS & 0xF) << 16) | (imm & 0xFFFF);
 
         if (hasPatch) {
@@ -279,6 +295,7 @@ public class TextAssembler {
         buffer.write((instruction >>> 24) & 0xFF);
         currentAddress += 4;
     }
+
 
     // Хелперы для определения типа аргументов
     private boolean isRegReg(String m) {
@@ -293,11 +310,15 @@ public class TextAssembler {
                 m.equals("cmpi") || m.equals("shl") || m.equals("shr") || m.equals("andi") || m.equals("ori");
     }
     private boolean isSingleReg(String m) {
-        return m.equals("push") || m.equals("pop") || m.equals("get_temp") || m.equals("get_clock") || m.equals("inc") || m.equals("dec")|| m.equals("jmpr");
+        // ДОБАВЛЕНО: wait
+        return m.equals("push") || m.equals("pop") || m.equals("get_temp") ||
+                m.equals("get_clock") || m.equals("inc") || m.equals("dec") ||
+                m.equals("jmpr") || m.equals("wait");
     }
     private boolean isJump(String m) {
+        // УБРАНО: wait
         return m.equals("jmp") || m.equals("jz") || m.equals("jnz") || m.equals("jg") ||
-                m.equals("jl") || m.equals("call") || m.equals("wait");
+                m.equals("jl") || m.equals("call");
     }
 
     private String[] splitArgs(String argsRaw) {
@@ -325,8 +346,12 @@ public class TextAssembler {
     public int parseNumber(String token) throws NumberFormatException {
         token = token.trim();
         if (token.startsWith("0x") || token.startsWith("0X")) {
-            return Integer.parseInt(token.substring(2), 16);
+            return (int) Long.parseLong(token.substring(2), 16);
         }
-        return Integer.parseInt(token);
+        return (int) Long.parseLong(token);
+    }
+
+    private boolean isOffsetOp(String m) {
+        return m.equals("ldo") || m.equals("sto");
     }
 }

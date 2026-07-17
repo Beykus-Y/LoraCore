@@ -1,0 +1,11 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "pattern": ["LGL", "GRG", "LGL"],
+  "key": {
+    "L": { "item": "minecraft:lapis_lazuli" },
+    "G": { "item": "minecraft:gold_ingot" },
+    "R": { "item": "loracore:ram_t1" }
+  },
+  "result": { "id": "loracore:ram_t2", "count": 1 }
+}

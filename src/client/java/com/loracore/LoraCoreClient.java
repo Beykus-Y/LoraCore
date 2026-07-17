@@ -3,18 +3,14 @@ package com.loracore;
 
 import com.loracore.api.ClientApi;
 import com.loracore.api.GpuApi;
-import com.loracore.computer.ClientVFS;
 import com.loracore.gui.AskChatScreen;
 import com.loracore.gui.TabletScreen;
 import com.loracore.keybinding.ModKeyBindings;
 import com.loracore.network.BootTabletS2CPacket;
-import com.loracore.network.DeviceMethodResultS2CPacket;
 import com.loracore.network.SpawnDebugTabletC2SPacket;
-import com.loracore.network.SwitchToClientKernelS2CPacket;
 import com.loracore.network.SystemMetricsS2CPacket;
 import com.loracore.network.graphics.GpuCommandC2SPacket;
 import com.loracore.network.graphics.ScreenUpdateS2CPacket;
-import com.loracore.network.vfs.VfsResponseS2CPacket;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
@@ -50,13 +46,6 @@ public class LoraCoreClient implements ClientModInitializer {
     }
 
     private void registerPacketHandlers() {
-        // Обработчик для VFS
-        ClientPlayNetworking.registerGlobalReceiver(VfsResponseS2CPacket.ID, (payload, context) -> {
-            context.client().execute(() -> {
-                ClientVFS.dispatchResponse(payload);
-            });
-        });
-
         // Обработчик для загрузки планшета
         ClientPlayNetworking.registerGlobalReceiver(BootTabletS2CPacket.ID, (payload, context) -> {
             context.client().execute(() -> {
@@ -67,16 +56,6 @@ public class LoraCoreClient implements ClientModInitializer {
                 context.client().setScreen(tabletScreen);
             });
         });
-        ClientPlayNetworking.registerGlobalReceiver(DeviceMethodResultS2CPacket.ID, (payload, context) -> {
-            context.client().execute(() -> {
-                Screen currentScreen = MinecraftClient.getInstance().currentScreen;
-                if (currentScreen instanceof TabletScreen tabletScreen) {
-                    // TabletScreen должен иметь метод для обработки этого
-                    tabletScreen.onDeviceResult(payload.requestId(), payload.success(), payload.getResult());
-                }
-            });
-        });
-
         // ИСПРАВЛЕНИЕ: Обработчик обновления экрана теперь находится ВНУТРИ метода
         ClientPlayNetworking.registerGlobalReceiver(ScreenUpdateS2CPacket.ID, (payload, context) -> {
             context.client().execute(() -> {
@@ -93,16 +72,6 @@ public class LoraCoreClient implements ClientModInitializer {
                 }
             });
         });
-        ClientPlayNetworking.registerGlobalReceiver(SwitchToClientKernelS2CPacket.ID, (payload, context) -> {
-            context.client().execute(() -> {
-                Screen currentScreen = MinecraftClient.getInstance().currentScreen;
-                if (currentScreen instanceof TabletScreen tabletScreen) {
-                    // Вызываем новый метод в TabletScreen для переключения
-                    tabletScreen.switchToClientKernel(payload.kernelPath());
-                }
-            });
-        });
-        
         // Обработчик метрик системы
         ClientPlayNetworking.registerGlobalReceiver(SystemMetricsS2CPacket.ID, (payload, context) -> {
             context.client().execute(() -> {

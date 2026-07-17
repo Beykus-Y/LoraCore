@@ -1,0 +1,203 @@
+import "consts.lc";
+import "globals.lc";
+import "drivers/gpu.lc";
+import "drivers/keyboard.lc";
+import "drivers/hardware.lc";
+import "stdlib/string.lc";
+import "sys/filesystem.lc";
+
+const SHELL_BUFFER = 0x16000;
+const SHELL_CAPACITY = 48;
+
+fn terminal_reset() {
+    gpu_clear(COL_BG);
+    gpu_rect(0, 0, 480, 16, COL_BAR);
+    gpu_print(8, 0, "LoraOS 2.0", COL_TEXT);
+    term_cursor_x = 10;
+    term_cursor_y = 32;
+}
+
+fn terminal_newline() {
+    term_cursor_x = 10;
+    term_cursor_y = term_cursor_y + 16;
+    if (term_cursor_y > 240) {
+        terminal_reset();
+    }
+}
+
+fn terminal_line(text, color) {
+    gpu_print(10, term_cursor_y, text, color);
+    terminal_newline();
+}
+
+fn shell_prompt() {
+    gpu_print(10, term_cursor_y, "lora> ", COL_OK);
+    term_cursor_x = 58;
+}
+
+fn shell_help() {
+    terminal_line("help  - list commands", COL_TEXT);
+    terminal_line("about - system version", COL_TEXT);
+    terminal_line("hw    - discovered hardware", COL_TEXT);
+    terminal_line("clear - clear terminal", COL_TEXT);
+    terminal_line("ls    - list files", COL_TEXT);
+    terminal_line("cat note - read note", COL_TEXT);
+    terminal_line("write note - replace note", COL_TEXT);
+    terminal_line("world - inspect player/target", COL_TEXT);
+}
+
+fn shell_write_note() {
+    terminal_line("Enter note text:", COL_DIM);
+    let length = 0;
+    string_clear(LFS_DATA_BUFFER, LFS_MAX_CHARS + 1);
+    term_cursor_x = 10;
+    while (1 == 1) {
+        let key = poll_keyboard();
+        if (key == 13) {
+            terminal_newline();
+            if (fs_write_note(LFS_DATA_BUFFER, length) == 1) {
+                terminal_line("Saved note", COL_OK);
+            } else {
+                terminal_line("Disk write failed", 0xFFFF8080);
+            }
+            return;
+        } else {
+            if (key == 8) {
+                if (length > 0) {
+                    length = length - 1;
+                    mem[LFS_DATA_BUFFER + (length * 4)] = 0;
+                    term_cursor_x = term_cursor_x - 8;
+                    gpu_rect(term_cursor_x, term_cursor_y, 8, 16, COL_BG);
+                }
+            } else {
+                if (key >= 32) {
+                    if (length < 48) {
+                        mem[LFS_DATA_BUFFER + (length * 4)] = key;
+                        length = length + 1;
+                        gpu_char(term_cursor_x, term_cursor_y, key, COL_TEXT);
+                        term_cursor_x = term_cursor_x + 8;
+                    }
+                }
+            }
+        }
+        wait(10);
+    }
+}
+
+fn shell_hardware() {
+    terminal_line("PnP devices:", COL_DIM);
+    gpu_print(120, term_cursor_y - 16, "count", COL_DIM);
+    gpu_print_hex(168, term_cursor_y - 16, hardware_count(), COL_TEXT);
+    terminal_line("GPU:", COL_DIM);
+    gpu_print_hex(58, term_cursor_y - 16, mem[BIOS_VAR_GPU], COL_TEXT);
+    terminal_line("Disk:", COL_DIM);
+    gpu_print_hex(58, term_cursor_y - 16, disk_regs_ptr, COL_TEXT);
+    terminal_line("Keyboard:", COL_DIM);
+    gpu_print_hex(90, term_cursor_y - 16, keyboard_regs_ptr, COL_TEXT);
+    terminal_line("World:", COL_DIM);
+    gpu_print_hex(66, term_cursor_y - 16, world_regs_ptr, COL_TEXT);
+}
+
+fn shell_world() {
+    let base = world_regs_ptr;
+    if (base == 0) {
+        terminal_line("World bridge unavailable", 0xFFFF8080);
+        return;
+    }
+    terminal_line("Player X/Y/Z:", COL_DIM);
+    gpu_print_hex(122, term_cursor_y - 16, mem[base + 8], COL_TEXT);
+    gpu_print_hex(218, term_cursor_y - 16, mem[base + 12], COL_TEXT);
+    gpu_print_hex(314, term_cursor_y - 16, mem[base + 16], COL_TEXT);
+    if (mem[base + 24] == 1) {
+        terminal_line("Target block ID:", COL_DIM);
+        gpu_print_hex(138, term_cursor_y - 16, mem[base + 28], COL_TEXT);
+        terminal_line("Redstone input:", COL_DIM);
+        gpu_print_hex(138, term_cursor_y - 16, mem[base + 32], COL_TEXT);
+    } else {
+        terminal_line("No block in reach", COL_DIM);
+    }
+}
+
+fn shell_execute(command) {
+    if (string_equals(command, "") == 1) { return; }
+    if (string_equals(command, "help") == 1) {
+        shell_help();
+        return;
+    }
+    if (string_equals(command, "about") == 1) {
+        terminal_line("LoraOS 2.0 native survival OS", COL_TEXT);
+        terminal_line("Booted from the tablet disk", COL_DIM);
+        return;
+    }
+    if (string_equals(command, "hw") == 1) {
+        shell_hardware();
+        return;
+    }
+    if (string_equals(command, "clear") == 1) {
+        terminal_reset();
+        return;
+    }
+    if (string_equals(command, "ls") == 1) {
+        terminal_line("note", COL_TEXT);
+        return;
+    }
+    if (string_equals(command, "cat note") == 1) {
+        let note = fs_read_note();
+        if (note == 0) {
+            terminal_line("Disk read failed", 0xFFFF8080);
+        } else {
+            if (fs_note_length() == 0) {
+                terminal_line("(empty)", COL_DIM);
+            } else {
+                terminal_line(note, COL_TEXT);
+            }
+        }
+        return;
+    }
+    if (string_equals(command, "write note") == 1) {
+        shell_write_note();
+        return;
+    }
+    if (string_equals(command, "world") == 1) {
+        shell_world();
+        return;
+    }
+    terminal_line("Unknown command. Type help.", 0xFFFF8080);
+}
+
+fn shell_run() {
+    let length = 0;
+    string_clear(SHELL_BUFFER, SHELL_CAPACITY);
+    shell_prompt();
+
+    while (1 == 1) {
+        let key = poll_keyboard();
+        if (key == 13) {
+            mem[SHELL_BUFFER + (length * 4)] = 0;
+            terminal_newline();
+            shell_execute(SHELL_BUFFER);
+            length = 0;
+            string_clear(SHELL_BUFFER, SHELL_CAPACITY);
+            shell_prompt();
+        } else {
+            if (key == 8) {
+                if (length > 0) {
+                    length = length - 1;
+                    mem[SHELL_BUFFER + (length * 4)] = 0;
+                    term_cursor_x = term_cursor_x - 8;
+                    gpu_rect(term_cursor_x, term_cursor_y, 8, 16, COL_BG);
+                }
+            } else {
+                if (key >= 32) {
+                    if (length < SHELL_CAPACITY - 1) {
+                        mem[SHELL_BUFFER + (length * 4)] = key;
+                        length = length + 1;
+                        gpu_char(term_cursor_x, term_cursor_y, key, COL_TEXT);
+                        term_cursor_x = term_cursor_x + 8;
+                    }
+                }
+            }
+        }
+        wait(10);
+    }
+}

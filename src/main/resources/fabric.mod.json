@@ -3,7 +3,7 @@
 	"id": "loracore",
 	"version": "${version}",
 	"name": "LoraCore",
-	"description": "An AI-powered assistant for Minecraft. Ask questions and discover dynamically named structures.",
+	"description": "AI-assisted adventures and an autonomous craftable virtual tablet running native LoraOS.",
 	"authors": [
 		"Beykus-Y"
 	],

@@ -1,0 +1,11 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "pattern": ["EDE", "DRD", "EDE"],
+  "key": {
+    "E": { "item": "minecraft:emerald" },
+    "D": { "item": "minecraft:diamond" },
+    "R": { "item": "loracore:ram_t2" }
+  },
+  "result": { "id": "loracore:ram_t3", "count": 1 }
+}

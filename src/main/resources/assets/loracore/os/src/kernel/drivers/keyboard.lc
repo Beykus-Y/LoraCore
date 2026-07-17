@@ -1,13 +1,20 @@
 import "consts.lc";
+import "globals.lc";
+
+fn init_keyboard_driver() {
+    keyboard_regs_ptr = mem[BIOS_VAR_KEYBOARD];
+}
 
 // Возвращает код клавиши или 0, если ничего не нажато
 fn poll_keyboard() {
     // Читаем количество символов в буфере
-    let count = mem[ADDR_KEYB + KEYB_REG_CNT];
+    let base = keyboard_regs_ptr;
+    if (base == 0) { return 0; }
+    let count = mem[base + KEYB_REG_CNT];
 
     if (count > 0) {
         // Читаем сам символ (это удалит его из буфера контроллера)
-        let key = mem[ADDR_KEYB + KEYB_REG_VAL];
+        let key = mem[base + KEYB_REG_VAL];
         return key;
     }
 

@@ -68,12 +68,23 @@ public final class Assembler {
     public Assembler interrupt(int code) { emit(InstructionSet.OP_INT, 0, 0, code); return this; }
     public Assembler out(int port, int rs) { emit(InstructionSet.OP_OUT, 0, rs, port); return this; }
     public Assembler in(int rd, int port) { emit(InstructionSet.OP_IN, rd, 0, port); return this; }
+    public Assembler iret() { code.add(enc(InstructionSet.OP_IRET, 0, 0, 0)); return this; }
+    public Assembler sti()  { code.add(enc(InstructionSet.OP_STI, 0, 0, 0)); return this; }
+    public Assembler cli()  { code.add(enc(InstructionSet.OP_CLI, 0, 0, 0)); return this; }
 
     // --- Группа 5: Система ---
     public Assembler waitCycles(int cycles) { code.add(enc(InstructionSet.OP_WAIT, 0, 0, cycles)); return this; }
     public Assembler hlt() { code.add(enc(InstructionSet.OP_HLT, 0, 0, 0)); return this; }
     public Assembler dump() { code.add(enc(InstructionSet.OP_DUMP, 0, 0, 0)); return this; }
+    public Assembler ldo(int rd, int rs, int imm16) {
+        code.add(enc(InstructionSet.OP_LDO, rd, rs, imm16));
+        return this;
+    }
 
+    public Assembler sto(int rd, int rs, int imm16) {
+        code.add(enc(InstructionSet.OP_STO, rd, rs, imm16));
+        return this;
+    }
     public Assembler jmpr(int rd) {
         emit(InstructionSet.OP_JMPR, rd, 0, 0);
         return this;

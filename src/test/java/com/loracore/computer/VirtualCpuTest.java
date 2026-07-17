@@ -227,5 +227,91 @@ public class VirtualCpuTest {
         bus.mapDevice(0x000000, ram);
         bus.readByte(0x1000000);
     }
+
+    @Test
+    public void testResetClearsInterruptAndRuntimeStateBeforeReboot() {
+        SystemBus bus = new SystemBus();
+        GenericRam ram = new GenericRam(0x200000);
+        bus.mapDevice(0x000000, ram);
+        CpuTiers.Config config = new CpuTiers.Config("test", 1.0, 100_000, 200_000);
+        VirtualCpu cpu = new VirtualCpu(bus, ram, config, 8L);
+
+        bus.writeInt(0, encode(InstructionSet.OP_STI, 0, 0, 0));
+        cpu.step();
+        bus.requestInterrupt(3);
+
+        cpu.reset();
+
+        assertEquals(0, cpu.pc);
+        assertEquals(0, cpu.totalCycles);
+        assertEquals(-1, bus.checkPendingInterrupts());
+        assertEquals(0x0FFC, cpu.registers[15]);
+
+        bus.writeInt(0, encode(InstructionSet.OP_NOP, 0, 0, 0));
+        cpu.step();
+        assertEquals(4, cpu.pc);
+        assertEquals(1, cpu.totalCycles);
+        assertEquals(0x0FFC, cpu.registers[15]);
+    }
+
+    @Test
+    public void testPagedLoadAndStoreAcrossNonContiguousFrames() {
+        SystemBus bus = new SystemBus();
+        GenericRam ram = new GenericRam(0x50000);
+        bus.mapDevice(0x000000, ram);
+        CpuTiers.Config config = new CpuTiers.Config("test", 1.0, 100_000, 200_000);
+        VirtualCpu cpu = new VirtualCpu(bus, ram, config, 9L);
+
+        int pageTable = 0x4000;
+        bus.writeInt(pageTable, 0x10000 | 1);
+        bus.writeInt(pageTable + 4, 0x30000 | 1);
+        bus.writeInt(0x10000, encode(InstructionSet.OP_LD, 2, 1, 0));
+        bus.writeInt(0x10004, encode(InstructionSet.OP_ST, 1, 2, 0));
+
+        bus.writeByte(0x10FFF, (byte) 0x78);
+        bus.writeByte(0x30000, (byte) 0x56);
+        bus.writeByte(0x30001, (byte) 0x34);
+        bus.writeByte(0x30002, (byte) 0x12);
+
+        cpu.cr3 = pageTable;
+        cpu.pagingEnabled = true;
+        cpu.registers[1] = 0x0FFF;
+
+        cpu.step();
+        assertEquals(0x12345678, cpu.registers[2]);
+
+        cpu.registers[2] = 0x89ABCDEF;
+        cpu.step();
+        assertEquals(0xEF, bus.readByte(0x10FFF) & 0xFF);
+        assertEquals(0xCD, bus.readByte(0x30000) & 0xFF);
+        assertEquals(0xAB, bus.readByte(0x30001) & 0xFF);
+        assertEquals(0x89, bus.readByte(0x30002) & 0xFF);
+    }
+
+    @Test
+    public void testInstructionFetchAcrossNonContiguousFrames() {
+        SystemBus bus = new SystemBus();
+        GenericRam ram = new GenericRam(0x50000);
+        bus.mapDevice(0x000000, ram);
+        CpuTiers.Config config = new CpuTiers.Config("test", 1.0, 100_000, 200_000);
+        VirtualCpu cpu = new VirtualCpu(bus, ram, config, 10L);
+
+        int pageTable = 0x4000;
+        bus.writeInt(pageTable, 0x10000 | 1);
+        bus.writeInt(pageTable + 4, 0x30000 | 1);
+        int instruction = encode(InstructionSet.OP_LDI, 4, 0, 0xBEEF);
+        bus.writeByte(0x10FFF, (byte) instruction);
+        bus.writeByte(0x30000, (byte) (instruction >>> 8));
+        bus.writeByte(0x30001, (byte) (instruction >>> 16));
+        bus.writeByte(0x30002, (byte) (instruction >>> 24));
+
+        cpu.cr3 = pageTable;
+        cpu.pagingEnabled = true;
+        cpu.pc = 0x0FFF;
+
+        cpu.step();
+        assertEquals(0xBEEF, cpu.registers[4]);
+        assertEquals(0x1003, cpu.pc);
+    }
 }
 

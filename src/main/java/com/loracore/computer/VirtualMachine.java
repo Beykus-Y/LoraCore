@@ -1,6 +1,7 @@
 package com.loracore.computer;
 
 import com.loracore.LoraCoreMod;
+import com.loracore.computer.device.KeyboardDevice;
 import com.loracore.lang.LoraCompiler;
 import com.loracore.lang.TextAssembler;
 import net.minecraft.nbt.NbtCompound;
@@ -48,13 +49,13 @@ public class VirtualMachine {
     private volatile int diskQueue = 0;
     private long cyclesConsumedInPeriod = 0;
     private int ticksInPeriod = 0;
-
+    private KeyboardDevice keyboardDevice;
     // ИСПРАВЛЕНО: Конструктор теперь принимает оба UUID и обработчик перезагрузки
     public VirtualMachine(ServerPlayerEntity player, String architecture, int totalRamKb,
                           Terminal terminal, ResourceLoader resourceLoader, IAsyncVFS vfs,
                           UUID fsUuid, UUID tabletUuid,
                           // Новые аргументы:
-                          SystemBus systemBus, GenericRam systemRam, GpuMmioDevice gpuMmioDevice) {
+                          SystemBus systemBus, GenericRam systemRam, GpuMmioDevice gpuMmioDevice, KeyboardDevice keyboardDevice) {
 
         this.player = player;
         this.totalRamKb = totalRamKb;
@@ -65,6 +66,7 @@ public class VirtualMachine {
         this.tabletUuid = tabletUuid;
         this.startTime = System.nanoTime();
         this.tickCount = 0;
+        this.keyboardDevice = keyboardDevice;
 
         // Получаем конфигурацию процессора
         this.cpuConfig = CpuTiers.getConfigForArchitecture(architecture);
@@ -163,6 +165,9 @@ public class VirtualMachine {
 
         // Увеличиваем счетчик тиков
         tickCount++;
+        if (tickCount % 1 == 0) {
+            systemBus.requestInterrupt(0);
+        }
 
         try {
             // Вычисляем сгенерированные циклы за этот тик
@@ -409,8 +414,28 @@ public class VirtualMachine {
         this.isOn = false;
     }
 
-    public void pushEvent(String type, int keyCode) {}
-    public void pushEvent(String type, String text) {}
+    public void pushEvent(String type, int keyCode) {
+        if (!isOn || keyboardDevice == null) return;
+
+        if ("key".equals(type)) {
+            // Обрабатываем ТОЛЬКО управляющие клавиши, которые не генерируют CharTyped
+            if (keyCode == 257 || keyCode == 335) { // Enter в GLFW
+                keyboardDevice.pushKey(13); // Отправляем стандартный ASCII CR
+            } else if (keyCode == 259) { // Backspace в GLFW
+                keyboardDevice.pushKey(8);
+            }
+        }
+    }
+
+    public void pushEvent(String type, String text) {
+        if (isOn && keyboardDevice != null && "char".equals(type) && !text.isEmpty()) {
+            char c = text.charAt(0);
+            // Пропускаем Enter здесь, так как мы обработали его в KeyPressed
+            if (c != '\n' && c != '\r') {
+                keyboardDevice.pushKey((int) c);
+            }
+        }
+    }
     public void pushEvent(String type, double x, double y, int button) {}
 
     public java.util.List<Object> getDevices() {

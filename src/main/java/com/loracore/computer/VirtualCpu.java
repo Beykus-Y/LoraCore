@@ -24,13 +24,17 @@ public class VirtualCpu {
     private int cycleCounter = 0;
     private boolean halted = false;
     private int emptyMemoryCounter = 0; // Счетчик пустых инструкций подряд
-
+    public long totalCycles = 0; // Реальный счетчик тактов с момента старта
     private final SystemBus bus;
     private final GenericRam systemRam; // Прямая ссылка на RAM для performBitFlip
     private final int cpuId;
 
     private static final int FLAG_ZERO = 1;
     private static final int FLAG_NEGATIVE = 2;
+    private boolean interruptsEnabled = false; // По умолчанию выключены
+
+    public int cr3 = 0;             // Физический адрес начала таблицы страниц
+    public boolean pagingEnabled = false;
 
     public VirtualCpu(SystemBus bus, GenericRam systemRam, CpuTiers.Config config, long seed) {
         this.bus = bus;
@@ -59,6 +63,14 @@ public class VirtualCpu {
      * @return Количество тактов, затраченных на выполнение (обычно 1)
      */
     public int step() {
+        totalCycles++;
+        if (interruptsEnabled) {
+            int irq = bus.checkPendingInterrupts();
+            if (irq != -1) {
+                handleInterrupt(irq);
+                if (halted) halted = false; // Будим процессор
+            }
+        }
         if (halted) return 1;
 
         // 1. Обновляем физику и проверяем стабильность раз в 256 тактов
@@ -69,7 +81,7 @@ public class VirtualCpu {
             }
         }
         if (this.pc == 0x11A0) {
-            int instr = bus.readInt(pc);
+            int instr = readVirtualInt(pc);
             int opcode = (instr >>> 24) & 0xFF;
             System.out.printf("CPU HALTED AT DEBUG POINT 0x11A0! Instruction: 0x%08X, Opcode: 0x%02X\n", instr, opcode);
             // Выведи значения регистров, чтобы понять контекст
@@ -77,7 +89,7 @@ public class VirtualCpu {
         }
 
         // 2. Fetch
-        int instr = bus.readInt(pc);
+        int instr = readVirtualInt(pc);
         
         // Защита от пустой памяти: если инструкция 0 много раз подряд, останавливаем CPU
         if (instr == 0) {
@@ -111,14 +123,20 @@ public class VirtualCpu {
             case InstructionSet.OP_MOV -> registers[rD] = registers[rS];
             case InstructionSet.OP_LDI -> registers[rD] = imm16;
             case InstructionSet.OP_LUI -> registers[rD] = imm16 << 16;
-            case InstructionSet.OP_LD  -> registers[rD] = bus.readInt(registers[rS]);
-            case InstructionSet.OP_ST  -> bus.writeInt(registers[rD], registers[rS]);
+            case InstructionSet.OP_LD -> {
+                int vAddr = registers[rS];
+                registers[rD] = readVirtualInt(vAddr);
+            }
+            case InstructionSet.OP_ST -> {
+                int vAddr = registers[rD];
+                writeVirtualInt(vAddr, registers[rS]);
+            }
             case InstructionSet.OP_PUSH -> {
                 registers[15] -= 4;
-                bus.writeInt(registers[15], registers[rS]);
+                writeVirtualInt(registers[15], registers[rS]);
             }
             case InstructionSet.OP_POP -> {
-                registers[rD] = bus.readInt(registers[15]);
+                registers[rD] = readVirtualInt(registers[15]);
                 registers[15] += 4;
             }
 
@@ -149,8 +167,16 @@ public class VirtualCpu {
             case InstructionSet.OP_ORI  -> { registers[rD] |= imm16; updateFlags(registers[rD]); }
             case InstructionSet.OP_XOR  -> { registers[rD] ^= registers[rS]; updateFlags(registers[rD]); }
             case InstructionSet.OP_NOT  -> { registers[rD] = ~registers[rD]; updateFlags(registers[rD]); }
-            case InstructionSet.OP_SHL  -> { registers[rD] <<= (imm16 & 0x1F); updateFlags(registers[rD]); }
-            case InstructionSet.OP_SHR  -> { registers[rD] >>>= (imm16 & 0x1F); updateFlags(registers[rD]); }
+            case InstructionSet.OP_SHL -> {
+                int count = (imm16 != 0) ? (imm16 & 0x1F) : (registers[rS] & 0x1F);
+                registers[rD] <<= count;
+                updateFlags(registers[rD]);
+            }
+            case InstructionSet.OP_SHR -> {
+                int count = (imm16 != 0) ? (imm16 & 0x1F) : (registers[rS] & 0x1F);
+                registers[rD] >>>= count; // Логический сдвиг
+                updateFlags(registers[rD]);
+            }
 
             // --- Группа 4: Управление потоком ---
             case InstructionSet.OP_CMP  -> updateFlags(registers[rD] - registers[rS]);
@@ -161,12 +187,20 @@ public class VirtualCpu {
             case InstructionSet.OP_JG   -> { if ((flags & FLAG_ZERO) == 0 && (flags & FLAG_NEGATIVE) == 0) pc = imm16; }
             case InstructionSet.OP_JL   -> { if ((flags & FLAG_NEGATIVE) != 0) pc = imm16; }
             case InstructionSet.OP_CALL -> {
+                // 1. Уменьшаем виртуальный SP
                 registers[15] -= 4;
-                bus.writeInt(registers[15], pc);
+
+                // 2. Пишем адрес возврата через MMU (включая границу страниц)
+                writeVirtualInt(registers[15], pc);
+
+                // 4. Прыгаем на адрес (imm16 обычно содержит абсолютный адрес в этой архитектуре)
                 pc = imm16;
             }
-            case InstructionSet.OP_RET  -> {
-                pc = bus.readInt(registers[15]);
+            case InstructionSet.OP_RET -> {
+                // 1. Читаем из виртуального стека адрес возврата
+                pc = readVirtualInt(registers[15]);
+
+                // 3. Увеличиваем виртуальный SP
                 registers[15] += 4;
             }
 
@@ -190,12 +224,22 @@ public class VirtualCpu {
                 int port = imm16;
                 registers[rD] = bus.readPort(port);
             }
+            case InstructionSet.OP_LDO -> {
+                int vAddr = registers[rS] + simm16;
+                registers[rD] = readVirtualInt(vAddr);
+            }
+            case InstructionSet.OP_STO -> {
+                int vAddr = registers[rD] + simm16;
+                writeVirtualInt(vAddr, registers[rS]);
+            }
 
 
             // --- Группа 6: Физика и Оверклокинг ---
             case InstructionSet.OP_GET_TEMP -> registers[rD] = tempmC / 10;
             case InstructionSet.OP_SET_VOLT -> voltageMV = registers[rS];
-            case InstructionSet.OP_GET_CLOCK -> registers[rD] = freqHz;
+            case InstructionSet.OP_GET_CLOCK -> {
+                registers[rD] = (int) totalCycles;
+            }
             case InstructionSet.OP_CPUID -> {
                 // В R_dest возвращаем инфо, зависящее от того, что лежит в R_src
                 int request = registers[rS];
@@ -210,6 +254,30 @@ public class VirtualCpu {
             case InstructionSet.OP_JMPR -> {
                 // Прыгаем на адрес из регистра rD
                 pc = registers[rD];
+            }
+            case InstructionSet.OP_STI -> interruptsEnabled = true;
+            case InstructionSet.OP_CLI -> interruptsEnabled = false;
+            case InstructionSet.OP_IRET -> {
+                // --- 1. Извлекаем Флаги ---
+                flags = readVirtualInt(registers[15]);
+                registers[15] += 4;
+
+                // --- 2. Извлекаем PC (Адрес возврата) ---
+                pc = readVirtualInt(registers[15]);
+                registers[15] += 4;
+
+                // --- 3. Включаем прерывания обратно ---
+                this.interruptsEnabled = true;
+            }
+
+            case InstructionSet.OP_SET_CR3 -> {
+                this.cr3 = registers[rS];
+            }
+            case InstructionSet.OP_PG_ENABLE -> {
+                this.pagingEnabled = true;
+            }
+            case InstructionSet.OP_PG_DISABLE -> {
+                this.pagingEnabled = false;
             }
 
             default ->{
@@ -226,8 +294,14 @@ public class VirtualCpu {
         this.pc = 0;
         this.flags = 0;
         this.halted = false; // <--- САМОЕ ВАЖНОЕ
+        this.cr3 = 0;
+        this.pagingEnabled = false;
         this.errorCount = 0;
         this.cycleCounter = 0;
+        this.emptyMemoryCounter = 0;
+        this.totalCycles = 0;
+        this.interruptsEnabled = false;
+        this.bus.clearPendingInterrupts();
         // Очистка регистров (опционально, но полезно)
         java.util.Arrays.fill(this.registers, 0);
         this.registers[15] = 0x0FFC; // Reset SP
@@ -310,6 +384,67 @@ public class VirtualCpu {
                 String.format("%06X", address), bit, tempmC / 1000.0, freqHz);
     }
 
+    /**
+     * Трансляция виртуального адреса в физический.
+     */
+    private int translate(int virtualAddr) {
+        if (!pagingEnabled) return virtualAddr;
+
+        // 1. Извлекаем индекс страницы (верхние 20 бит)
+        int pageIndex = virtualAddr >>> 12;
+        // 2. Извлекаем смещение внутри страницы (нижние 12 бит)
+        int offset = virtualAddr & 0xFFF;
+
+        // 3. Читаем PTE (Page Table Entry) из физической памяти
+        // Таблица — это массив 32-битных чисел по адресу CR3
+        int pteAddr = cr3 + (pageIndex * 4);
+
+        // Читаем напрямую из шины, игнорируя текущий статус пейджинга (это системный доступ)
+        // Мы используем bus.readInt, так как таблицы лежат в физической RAM
+        int pte = bus.readInt(pteAddr);
+
+        // 4. Проверка бита присутствия (бит 0: Present)
+        if ((pte & 1) == 0) {
+            // Если страницы нет в памяти — вызываем аппаратное исключение (Page Fault)
+            throw new HardwareInterruptException("PAGE FAULT: Access to 0x" +
+                    Integer.toHexString(virtualAddr) + " is not mapped!");
+        }
+
+        // 5. Собираем физический адрес
+        // Базовый адрес фрейма (из PTE) + смещение
+        int physicalFrame = pte & 0xFFFFF000;
+        return physicalFrame | offset;
+    }
+
+    /**
+     * Reads a little-endian 32-bit value from virtual memory. A value that
+     * crosses a page boundary must translate each byte independently because
+     * adjacent virtual pages are not required to use adjacent physical frames.
+     */
+    private int readVirtualInt(int virtualAddr) {
+        if (!pagingEnabled || (virtualAddr & 0xFFF) <= 0xFFC) {
+            return bus.readInt(translate(virtualAddr));
+        }
+
+        return (bus.readByte(translate(virtualAddr)) & 0xFF)
+                | ((bus.readByte(translate(virtualAddr + 1)) & 0xFF) << 8)
+                | ((bus.readByte(translate(virtualAddr + 2)) & 0xFF) << 16)
+                | ((bus.readByte(translate(virtualAddr + 3)) & 0xFF) << 24);
+    }
+
+    /** Writes a little-endian 32-bit value to virtual memory. */
+    private void writeVirtualInt(int virtualAddr, int value) {
+        if (!pagingEnabled || (virtualAddr & 0xFFF) <= 0xFFC) {
+            bus.writeInt(translate(virtualAddr), value);
+            return;
+        }
+
+        bus.writeByte(translate(virtualAddr), (byte) value);
+        bus.writeByte(translate(virtualAddr + 1), (byte) (value >>> 8));
+        bus.writeByte(translate(virtualAddr + 2), (byte) (value >>> 16));
+        bus.writeByte(translate(virtualAddr + 3), (byte) (value >>> 24));
+    }
+
     private void dumpRegisters(int currentPc) {
         LoraCoreMod.LOGGER.debug("[CPU DUMP] PC:{} R0:{} R1:{} R7:{} R12:{} R13:{} SP:{} T:{:.2f}",
                 String.format("%04X", currentPc),
@@ -341,5 +476,29 @@ public class VirtualCpu {
      */
     public int getFrequency() {
         return freqHz;
+    }
+
+    private void handleInterrupt(int irq) {
+        // 1. Сбрасываем сигнал в контроллере прерываний
+        bus.clearInterrupt(irq);
+
+        // 2. Выключаем прерывания, чтобы не возникло "рекурсии" прерываний
+        this.interruptsEnabled = false;
+
+        // 3. Сохраняем PC в стек.
+        // ВАЖНО: сначала уменьшаем виртуальный SP, потом транслируем его
+        registers[15] -= 4;
+        writeVirtualInt(registers[15], pc);
+
+        // 4. Сохраняем Flags в стек
+        registers[15] -= 4;
+        writeVirtualInt(registers[15], flags);
+
+        // 5. Читаем адрес обработчика из таблицы векторов (IVT)
+        // IVT обычно находится в физической памяти по адресу 0x0000.
+        // Если твоё ядро замапило виртуальный 0x0 на физический 0x0 (Identity Map),
+        // то вызываем translate, чтобы соблюдать правила MMU.
+        pc = readVirtualInt(irq * 4);
+
     }
 }
